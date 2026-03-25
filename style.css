@@ -123,8 +123,23 @@ button { cursor: pointer; border: none; outline: none; background: transparent; 
 .mobile-back-btn { display: none; margin-right: 10px; }
 
 /* Messages */
-.messages-container { flex: 1; padding: 25px; overflow-y: auto; display: flex; flex-direction: column; gap: 20px; scroll-behavior: smooth; }
-.message-wrapper { display: flex; gap: 10px; max-width: 75%; animation: slideUp 0.3s ease forwards; opacity: 0; transform: translateY(10px); }
+.messages-container { 
+  flex: 1; 
+  padding: 25px; 
+  overflow-y: auto; 
+  display: flex; 
+  flex-direction: column; 
+  gap: 20px; 
+  /* scroll-behavior: smooth; <--- Is line ko delete kar diya gaya hai */
+}
+.message-wrapper { 
+  display: flex; 
+  gap: 10px; 
+  max-width: 85%; /* 75% ko badal kar 85% kar dein */
+  animation: slideUp 0.3s ease forwards; 
+  opacity: 0; 
+  transform: translateY(10px); 
+}
 .message-wrapper.sent { align-self: flex-end; flex-direction: row-reverse; }
 .message-wrapper.received { align-self: flex-start; }
 
