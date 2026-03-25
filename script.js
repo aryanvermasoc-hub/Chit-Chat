@@ -128,7 +128,9 @@ onAuthStateChanged(auth, async (user) => {
   if (user) {
     authScreen.style.display = "none";
     appScreen.style.display = "flex";
-    
+    authScreen.style.display = "none";
+    appScreen.style.display = "flex";
+    history.pushState({ page: "home" }, ""); // <-- YEH LINE ADD KAREIN
     await updateDoc(doc(db, "users", user.uid), { isOnline: true });
 
     window.addEventListener("beforeunload", () => {
@@ -251,8 +253,31 @@ document.getElementById("createGroupBtn").addEventListener("click", () => {
   }
 });
 
+// --- SMART MOBILE ROUTING & BACK BUTTON FIX ---
 backToUsersBtn.addEventListener("click", () => {
-  sidebar.classList.remove("hidden");
+  if (window.innerWidth <= 768) {
+    history.back(); // Triggers the hardware back logic smoothly
+  }
+});
+
+// Handle Phone's Physical Back Button
+window.addEventListener("popstate", (e) => {
+  if (window.innerWidth <= 768) {
+    if (sidebar.classList.contains("hidden")) {
+      // User is in a chat -> Close chat, show users list clearly
+      sidebar.classList.remove("hidden");
+      document.getElementById("activeChatState").style.display = "none";
+      document.getElementById("emptyChatState").style.display = "flex";
+    } else if (auth.currentUser) {
+      // User is on the users list -> Ask to logout instead of exiting app randomly
+      if(confirm("Logout and return to Login screen?")) {
+        document.getElementById("logoutBtn").click();
+      } else {
+        // Keep them safely on the page if they click cancel
+        history.pushState({ page: "home" }, ""); 
+      }
+    }
+  }
 });
 
 // --- 8. CHAT ENGINE & ROUTING ---
@@ -282,8 +307,10 @@ function openChat(targetUid, targetName, targetAvatar, isTargetOnline, targetLas
   
   emptyChatState.style.display = "none";
   activeChatState.style.display = "flex";
-  if(window.innerWidth <= 768) sidebar.classList.add("hidden");
-
+ if(window.innerWidth <= 768) {
+    sidebar.classList.add("hidden");
+    history.pushState({ page: "chat" }, ""); // Tells phone we entered a chat
+  }
   loadMessages();
   listenToTyping();
 }
@@ -307,7 +334,10 @@ function openGroupChat(groupId, groupName, memberCount) {
   
   emptyChatState.style.display = "none";
   activeChatState.style.display = "flex";
-  if(window.innerWidth <= 768) sidebar.classList.add("hidden");
+  if(window.innerWidth <= 768) {
+    sidebar.classList.add("hidden");
+    history.pushState({ page: "chat" }, ""); // Tells phone we entered a chat
+  }
 
   loadMessages();
 }
@@ -473,9 +503,7 @@ searchInput.addEventListener("input", (e) => {
   });
 });
 
-// --- 11. MEDIA UPLOAD LOGIC ---
 // --- 11. MEDIA UPLOAD LOGIC (CLOUDINARY) ---
-
 const CLOUD_NAME = "ddkov7oka"; 
 const UPLOAD_PRESET = "chitchat_preset"; 
 
@@ -485,26 +513,22 @@ fileInput.accept = "image/*";
 fileInput.style.display = "none";
 document.body.appendChild(fileInput);
 
-// Bind to your existing paperclip icon
 document.querySelector('.fa-paperclip').parentElement.addEventListener("click", () => fileInput.click());
 
 fileInput.addEventListener("change", async (e) => {
   const file = e.target.files[0];
   if (!file || !currentChatId) return;
 
-  // Visual loading feedback
   const sendBtn = document.getElementById("sendBtn");
   const originalHtml = sendBtn.innerHTML;
   sendBtn.innerHTML = "<i class='fa-solid fa-spinner fa-spin'></i>";
   sendBtn.disabled = true;
 
   try {
-    // 1. Prepare data for Cloudinary
     const formData = new FormData();
     formData.append("file", file);
     formData.append("upload_preset", UPLOAD_PRESET);
 
-    // 2. Upload to Cloudinary via REST API
     const cloudinaryUrl = `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`;
     const response = await fetch(cloudinaryUrl, {
       method: "POST",
@@ -517,9 +541,8 @@ fileInput.addEventListener("change", async (e) => {
       throw new Error(data.error.message || "Cloudinary upload failed");
     }
 
-    const downloadURL = data.secure_url; // This is the final image link!
+    const downloadURL = data.secure_url; 
 
-    // 3. Save the link to your existing Firestore database
     await addDoc(collection(db, "chats", currentChatId, "messages"), {
       text: "", 
       imageUrl: downloadURL,
@@ -534,12 +557,12 @@ fileInput.addEventListener("change", async (e) => {
     alert("Image upload failed: " + err.message);
     console.error("Upload error:", err);
   } finally {
-    // Reset UI
     sendBtn.innerHTML = originalHtml;
     sendBtn.disabled = false;
     fileInput.value = ""; 
   }
 });
+
 // --- 12. SIMULATED CALLING LOGIC ---
 const phoneBtn = document.querySelector('.fa-phone').parentElement;
 const videoBtn = document.querySelector('.fa-video').parentElement;
@@ -598,23 +621,21 @@ function listenForIncomingCalls(uid) {
     }
   });
 }
-// --- APP INFO MODAL LOGIC ---
+
+// --- 13. APP INFO MODAL LOGIC ---
 const appInfoBtn = document.getElementById("appInfoBtn");
 const infoModal = document.getElementById("infoModal");
 const closeModalBtn = document.getElementById("closeModalBtn");
 
 if (appInfoBtn && infoModal && closeModalBtn) {
-  // Open Modal
   appInfoBtn.addEventListener("click", () => {
     infoModal.style.display = "flex";
   });
 
-  // Close Modal (X button)
   closeModalBtn.addEventListener("click", () => {
     infoModal.style.display = "none";
   });
 
-  // Close Modal (Clicking outside the box)
   infoModal.addEventListener("click", (e) => {
     if (e.target === infoModal) {
       infoModal.style.display = "none";
