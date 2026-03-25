@@ -642,3 +642,28 @@ if (appInfoBtn && infoModal && closeModalBtn) {
     }
   });
 }
+// --- SMART MOBILE ROUTING & BACK BUTTON FIX ---
+const actualBackBtn = document.getElementById("backToUsersBtn");
+if (actualBackBtn) {
+  actualBackBtn.addEventListener("click", () => {
+    if (window.innerWidth <= 768) {
+      sidebar.classList.remove("hidden"); // Chat hide karega, users list dikhayega
+    }
+  });
+}
+
+// Hardware Back Button handle karne ke liye
+window.addEventListener("popstate", (e) => {
+  if (window.innerWidth <= 768) {
+    if (sidebar.classList.contains("hidden")) {
+      sidebar.classList.remove("hidden");
+      history.pushState({ page: "users" }, ""); 
+    } else if (auth.currentUser) {
+      if(confirm("Do you want to logout?")) {
+        document.getElementById("logoutBtn").click();
+      } else {
+        history.pushState({ page: "users" }, ""); 
+      }
+    }
+  }
+});
