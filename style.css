@@ -182,22 +182,45 @@ button { cursor: pointer; border: none; outline: none; background: transparent; 
 /* =========================================
    7. RESPONSIVE DESIGN (MOBILE) - FIXED
    ========================================= */
+/* =========================================
+   7. RESPONSIVE DESIGN (MOBILE) - FINAL FIX
+   ========================================= */
 @media (max-width: 768px) {
-  .app-layout { width: 100vw; height: 100vh; border-radius: 0; border: none; }
+  .app-layout { 
+    width: 100vw; 
+    height: 100dvh; /* dvh use karne se browser bar ka issue solve hoga */
+    border-radius: 0; 
+    border: none; 
+  }
+
   .sidebar { 
     width: 100%; 
     position: absolute; 
     top: 0; 
     left: 0; 
     height: 100%; 
-    z-index: 100; /* Higher priority */
-    background: var(--bg-base); /* FIX: Solid background to stop overlap/mix */
+    z-index: 100; 
+    background: var(--bg-base); 
     transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1); 
   }
+
   .sidebar.hidden { transform: translateX(-100%); }
-  .chat-area { width: 100%; height: 100%; }
-  .mobile-back-btn { display: block; }
-  .message-wrapper { max-width: 85%; }
+
+  .chat-area { 
+    width: 100%; 
+    height: 100%; 
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* Input area ko thoda upar lift karne ke liye padding adjust karein */
+  .chat-input-wrapper {
+    padding: 15px 15px 25px 15px !important; /* Bottom padding 25px rakhi hai taaki navigation bar se upar rahe */
+  }
+
+  .message-wrapper { 
+    max-width: 85%; 
+  }
 }
 
 /* =========================================
