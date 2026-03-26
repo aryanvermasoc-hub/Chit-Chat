@@ -128,9 +128,7 @@ onAuthStateChanged(auth, async (user) => {
   if (user) {
     authScreen.style.display = "none";
     appScreen.style.display = "flex";
-    authScreen.style.display = "none";
-    appScreen.style.display = "flex";
-    history.pushState({ page: "home" }, ""); // <-- YEH LINE ADD KAREIN
+    history.pushState({ page: "home" }, ""); 
     await updateDoc(doc(db, "users", user.uid), { isOnline: true });
 
     window.addEventListener("beforeunload", () => {
@@ -254,23 +252,25 @@ document.getElementById("createGroupBtn").addEventListener("click", () => {
 });
 
 // --- SMART MOBILE ROUTING & BACK BUTTON FIX ---
-backToUsersBtn.addEventListener("click", () => {
-  if (window.innerWidth <= 768) {
-    history.back(); // Triggers the hardware back logic smoothly
-  }
-});
+if (backToUsersBtn) {
+  backToUsersBtn.addEventListener("click", () => {
+    if (window.innerWidth <= 768) {
+      history.back(); // Triggers popstate to gracefully return to list
+    }
+  });
+}
 
-// Handle Phone's Physical Back Button
+// Hardware Back Button handle
 window.addEventListener("popstate", (e) => {
   if (window.innerWidth <= 768) {
     if (sidebar.classList.contains("hidden")) {
-      // User is in a chat -> Close chat, show users list clearly
+      // 1. User is in chat -> Close chat, go directly to user list. No logout prompt.
       sidebar.classList.remove("hidden");
       document.getElementById("activeChatState").style.display = "none";
       document.getElementById("emptyChatState").style.display = "flex";
     } else if (auth.currentUser) {
-      // User is on the users list -> Ask to logout instead of exiting app randomly
-      if(confirm("Logout and return to Login screen?")) {
+      // 2. User is on user list -> Show disconnect prompt.
+      if(confirm("Disconnect from Chit-Chat?")) {
         document.getElementById("logoutBtn").click();
       } else {
         // Keep them safely on the page if they click cancel
@@ -307,7 +307,8 @@ function openChat(targetUid, targetName, targetAvatar, isTargetOnline, targetLas
   
   emptyChatState.style.display = "none";
   activeChatState.style.display = "flex";
- if(window.innerWidth <= 768) {
+  
+  if(window.innerWidth <= 768) {
     sidebar.classList.add("hidden");
     history.pushState({ page: "chat" }, ""); // Tells phone we entered a chat
   }
@@ -334,6 +335,7 @@ function openGroupChat(groupId, groupName, memberCount) {
   
   emptyChatState.style.display = "none";
   activeChatState.style.display = "flex";
+  
   if(window.innerWidth <= 768) {
     sidebar.classList.add("hidden");
     history.pushState({ page: "chat" }, ""); // Tells phone we entered a chat
@@ -642,28 +644,3 @@ if (appInfoBtn && infoModal && closeModalBtn) {
     }
   });
 }
-// --- SMART MOBILE ROUTING & BACK BUTTON FIX ---
-const actualBackBtn = document.getElementById("backToUsersBtn");
-if (actualBackBtn) {
-  actualBackBtn.addEventListener("click", () => {
-    if (window.innerWidth <= 768) {
-      sidebar.classList.remove("hidden"); // Chat hide karega, users list dikhayega
-    }
-  });
-}
-
-// Hardware Back Button handle karne ke liye
-window.addEventListener("popstate", (e) => {
-  if (window.innerWidth <= 768) {
-    if (sidebar.classList.contains("hidden")) {
-      sidebar.classList.remove("hidden");
-      history.pushState({ page: "users" }, ""); 
-    } else if (auth.currentUser) {
-      if(confirm("Do you want to logout?")) {
-        document.getElementById("logoutBtn").click();
-      } else {
-        history.pushState({ page: "users" }, ""); 
-      }
-    }
-  }
-});
