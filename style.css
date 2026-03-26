@@ -28,10 +28,9 @@ body {
   width: 100vw;
   overflow: hidden;
   
-  /* Ye 3 lines center karne ke liye sabse zaroori hain */
   display: flex; 
-  justify-content: center; /* Horizontal center */
-  align-items: center;     /* Vertical center */
+  justify-content: center; 
+  align-items: center;     
 }
 
 /* =========================================
@@ -73,7 +72,7 @@ button { cursor: pointer; border: none; outline: none; background: transparent; 
 .icon-btn:hover { color: var(--text-main); background: rgba(255,255,255,0.1); }
 
 /* =========================================
-   4. AUTH SCREEN
+   4. AUTH SCREEN (Perfectly Centered)
    ========================================= */
 #authScreen { 
   display: flex; 
@@ -88,8 +87,9 @@ button { cursor: pointer; border: none; outline: none; background: transparent; 
   max-width: 400px; 
   padding: 30px; 
   margin: auto; 
-  transform: translateY(-10vh); /* Ye ek line box ko thoda upar shift kar degi */
+  /* Purana transform translateY code hata diya gaya hai */
 }
+
 .auth-header { 
   display: flex; 
   flex-direction: column; 
@@ -106,7 +106,7 @@ button { cursor: pointer; border: none; outline: none; background: transparent; 
   justify-content: center; 
   align-items: center; 
   font-size: 24px; 
-  margin: 0 auto 20px auto; /* This margin safely forces it to the center on all screens */
+  margin: 0 auto 20px auto; 
   box-shadow: 0 10px 20px var(--primary-glow); 
 }
 .auth-header p { color: var(--text-muted); font-size: 14px; margin-bottom: 30px; }
@@ -201,18 +201,16 @@ button { cursor: pointer; border: none; outline: none; background: transparent; 
   display: flex;
   gap: 10px;
   align-items: center;
-  box-sizing: border-box; /* Ensures width doesn't break */
+  box-sizing: border-box; 
 }
 
-/* Any button or icon directly inside wrapper should NOT shrink */
 .chat-input-wrapper > * {
   flex-shrink: 0; 
 }
 
-/* Input pill will take remaining space and shrink if needed */
 .input-pill { 
-  flex: 1 1 auto; /* Grow and shrink dynamically */
-  min-width: 0;   /* CRITICAL: Prevents flex children from overflowing screen */
+  flex: 1 1 auto; 
+  min-width: 0;   
   background: rgba(0,0,0,0.3); 
   border: 1px solid var(--glass-border); 
   border-radius: 30px; 
@@ -239,16 +237,7 @@ button { cursor: pointer; border: none; outline: none; background: transparent; 
    7. RESPONSIVE DESIGN (MOBILE) - FIXED
    ========================================= */
 @media (max-width: 768px) {
-  /* Forces the app to align at the top of the mobile browser */
-  #authScreen {
-    align-items: flex-start !important;
-    padding-top: 15vh !important; /* Change '15vh' to move it higher (e.g., 10vh) or lower (e.g., 20vh) */
-  }
-
-  /* 2. Reset the card's margins so it obeys the parent container */
-  .auth-card {
-    margin: 0 auto !important; 
-  }
+  /* User list gap theek karne ke liye zaroori hai */
   body {
     align-items: flex-start; 
   }
@@ -272,7 +261,6 @@ button { cursor: pointer; border: none; outline: none; background: transparent; 
     transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1); 
   }
 
-  /* This pulls the profile header up specifically on mobile */
   .sidebar-header {
     padding: 10px 20px 15px 20px; 
   }
@@ -286,7 +274,6 @@ button { cursor: pointer; border: none; outline: none; background: transparent; 
     flex-direction: column;
   }
 
-  /* MOBILE INPUT AREA FIX */
   .chat-input-wrapper {
     padding: 10px 10px 20px 10px !important; 
     gap: 8px !important; 
@@ -305,7 +292,7 @@ button { cursor: pointer; border: none; outline: none; background: transparent; 
 }
 
 /* =========================================
-   8. APP INFO MODAL (FIXED)
+   8. APP INFO MODAL
    ========================================= */
 .modal-overlay {
   position: fixed !important;
