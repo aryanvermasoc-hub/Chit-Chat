@@ -213,8 +213,17 @@ button { cursor: pointer; border: none; outline: none; background: transparent; 
 /* =========================================
    7. RESPONSIVE DESIGN (MOBILE) - FIXED
    ========================================= */
+/* =========================================
+   7. RESPONSIVE DESIGN (MOBILE) - FIXED
+   ========================================= */
 @media (max-width: 768px) {
+  /* 1. Add this body rule to force the app to the top */
+  body {
+    align-items: flex-start; 
+  }
+
   .app-layout { 
+    position: relative; /* 2. Add this to contain the absolute sidebar */
     width: 100vw; 
     height: 100dvh; 
     border-radius: 0; 
@@ -231,6 +240,7 @@ button { cursor: pointer; border: none; outline: none; background: transparent; 
     background: var(--bg-base); 
     transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1); 
   }
+
 
   .sidebar.hidden { transform: translateX(-100%); }
 
