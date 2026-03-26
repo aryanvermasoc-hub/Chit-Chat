@@ -75,6 +75,9 @@ button { cursor: pointer; border: none; outline: none; background: transparent; 
 /* =========================================
    4. AUTH SCREEN
    ========================================= */
+/* =========================================
+   4. AUTH SCREEN
+   ========================================= */
 #authScreen { 
   display: flex; 
   justify-content: center; 
@@ -83,13 +86,55 @@ button { cursor: pointer; border: none; outline: none; background: transparent; 
   height: 100%; 
 }
 
+/* Naya container jo dono card aur footer ko saath rakhega */
+.auth-container {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 15px; /* Box aur footer ke beech ka gap */
+  transform: translateY(8vh); /* Box aur text ek saath neeche shift honge */
+}
+
 .auth-card { 
   width: 90%; 
   max-width: 400px; 
   padding: 30px; 
-  margin: auto; 
-  transform: translateY(-10vh); /* Ye ek line box ko thoda upar shift kar degi */
+  /* margin aur transform yahan se hata diye hain kyunki wo ab container me hain */
 }
+
+/* --- Aapke Naye Footer Ka Design --- */
+.auth-footer {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text-muted);
+  font-size: 13px;
+  animation: slideUp 0.5s ease;
+}
+
+.about-link {
+  background: rgba(139, 92, 246, 0.15); /* Purple tint */
+  color: var(--text-main);
+  text-decoration: none;
+  padding: 5px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(139, 92, 246, 0.3);
+  font-size: 12px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  transition: all 0.3s ease;
+}
+
+.about-link:hover {
+  background: var(--primary);
+  box-shadow: 0 0 10px var(--primary-glow);
+  color: #fff;
+}
+
+/* ... iske aage aapka .auth-header aur baaki purana CSS same rahega ... */
 .auth-header { 
   display: flex; 
   flex-direction: column; 
