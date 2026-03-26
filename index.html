@@ -4,11 +4,13 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Chit-Chat | Premium Messaging</title>
-  <link rel="stylesheet" href="style.css?v=2">
+  <link rel="stylesheet" href="style.css?v=6">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
 <body>
+
+  <div id="toastContainer" class="toast-container"></div>
 
   <div class="ambient-bg">
     <div class="blob blob-1"></div>
@@ -17,7 +19,6 @@
 
   <div id="authScreen" class="screen active">
     <div class="auth-container">
-      
       <div class="glass-card auth-card">
         <div class="auth-header">
           <div class="logo-box"><i class="fa-regular fa-comments"></i></div>
@@ -53,26 +54,19 @@
           About <i class="fa-solid fa-arrow-up-right-from-square"></i>
         </a>
       </div>
-
     </div>
   </div>
 
   <div id="appScreen" class="screen app-layout" style="display: none;">
-    
     <aside class="sidebar" id="sidebar">
       <div class="sidebar-header">
-        <div class="current-user">
+        <div class="current-user" title="View My Profile">
           <img id="myAvatar" src="" alt="Me" class="avatar">
           <div class="user-meta">
             <span id="myName" class="name">Loading...</span>
             <span id="myUsername" class="handle">@...</span>
           </div>
         </div> 
-        <div style="display: flex; gap: 5px;">
-          <button id="appInfoBtn" class="icon-btn" title="About App"><i class="fa-solid fa-circle-info"></i></button>
-          <button id="createGroupBtn" class="icon-btn" title="New Group"><i class="fa-solid fa-users"></i></button>
-          <button id="logoutBtn" class="icon-btn" title="Logout"><i class="fa-solid fa-right-from-bracket"></i></button>
-        </div>
       </div>
 
       <div class="search-container">
@@ -81,7 +75,22 @@
       </div>
 
       <div class="users-list" id="usersList">
-        </div>
+      </div>
+
+      <div class="sidebar-footer">
+        <button id="discoverBtn" class="nav-btn" title="Discover">
+          <i class="fa-solid fa-compass"></i><span>Discover</span>
+        </button>
+        <button id="createGroupBtn" class="nav-btn" title="New Group">
+          <i class="fa-solid fa-users"></i><span>Group</span>
+        </button>
+        <button id="appInfoBtn" class="nav-btn" title="About App">
+          <i class="fa-solid fa-circle-info"></i><span>Info</span>
+        </button>
+        <button id="logoutBtn" class="nav-btn" title="Logout">
+          <i class="fa-solid fa-right-from-bracket"></i><span>Logout</span>
+        </button>
+      </div>
     </aside>
 
     <main class="chat-area" id="chatArea">
@@ -94,7 +103,7 @@
       <div id="activeChatState" style="display: none; height: 100%; flex-direction: column;">
         <header class="chat-header glass-panel">
           <button id="backToUsersBtn" class="mobile-back-btn icon-btn"><i class="fa-solid fa-chevron-left"></i></button>
-          <div class="chat-target-info">
+          <div class="chat-target-info" title="View Profile">
             <div class="avatar-wrapper">
               <img id="chatTargetAvatar" src="" alt="Avatar" class="avatar">
               <div id="chatTargetStatus" class="status-dot"></div>
@@ -112,7 +121,7 @@
         </header>
 
         <div class="messages-container" id="chatBox">
-          </div>
+        </div>
 
         <div id="replyPreviewContainer" class="glass-panel" style="display: none; padding: 10px 20px; border-bottom: 1px solid rgba(255,255,255,0.1); align-items: center; justify-content: space-between; background: rgba(0,0,0,0.3);">
           <div style="border-left: 3px solid #8b5cf6; padding-left: 10px; display: flex; flex-direction: column;">
@@ -132,7 +141,6 @@
         </div>
       </div>
     </main>
-
   </div>
 
   <div id="infoModal" class="modal-overlay" style="display: none;">
@@ -147,6 +155,52 @@
       <a href="https://aryanvermasoc-hub.github.io/My-Info-ARYAN-VERMA/" target="_blank" class="primary-btn glow-btn" style="text-decoration: none;">
        Owner's Info <i class="fa-solid fa-arrow-up-right-from-square" style="margin-left: 5px;"></i>
       </a>
+    </div>
+  </div>
+
+  <div id="discoverModal" class="modal-overlay" style="display: none;">
+    <div class="modal-content" style="max-width: 500px; max-height: 80vh; display: flex; flex-direction: column; padding: 25px;">
+      <div class="modal-header">
+        <h3><i class="fa-solid fa-earth-americas" style="color: var(--primary); margin-right: 8px;"></i> Discover</h3>
+        <button id="closeDiscoverBtn" class="icon-btn"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="auth-tabs" style="margin-bottom: 15px; flex-shrink: 0;">
+        <button id="tabNews" class="active"><i class="fa-regular fa-newspaper"></i> Tech News</button>
+        <button id="tabVideo"><i class="fa-brands fa-youtube"></i> YouTube</button>
+      </div>
+      <div id="discoverNews" style="overflow-y: auto; text-align: left; padding-right: 10px; flex: 1;"></div>
+      <div id="discoverVideo" style="overflow-y: auto; text-align: left; padding-right: 10px; flex: 1; display: none;"></div>
+    </div>
+  </div>
+
+  <div id="profileModal" class="modal-overlay" style="display: none;">
+    <div class="modal-content profile-content">
+      <button id="closeProfileBtn" class="icon-btn close-modal-corner"><i class="fa-solid fa-xmark"></i></button>
+      
+      <div class="profile-header">
+        <div style="position: relative; display: inline-block;">
+          <img id="profileAvatar" src="" alt="Profile" class="profile-avatar-large">
+          <input type="file" id="profileAvatarInput" accept="image/*" style="display: none;">
+          <button id="editAvatarBtn" style="display:none; position:absolute; bottom:15px; right:-5px; background:var(--primary); color:white; border-radius:50%; width:35px; height:35px; border:3px solid var(--glass-bg); cursor:pointer; box-shadow:0 4px 10px rgba(0,0,0,0.5); justify-content:center; align-items:center;">
+            <i class="fa-solid fa-camera" style="font-size:13px;"></i>
+          </button>
+        </div>
+        <h2 id="profileName">Loading...</h2>
+        <p id="profileHandle" class="text-muted">@username</p>
+      </div>
+      
+      <div class="profile-body">
+        <div class="bio-section">
+          <p id="profileBioDisplay">Hey there! I am using Chit-Chat.</p>
+          <textarea id="profileBioEdit" style="display:none;" rows="3" placeholder="Write a short bio about yourself..."></textarea>
+        </div>
+        <p id="profileJoinDate" class="text-muted" style="font-size: 12px; margin-top: 15px;"></p>
+      </div>
+      
+      <div class="profile-actions">
+        <button id="editProfileBtn" class="primary-btn" style="display:none;"><i class="fa-solid fa-pen"></i> Edit Profile</button>
+        <button id="saveProfileBtn" class="primary-btn glow-btn" style="display:none;"><i class="fa-solid fa-check"></i> Save Changes</button>
+      </div>
     </div>
   </div>
 
