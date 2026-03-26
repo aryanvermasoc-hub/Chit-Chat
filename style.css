@@ -28,10 +28,9 @@ body {
   width: 100vw;
   overflow: hidden;
   
-  /* Ye 3 lines center karne ke liye sabse zaroori hain */
   display: flex; 
-  justify-content: center; /* Horizontal center */
-  align-items: center;     /* Vertical center */
+  justify-content: center; 
+  align-items: center;     
 }
 
 /* =========================================
@@ -73,10 +72,7 @@ button { cursor: pointer; border: none; outline: none; background: transparent; 
 .icon-btn:hover { color: var(--text-main); background: rgba(255,255,255,0.1); }
 
 /* =========================================
-   4. AUTH SCREEN
-   ========================================= */
-/* =========================================
-   4. AUTH SCREEN
+   4. AUTH SCREEN & FOOTER
    ========================================= */
 #authScreen { 
   display: flex; 
@@ -86,55 +82,21 @@ button { cursor: pointer; border: none; outline: none; background: transparent; 
   height: 100%; 
 }
 
-/* Naya container jo dono card aur footer ko saath rakhega */
 .auth-container {
   width: 100%;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 15px; /* Box aur footer ke beech ka gap */
-  transform: translateY(8vh); /* Box aur text ek saath neeche shift honge */
+  justify-content: center;
 }
 
 .auth-card { 
   width: 90%; 
   max-width: 400px; 
   padding: 30px; 
-  /* margin aur transform yahan se hata diye hain kyunki wo ab container me hain */
+  margin: auto; 
 }
 
-/* --- Aapke Naye Footer Ka Design --- */
-.auth-footer {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  color: var(--text-muted);
-  font-size: 13px;
-  animation: slideUp 0.5s ease;
-}
-
-.about-link {
-  background: rgba(139, 92, 246, 0.15); /* Purple tint */
-  color: var(--text-main);
-  text-decoration: none;
-  padding: 5px 12px;
-  border-radius: 12px;
-  border: 1px solid rgba(139, 92, 246, 0.3);
-  font-size: 12px;
-  font-weight: 500;
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  transition: all 0.3s ease;
-}
-
-.about-link:hover {
-  background: var(--primary);
-  box-shadow: 0 0 10px var(--primary-glow);
-  color: #fff;
-}
-
-/* ... iske aage aapka .auth-header aur baaki purana CSS same rahega ... */
 .auth-header { 
   display: flex; 
   flex-direction: column; 
@@ -151,7 +113,7 @@ button { cursor: pointer; border: none; outline: none; background: transparent; 
   justify-content: center; 
   align-items: center; 
   font-size: 24px; 
-  margin: 0 auto 20px auto; /* This margin safely forces it to the center on all screens */
+  margin: 0 auto 20px auto; 
   box-shadow: 0 10px 20px var(--primary-glow); 
 }
 .auth-header p { color: var(--text-muted); font-size: 14px; margin-bottom: 30px; }
@@ -164,6 +126,50 @@ button { cursor: pointer; border: none; outline: none; background: transparent; 
 .input-group i { position: absolute; left: 16px; top: 50%; transform: translateY(-50%); color: var(--text-muted); }
 .input-group input { width: 100%; background: rgba(0,0,0,0.2); border: 1px solid var(--glass-border); border-radius: 12px; padding: 14px 14px 14px 45px; color: var(--text-main); font-size: 15px; outline: none; transition: border-color 0.3s; }
 .input-group input:focus { border-color: var(--primary); }
+
+/* --- PREMIUM FOOTER STYLING --- */
+.auth-footer {
+  margin-top: 25px;
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  background: rgba(0, 0, 0, 0.4);
+  padding: 12px 20px;
+  border-radius: 30px;
+  border: 1px solid var(--glass-border);
+  font-size: 13px;
+  color: var(--text-muted);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+  animation: slideUp 0.5s ease;
+}
+
+.auth-footer .developer-name {
+  color: var(--text-main);
+  font-weight: 600;
+}
+
+.about-link {
+  background: var(--primary);
+  color: #fff !important;
+  text-decoration: none;
+  padding: 8px 16px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 12px var(--primary-glow);
+}
+
+.about-link:hover {
+  background: var(--primary-hover);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 15px var(--primary-glow);
+}
 
 /* =========================================
    5. MAIN APP LAYOUT (Split Pane)
@@ -246,18 +252,16 @@ button { cursor: pointer; border: none; outline: none; background: transparent; 
   display: flex;
   gap: 10px;
   align-items: center;
-  box-sizing: border-box; /* Ensures width doesn't break */
+  box-sizing: border-box; 
 }
 
-/* Any button or icon directly inside wrapper should NOT shrink */
 .chat-input-wrapper > * {
   flex-shrink: 0; 
 }
 
-/* Input pill will take remaining space and shrink if needed */
 .input-pill { 
-  flex: 1 1 auto; /* Grow and shrink dynamically */
-  min-width: 0;   /* CRITICAL: Prevents flex children from overflowing screen */
+  flex: 1 1 auto; 
+  min-width: 0;   
   background: rgba(0,0,0,0.3); 
   border: 1px solid var(--glass-border); 
   border-radius: 30px; 
@@ -285,16 +289,16 @@ button { cursor: pointer; border: none; outline: none; background: transparent; 
    ========================================= */
 @media (max-width: 768px) {
   
-  body {
-    align-items: flex-start; 
-  }
-
+  /* PERFECT FIX: This forces the app screen to completely fill the phone display, removing ALL top gaps forever */
   .app-layout { 
-    position: relative; 
+    position: fixed; 
+    top: 0;
+    left: 0;
     width: 100vw; 
     height: 100dvh; 
     border-radius: 0; 
     border: none; 
+    z-index: 10;
   }
 
   .sidebar { 
@@ -308,7 +312,6 @@ button { cursor: pointer; border: none; outline: none; background: transparent; 
     transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1); 
   }
 
-  /* This pulls the profile header up specifically on mobile */
   .sidebar-header {
     padding: 10px 20px 15px 20px; 
   }
@@ -322,7 +325,6 @@ button { cursor: pointer; border: none; outline: none; background: transparent; 
     flex-direction: column;
   }
 
-  /* MOBILE INPUT AREA FIX */
   .chat-input-wrapper {
     padding: 10px 10px 20px 10px !important; 
     gap: 8px !important; 
@@ -341,7 +343,7 @@ button { cursor: pointer; border: none; outline: none; background: transparent; 
 }
 
 /* =========================================
-   8. APP INFO MODAL (FIXED)
+   8. APP INFO MODAL
    ========================================= */
 .modal-overlay {
   position: fixed !important;
