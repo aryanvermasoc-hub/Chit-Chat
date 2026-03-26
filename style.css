@@ -75,12 +75,20 @@ button { cursor: pointer; border: none; outline: none; background: transparent; 
 /* =========================================
    4. AUTH SCREEN
    ========================================= */
-#authScreen { display: flex; justify-content: center; align-items: center; width: 100%; height: 100%; }
+#authScreen { 
+  display: flex; 
+  justify-content: center; 
+  align-items: center; 
+  width: 100%; 
+  height: 100%; 
+}
+
 .auth-card { 
   width: 90%; 
   max-width: 400px; 
   padding: 30px; 
-  margin: auto; /* Extra safety center ke liye */
+  margin: auto; 
+  transform: translateY(-10vh); /* Ye ek line box ko thoda upar shift kar degi */
 }
 .auth-header { 
   display: flex; 
