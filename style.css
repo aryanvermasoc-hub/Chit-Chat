@@ -186,10 +186,13 @@ button { cursor: pointer; border: none; outline: none; background: transparent; 
 /* =========================================
    7. RESPONSIVE DESIGN (MOBILE) - FINAL FIX
    ========================================= */
+/* =========================================
+   7. RESPONSIVE DESIGN (MOBILE) - FIXED
+   ========================================= */
 @media (max-width: 768px) {
   .app-layout { 
     width: 100vw; 
-    height: 100dvh; /* dvh use karne se browser bar ka issue solve hoga */
+    height: 100dvh; 
     border-radius: 0; 
     border: none; 
   }
@@ -214,16 +217,33 @@ button { cursor: pointer; border: none; outline: none; background: transparent; 
     flex-direction: column;
   }
 
-  /* Input area ko thoda upar lift karne ke liye padding adjust karein */
+  /* --- YAHAN SE CHANGES HAIN --- */
   .chat-input-wrapper {
-    padding: 15px 15px 25px 15px !important; /* Bottom padding 25px rakhi hai taaki navigation bar se upar rahe */
+    padding: 10px 10px 25px 10px !important; 
+    display: flex !important;
+    gap: 8px !important; /* Input aur Send Button ke beech ki duri */
+    align-items: center !important;
   }
+
+  .input-pill {
+    flex: 0 0 80% !important; /* Input box ab 80% width lega, baaki 20% button ke liye */
+    min-width: 0;
+  }
+
+  /* Agar aapka button 'primary-btn' ya 'circle-btn' hai */
+  .chat-input-wrapper button {
+    flex: 0 0 15% !important; 
+    display: flex !important;
+    justify-content: center;
+    align-items: center;
+    padding: 10px 0 !important;
+  }
+  /* --- CHANGES KHATAM --- */
 
   .message-wrapper { 
     max-width: 85%; 
   }
 }
-
 /* =========================================
    8. APP INFO MODAL (FIXED)
    ========================================= */
