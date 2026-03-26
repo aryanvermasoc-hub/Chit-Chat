@@ -75,7 +75,11 @@ button { cursor: pointer; border: none; outline: none; background: transparent; 
    4. AUTH SCREEN
    ========================================= */
 #authScreen { display: flex; justify-content: center; align-items: center; width: 100%; height: 100%; }
-.auth-card { width: 100%; max-width: 400px; padding: 40px; text-align: center; }
+.auth-card { 
+  width: 90%; /* Mobile par side se thodi jagah chhodne ke liye */
+  max-width: 400px; 
+  padding: 30px; /* Padding thodi kam kar sakte hain mobile ke liye */
+}
 .logo-box { width: 60px; height: 60px; background: var(--msg-sent); border-radius: 16px; display: inline-flex; justify-content: center; align-items: center; font-size: 24px; margin-bottom: 20px; box-shadow: 0 10px 20px var(--primary-glow); }
 .auth-header h2 { font-size: 28px; font-weight: 700; margin-bottom: 5px; }
 .auth-header p { color: var(--text-muted); font-size: 14px; margin-bottom: 30px; }
