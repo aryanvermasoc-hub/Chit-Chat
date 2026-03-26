@@ -16,33 +16,44 @@
   </div>
 
   <div id="authScreen" class="screen active">
-    <div class="glass-card auth-card">
-      <div class="auth-header">
-        <div class="logo-box"><i class="fa-regular fa-comments"></i></div>
-        <h2>Chit-Chat</h2>
-        <p>Connect securely, beautifully.</p>
+    <div class="auth-container">
+      
+      <div class="glass-card auth-card">
+        <div class="auth-header">
+          <div class="logo-box"><i class="fa-regular fa-comments"></i></div>
+          <h2>Chit-Chat</h2>
+          <p>Connect securely, beautifully.</p>
+        </div>
+
+        <div class="auth-tabs">
+          <button id="tabLogin" class="active">Login</button>
+          <button id="tabSignup">Sign Up</button>
+        </div>
+
+        <form id="authForm" onsubmit="return false;">
+          <div class="input-group" id="nameGroup" style="display: none;">
+            <i class="fa-regular fa-user"></i>
+            <input type="text" id="fullName" placeholder="Display Name">
+          </div>
+          <div class="input-group">
+            <i class="fa-solid fa-at"></i>
+            <input type="text" id="username" placeholder="Username (Unique)">
+          </div>
+          <div class="input-group">
+            <i class="fa-solid fa-lock"></i>
+            <input type="password" id="password" placeholder="Password">
+          </div>
+          <button id="authActionBtn" class="primary-btn glow-btn">Enter Chit-Chat</button>
+        </form>
       </div>
 
-      <div class="auth-tabs">
-        <button id="tabLogin" class="active">Login</button>
-        <button id="tabSignup">Sign Up</button>
+      <div class="auth-footer">
+        Developed by Aryan Verma
+        <a href="https://aryanvermasoc-hub.github.io/My-Info-ARYAN-VERMA/" target="_blank" class="about-link">
+          About <i class="fa-solid fa-arrow-up-right-from-square"></i>
+        </a>
       </div>
 
-      <form id="authForm" onsubmit="return false;">
-        <div class="input-group" id="nameGroup" style="display: none;">
-          <i class="fa-regular fa-user"></i>
-          <input type="text" id="fullName" placeholder="Display Name">
-        </div>
-        <div class="input-group">
-          <i class="fa-solid fa-at"></i>
-          <input type="text" id="username" placeholder="Username (Unique)">
-        </div>
-        <div class="input-group">
-          <i class="fa-solid fa-lock"></i>
-          <input type="password" id="password" placeholder="Password">
-        </div>
-        <button id="authActionBtn" class="primary-btn glow-btn">Enter Chit-Chat</button>
-      </form>
     </div>
   </div>
 
@@ -56,7 +67,8 @@
             <span id="myName" class="name">Loading...</span>
             <span id="myUsername" class="handle">@...</span>
           </div>
-        </div> <div style="display: flex; gap: 5px;">
+        </div> 
+        <div style="display: flex; gap: 5px;">
           <button id="appInfoBtn" class="icon-btn" title="About App"><i class="fa-solid fa-circle-info"></i></button>
           <button id="createGroupBtn" class="icon-btn" title="New Group"><i class="fa-solid fa-users"></i></button>
           <button id="logoutBtn" class="icon-btn" title="Logout"><i class="fa-solid fa-right-from-bracket"></i></button>
