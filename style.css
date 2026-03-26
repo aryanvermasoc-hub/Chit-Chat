@@ -232,6 +232,9 @@ button { cursor: pointer; border: none; outline: none; background: transparent; 
    ========================================= */
 @media (max-width: 768px) {
   /* Forces the app to align at the top of the mobile browser */
+  .auth-card {
+    transform: translateY(-8vh); /* Adjust this number (-5vh, -10vh, etc.) to move it higher or lower */
+  }
   body {
     align-items: flex-start; 
   }
