@@ -33,6 +33,7 @@ body {
   justify-content: center; /* Horizontal center */
   align-items: center;     /* Vertical center */
 }
+
 /* =========================================
    2. AMBIENT BACKGROUND
    ========================================= */
@@ -76,9 +77,10 @@ button { cursor: pointer; border: none; outline: none; background: transparent; 
    ========================================= */
 #authScreen { display: flex; justify-content: center; align-items: center; width: 100%; height: 100%; }
 .auth-card { 
-  width: 90%; /* Mobile par side se thodi jagah chhodne ke liye */
+  width: 90%; 
   max-width: 400px; 
-  padding: 30px; /* Padding thodi kam kar sakte hain mobile ke liye */
+  padding: 30px; 
+  margin: auto; /* Extra safety center ke liye */
 }
 .logo-box { width: 60px; height: 60px; background: var(--msg-sent); border-radius: 16px; display: inline-flex; justify-content: center; align-items: center; font-size: 24px; margin-bottom: 20px; box-shadow: 0 10px 20px var(--primary-glow); }
 .auth-header h2 { font-size: 28px; font-weight: 700; margin-bottom: 5px; }
@@ -138,12 +140,11 @@ button { cursor: pointer; border: none; outline: none; background: transparent; 
   display: flex; 
   flex-direction: column; 
   gap: 20px; 
-  /* scroll-behavior: smooth; <--- Is line ko delete kar diya gaya hai */
 }
 .message-wrapper { 
   display: flex; 
   gap: 10px; 
-  max-width: 85%; /* 75% ko badal kar 85% kar dein */
+  max-width: 85%; 
   animation: slideUp 0.3s ease forwards; 
   opacity: 0; 
   transform: translateY(10px); 
@@ -167,18 +168,36 @@ button { cursor: pointer; border: none; outline: none; background: transparent; 
 .replied-msg-box { background: rgba(0, 0, 0, 0.2); border-left: 3px solid var(--primary); padding: 6px 10px; border-radius: 6px; margin-bottom: 6px; font-size: 12px; color: var(--text-muted); cursor: pointer; }
 .chat-meta-subtitle { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
 
-/* Input Area */
+/* Input Area - FIXED FOR DESKTOP & MOBILE */
 .chat-input-wrapper {
-  width: 100%; /* ✅ ADD THIS */
+  width: 100%;
   padding: 10px 15px calc(10px + env(safe-area-inset-bottom));
   border-top: 1px solid var(--glass-border);
   display: flex;
-  gap: 10px; /* thoda kam karo */
+  gap: 10px;
   align-items: center;
+  box-sizing: border-box; /* Ensures width doesn't break */
 }
-.input-pill { flex: 1; background: rgba(0,0,0,0.3); border: 1px solid var(--glass-border); border-radius: 30px; display: flex; align-items: center; padding: 5px 15px; transition: border-color 0.3s; }
+
+/* Any button or icon directly inside wrapper should NOT shrink */
+.chat-input-wrapper > * {
+  flex-shrink: 0; 
+}
+
+/* Input pill will take remaining space and shrink if needed */
+.input-pill { 
+  flex: 1 1 auto; /* Grow and shrink dynamically */
+  min-width: 0;   /* CRITICAL: Prevents flex children from overflowing screen */
+  background: rgba(0,0,0,0.3); 
+  border: 1px solid var(--glass-border); 
+  border-radius: 30px; 
+  display: flex; 
+  align-items: center; 
+  padding: 5px 15px; 
+  transition: border-color 0.3s; 
+}
 .input-pill:focus-within { border-color: var(--primary); box-shadow: 0 0 10px rgba(139, 92, 246, 0.1); }
-.input-pill input { flex: 1; background: transparent; border: none; color: var(--text-main); padding: 12px 10px; font-size: 15px; outline: none; }
+.input-pill input { flex: 1; min-width: 0; background: transparent; border: none; color: var(--text-main); padding: 12px 10px; font-size: 15px; outline: none; }
 
 /* =========================================
    6. SCROLLBARS & ANIMATIONS
@@ -191,15 +210,6 @@ button { cursor: pointer; border: none; outline: none; background: transparent; 
 @keyframes slideUp { to { opacity: 1; transform: translateY(0); } }
 @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
 
-/* =========================================
-   7. RESPONSIVE DESIGN (MOBILE)
-   ========================================= */
-/* =========================================
-   7. RESPONSIVE DESIGN (MOBILE) - FIXED
-   ========================================= */
-/* =========================================
-   7. RESPONSIVE DESIGN (MOBILE) - FINAL FIX
-   ========================================= */
 /* =========================================
    7. RESPONSIVE DESIGN (MOBILE) - FIXED
    ========================================= */
@@ -231,33 +241,24 @@ button { cursor: pointer; border: none; outline: none; background: transparent; 
     flex-direction: column;
   }
 
-  /* --- YAHAN SE CHANGES HAIN --- */
+  /* MOBILE INPUT AREA FIX */
   .chat-input-wrapper {
-    padding: 10px 10px 25px 10px !important; 
-    display: flex !important;
-    gap: 8px !important; /* Input aur Send Button ke beech ki duri */
-    align-items: center !important;
+    padding: 10px 10px 20px 10px !important; 
+    gap: 8px !important; 
   }
 
-  .input-pill {
-    flex: 0 0 80% !important; /* Input box ab 80% width lega, baaki 20% button ke liye */
-    min-width: 0;
-  }
-
-  /* Agar aapka button 'primary-btn' ya 'circle-btn' hai */
   .chat-input-wrapper button {
-    flex: 0 0 15% !important; 
+    padding: 10px !important;
     display: flex !important;
     justify-content: center;
     align-items: center;
-    padding: 10px 0 !important;
   }
-  /* --- CHANGES KHATAM --- */
 
   .message-wrapper { 
     max-width: 85%; 
   }
 }
+
 /* =========================================
    8. APP INFO MODAL (FIXED)
    ========================================= */
