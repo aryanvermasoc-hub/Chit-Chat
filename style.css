@@ -232,8 +232,14 @@ button { cursor: pointer; border: none; outline: none; background: transparent; 
    ========================================= */
 @media (max-width: 768px) {
   /* Forces the app to align at the top of the mobile browser */
+  #authScreen {
+    align-items: flex-start !important;
+    padding-top: 15vh !important; /* Change '15vh' to move it higher (e.g., 10vh) or lower (e.g., 20vh) */
+  }
+
+  /* 2. Reset the card's margins so it obeys the parent container */
   .auth-card {
-    transform: translateY(-8vh); /* Adjust this number (-5vh, -10vh, etc.) to move it higher or lower */
+    margin: 0 auto !important; 
   }
   body {
     align-items: flex-start; 
