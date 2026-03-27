@@ -254,3 +254,8 @@ body {
 .game-btn-row { display: flex; width: 100%; max-width: 300px; gap: 15px; margin-top: 15px; }
 .game-control-btn { flex: 1; padding: 15px; background: rgba(255,255,255,0.05); color: white; border: 1px solid var(--glass-border); border-radius: 12px; font-size: 24px; display: flex; justify-content: center; align-items: center; cursor: pointer; user-select: none; -webkit-user-select: none; touch-action: manipulation; transition: 0.1s; }
 .game-control-btn:active { background: rgba(139, 92, 246, 0.4); transform: scale(0.95); }
+/* Empty Chat State (Fixed Overlap) */
+.empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; color: var(--text-muted); text-align: center; padding: 20px; flex: 1; }
+.empty-icon { font-size: 60px; color: rgba(139, 92, 246, 0.2); margin-bottom: 20px; }
+.empty-state h3 { font-size: 24px; color: var(--text-main); margin-bottom: 10px; }
+.empty-state p { font-size: 14px; max-width: 250px; }
