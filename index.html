@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Chit-Chat | Premium Messaging & Games</title>
-  <link rel="stylesheet" href="style.css?v=13">
+  <link rel="stylesheet" href="style.css?v=14">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
@@ -67,28 +67,28 @@
             <h3>Arcade Zone</h3>
             <p>Challenge friends in chat to play!</p>
         </div>
-        <div class="game-card" onclick="alert('Open a chat and click the Gamepad icon to challenge a friend to Tic Tac Toe!')">
+        <div class="game-card" onclick="alert('Open a chat and click the Gamepad icon at the top to challenge a friend to Tic Tac Toe!')">
             <div class="game-icon"><i class="fa-solid fa-table-cells"></i></div>
             <div class="game-info">
                 <h4>Tic Tac Toe</h4>
                 <span>Multiplayer • Classic</span>
             </div>
         </div>
-        <div class="game-card" onclick="alert('Open a chat and click the Gamepad icon to challenge a friend to Rock Paper Scissors!')">
+        <div class="game-card" onclick="alert('Open a chat and click the Gamepad icon at the top to challenge a friend to Rock Paper Scissors!')">
             <div class="game-icon"><i class="fa-solid fa-hand-scissors"></i></div>
             <div class="game-info">
                 <h4>Rock Paper Scissors</h4>
                 <span>Multiplayer • Quick Match</span>
             </div>
         </div>
-        <div class="game-card" onclick="alert('Open a chat and click the Gamepad icon to challenge a friend to Jet Fighter!')">
+        <div class="game-card" onclick="alert('Open a chat and click the Gamepad icon at the top to challenge a friend to Jet Fighter!')">
             <div class="game-icon"><i class="fa-solid fa-jet-fighter"></i></div>
             <div class="game-info">
                 <h4>Jet Fighter</h4>
                 <span>Multiplayer • Action</span>
             </div>
         </div>
-        <div class="game-card" onclick="alert('Open a chat and click the Gamepad icon to challenge a friend to Car Racing!')">
+        <div class="game-card" onclick="alert('Open a chat and click the Gamepad icon at the top to challenge a friend to Car Racing!')">
             <div class="game-icon"><i class="fa-solid fa-car"></i></div>
             <div class="game-info">
                 <h4>Car Racing</h4>
@@ -142,15 +142,18 @@
 
       <div id="activeChatState" style="display: none; height: 100%; flex-direction: column;">
         <header class="chat-header glass-panel">
-          <button id="backToUsersBtn" class="mobile-back-btn icon-btn"><i class="fa-solid fa-chevron-left"></i></button>
-          <div class="chat-target-info">
-            <img id="chatTargetAvatar" src="" class="avatar">
-            <div class="user-meta">
-              <span id="chatTargetName" class="name">User Name</span>
-              <span id="typingIndicator" class="typing-text" style="display:none;">typing...</span>
-              <span id="chatTargetStatus" class="chat-meta-subtitle">Offline</span>
-            </div>
+          <div style="display: flex; align-items: center; gap: 10px; overflow: hidden;">
+              <button id="backToUsersBtn" class="mobile-back-btn icon-btn"><i class="fa-solid fa-chevron-left"></i></button>
+              <div class="chat-target-info">
+                <img id="chatTargetAvatar" src="" class="avatar">
+                <div class="user-meta" style="overflow: hidden;">
+                  <span id="chatTargetName" class="name">User Name</span>
+                  <span id="typingIndicator" class="typing-text" style="display:none;">typing...</span>
+                  <span id="chatTargetStatus" class="chat-meta-subtitle">Offline</span>
+                </div>
+              </div>
           </div>
+          <button id="launchGameMenuBtn" class="icon-btn" title="Challenge to Game" style="color: var(--accent); font-size: 22px; margin-left: auto; padding: 5px;"><i class="fa-solid fa-gamepad"></i></button>
         </header>
         
         <div class="messages-container" id="chatBox"></div>
@@ -164,7 +167,6 @@
         </div>
 
         <div class="chat-input-wrapper glass-panel">
-          <button id="launchGameMenuBtn" class="icon-btn" title="Challenge to Game" style="color: var(--accent);"><i class="fa-solid fa-gamepad"></i></button>
           <button class="icon-btn"><i class="fa-solid fa-paperclip"></i></button>
           <div class="input-pill"><input type="text" id="msg" placeholder="Type a message..."></div>
           <button id="sendBtn" class="primary-btn circle-btn"><i class="fa-solid fa-paper-plane"></i></button>
