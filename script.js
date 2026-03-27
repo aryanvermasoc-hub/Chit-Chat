@@ -358,13 +358,13 @@ document.getElementById("createGroupBtn").addEventListener("click", () => {
 
 if (backToUsersBtn) {
   backToUsersBtn.addEventListener("click", () => { 
-    if (window.innerWidth <= 768) { sidebar.classList.remove("hidden"); activeChatState.style.display = "none"; emptyChatState.style.display = "flex"; } 
+    if (window.innerWidth <= 992) { sidebar.classList.remove("hidden"); activeChatState.style.display = "none"; emptyChatState.style.display = "flex"; } 
   });
 }
 
 // Navigation Fix: Hardware Back Button
 window.addEventListener("popstate", (e) => {
-  if (window.innerWidth <= 768) {
+  if (window.innerWidth <= 992) {
     if (sidebar.classList.contains("hidden")) {
       sidebar.classList.remove("hidden");
       activeChatState.style.display = "none";
@@ -395,7 +395,7 @@ function openChat(targetUid, targetName, targetAvatar, isTargetOnline, targetLas
   else { targetStatus.classList.remove('online'); targetStatus.innerText = `Last seen: ${timeAgo(targetLastSeen)}`; }
   
   emptyChatState.style.display = "none"; activeChatState.style.display = "flex";
-  if(window.innerWidth <= 768) { sidebar.classList.add("hidden"); history.pushState({ page: "chat" }, ""); }
+  if(window.innerWidth <= 992) { sidebar.classList.add("hidden"); history.pushState({ page: "chat" }, ""); }
   loadMessages(); listenToTyping();
 }
 
@@ -411,7 +411,7 @@ function openGroupChat(groupId, groupName, memberCount) {
   document.getElementById("chatTargetStatus").innerText = `${memberCount} members`;
   
   emptyChatState.style.display = "none"; activeChatState.style.display = "flex";
-  if(window.innerWidth <= 768) { sidebar.classList.add("hidden"); history.pushState({ page: "chat" }, ""); }
+  if(window.innerWidth <= 992) { sidebar.classList.add("hidden"); history.pushState({ page: "chat" }, ""); }
   loadMessages();
 }
 
@@ -614,7 +614,7 @@ closeGameBtn.addEventListener("click", () => {
 const arcadeBackBtn = document.getElementById("arcadeBackBtn");
 if (arcadeBackBtn) {
   arcadeBackBtn.addEventListener("click", () => {
-    if (window.innerWidth <= 768) {
+    if (window.innerWidth <= 992) {
       sidebar.classList.remove("hidden");
       document.getElementById("activeGameArea").style.display = "none";
       isPlayingActionGame = false;
@@ -1022,13 +1022,13 @@ const reelsWrapper = document.getElementById("reelsWrapper");
 
 shortsBtn.addEventListener("click", () => {
   reelsArea.style.display = "flex";
-  if(window.innerWidth <= 768) sidebar.classList.add("hidden");
+  if(window.innerWidth <= 992) sidebar.classList.add("hidden");
   loadYoutubeReels();
 });
 
 closeReels.addEventListener("click", () => {
   reelsArea.style.display = "none"; reelsWrapper.innerHTML = ""; 
-  if(window.innerWidth <= 768) sidebar.classList.remove("hidden");
+  if(window.innerWidth <= 992) sidebar.classList.remove("hidden");
 });
 
 async function loadYoutubeReels() {
