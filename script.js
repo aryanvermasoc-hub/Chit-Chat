@@ -41,6 +41,14 @@ let gameUnsubscribe = null;
 let isPlayingActionGame = false;
 let singlePlayerMode = false;
 let currentAnimationId = null; 
+let currentSpDifficulty = 'medium'; // Global difficulty tracker
+
+// MESSAGE MODAL STATE
+let activeMsgId = null;
+let activeMsgText = "";
+let activeMsgSender = "";
+
+window.changeSpDifficulty = (val) => { currentSpDifficulty = val; };
 
 // --- 3. DOM ELEMENTS ---
 const authScreen = document.getElementById("authScreen");
@@ -93,17 +101,15 @@ function switchSidebarView(view) {
     }
 }
 
-// Initial View
 switchSidebarView('games');
 
 chatToggleBtn.addEventListener("click", () => {
   if (chatListContainer.style.display === "flex") { switchSidebarView('feed'); } 
   else { switchSidebarView('chats'); }
 });
-
 homeGamesBtn.addEventListener("click", () => { switchSidebarView('games'); });
 
-// --- 4. ENCRYPTION ENGINE (CryptoJS) ---
+// --- 4. ENCRYPTION ENGINE ---
 const encryptMessage = (text, secretKey) => {
   if (!text) return text;
   return CryptoJS.AES.encrypt(text, secretKey).toString();
@@ -119,7 +125,7 @@ const decryptMessage = (cipherText, secretKey) => {
   }
 };
 
-// --- 5. UTILS & TOAST NOTIFICATION ---
+// --- 5. UTILS & TOAST ---
 const getFakeEmail = (username) => `${username.toLowerCase().trim()}@chitchat.app`;
 
 const generateAvatar = (userObj, fallbackName) => {
@@ -159,7 +165,7 @@ window.showToast = function(title, message, avatarUrl) {
   }, 4000);
 };
 
-// --- 6. AUTHENTICATION UI LOGIC ---
+// --- 6. AUTHENTICATION ---
 const toggleAuthMode = (signup) => {
   isSignupMode = signup;
   if (signup) {
@@ -266,10 +272,15 @@ function startMyProfileListener(uid) {
               const sName = sender ? (sender.fullName || sender.username) : "Someone";
               const sAvatar = generateAvatar(sender, sName);
               let preview = newMeta.text;
+              
               if(preview === "🎮 GAME CHALLENGE") {
                   showToast(`Game Request!`, `${sName} challenged you to a game.`, sAvatar);
               } else {
-                  if (preview.startsWith("U2Fz")) preview = decryptMessage(preview, uid < otherUid ? `${uid}_${otherUid}` : `${otherUid}_${uid}`) || "New encrypted message";
+                  if (preview.startsWith("U2FsdGVkX1") || preview.startsWith("U2Fz")) {
+                      const pChatId = uid < otherUid ? `${uid}_${otherUid}` : `${otherUid}_${uid}`;
+                      const decrypted = decryptMessage(preview, pChatId);
+                      preview = decrypted ? decrypted : "🔒 Encrypted Message";
+                  }
                   showToast(`New Message from ${sName}`, preview, sAvatar);
               }
             }
@@ -324,11 +335,16 @@ function renderSidebar() {
     const unreadStyle = meta?.unread ? "font-weight:700; color:var(--primary);" : "";
     
     let previewText = meta?.text ? meta.text : `@${user.username}`;
-    if (previewText.startsWith("U2Fz")) previewText = "🔒 Encrypted Message";
+    
+    if (previewText.startsWith("U2FsdGVkX1") || previewText.startsWith("U2Fz")) {
+        const pChatId = auth.currentUser.uid < user.id ? `${auth.currentUser.uid}_${user.id}` : `${user.id}_${auth.currentUser.uid}`;
+        const decryptedText = decryptMessage(previewText, pChatId);
+        previewText = decryptedText ? decryptedText : "🔒 Encrypted Message";
+    }
 
     const userCard = document.createElement("div");
     userCard.className = "user-item";
-    userCard.innerHTML = `<div class="avatar-wrapper"><img src="${avatarUrl}" class="avatar"><div class="status-dot ${isOnline}"></div></div><div class="user-meta" style="flex:1; min-width:0;"><span class="name" style="${unreadStyle}">${displayName}</span><span class="handle" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis; ${unreadStyle}">${previewText}</span></div>${meta?.unread ? '<div style="width:10px; height:10px; background:var(--primary); border-radius:50%;"></div>' : ''}`;
+    userCard.innerHTML = `<div class="avatar-wrapper"><img src="${avatarUrl}" class="avatar"><div class="status-dot ${isOnline}"></div></div><div class="user-meta"><span class="name" style="${unreadStyle}">${displayName}</span><span class="handle" style="${unreadStyle}">${previewText}</span></div>${meta?.unread ? '<div style="width:10px; height:10px; background:var(--primary); border-radius:50%; flex-shrink:0;"></div>' : ''}`;
 
     userCard.onclick = () => {
       if(meta?.unread) updateDoc(doc(db, "users", auth.currentUser.uid), { [`chatMeta.${user.id}.unread`]: false });
@@ -364,7 +380,6 @@ if (backToUsersBtn) {
   });
 }
 
-// Navigation Fix: Hardware Back Button
 window.addEventListener("popstate", (e) => {
   if (window.innerWidth <= 992) {
     if (sidebar.classList.contains("hidden")) {
@@ -424,9 +439,21 @@ function loadMessages() {
   messagesUnsubscribe = onSnapshot(q, (snapshot) => {
     chatBox.innerHTML = "";
     
+    const now = Date.now();
+    
+    // ⏳ 24 HOURS TIME LIMIT 
+    const TIME_LIMIT = 24 * 60 * 60 * 1000; 
+
     snapshot.forEach(docSnap => {
       const msg = docSnap.data();
       const msgId = docSnap.id;
+      
+      // 🛑 AUTO-DELETE LOGIC
+      if (now - msg.time > TIME_LIMIT) {
+          deleteDoc(doc(db, "chats", currentChatId, "messages", msgId)).catch(e=>{});
+          return; 
+      }
+
       const isMe = msg.sender === auth.currentUser.uid;
       
       if (msg.deletedFor && msg.deletedFor.includes(auth.currentUser.uid)) return;
@@ -442,10 +469,10 @@ function loadMessages() {
           const gameTitle = gameNames[msg.gameType] || "a Game";
           
           if (isMe) {
-              contentHtml = `<div class="challenge-bubble"><h4>🎮 Challenge Sent</h4><p>Waiting for opponent to accept ${gameTitle}...</p></div>`;
+              contentHtml = `<div class="challenge-bubble" onclick="event.stopPropagation();"><h4>🎮 Challenge Sent</h4><p>Waiting for opponent to accept ${gameTitle}...</p></div>`;
           } else {
               contentHtml = `
-                <div class="challenge-bubble">
+                <div class="challenge-bubble" onclick="event.stopPropagation();">
                   <h4>🎮 Game Request</h4><p>Wants to play <b>${gameTitle}</b></p>
                   <div class="challenge-actions">
                      <button class="btn-accept" onclick="acceptGameChallenge('${msg.gameId}', '${msg.gameType}')">Accept</button>
@@ -456,18 +483,24 @@ function loadMessages() {
         contentHtml = `<div class="msg-bubble msg-deleted"><i class="fa-solid fa-ban"></i> This message was deleted</div>`;
       } else {
         let decryptedText = decryptMessage(msg.text, currentChatId);
-        let replyHtml = msg.replyToText ? `<div class="replied-msg-box"><b>${msg.replyToName}</b><br>${decryptMessage(msg.replyToText, currentChatId)}</div>` : "";
-        let imgHtml = msg.imageUrl ? `<img src="${msg.imageUrl}" style="max-width:100%; border-radius:12px; margin-bottom:8px; cursor:pointer;" onclick="window.open('${msg.imageUrl}')" />` : "";
+        
+        // 🛑 INVISIBLE BUBBLE FIX
+        if (!decryptedText && !msg.imageUrl) return;
+
+        let replyHtml = msg.replyToText ? `<div class="replied-msg-box" onclick="event.stopPropagation();"><b>${msg.replyToName}</b><div class="preview-text">${decryptMessage(msg.replyToText, currentChatId)}</div></div>` : "";
+        let imgHtml = msg.imageUrl ? `<img src="${msg.imageUrl}" style="max-width:100%; border-radius:12px; margin-bottom:8px; cursor:pointer;" onclick="event.stopPropagation(); window.open('${msg.imageUrl}')" />` : "";
         let groupSenderHtml = (isCurrentChatGroup && !isMe) ? `<div style="font-size:11px; color:var(--primary); font-weight:600; margin-bottom:4px;">${msg.senderName}</div>` : "";
         
-        let safeText = decryptedText ? decryptedText.replace(/'/g, "\\'") : 'Image';
-        let safeName = isMe ? 'You' : (msg.senderName ? msg.senderName.replace(/'/g, "\\'") : document.getElementById('chatTargetName').innerText.replace(/'/g, "\\'"));
+        const safeTextToEncode = decryptedText || (msg.imageUrl ? 'Image' : '');
+        const safeNameToEncode = isMe ? 'You' : (msg.senderName || document.getElementById('chatTargetName').innerText);
+        const encodedText = encodeURIComponent(safeTextToEncode);
+        const encodedName = encodeURIComponent(safeNameToEncode);
 
         contentHtml = `
-          <div class="msg-bubble" ondblclick="initReply('${msgId}', '${safeText}', '${safeName}')">
+          <div class="msg-bubble" onclick="openMessageModal('${msgId}', '${encodedText}', '${encodedName}', ${isMe})">
             ${groupSenderHtml}${replyHtml}${imgHtml}
-            ${decryptedText} ${msg.isEdited ? '<span style="font-size:10px; opacity:0.5;"> (edited)</span>' : ''}
-            <i class="fa-solid fa-ellipsis-vertical msg-options" title="Options" onclick="openMessageOptions('${msgId}', '${safeText}', ${isMe})"></i>
+            <span style="word-wrap: break-word; white-space: pre-wrap; display: block; max-width: 100%;">${decryptedText}</span> 
+            ${msg.isEdited ? '<span style="font-size:10px; opacity:0.5; display:block; margin-top:5px;">(edited)</span>' : ''}
           </div>
         `;
       }
@@ -476,7 +509,7 @@ function loadMessages() {
       
       div.innerHTML = `
         ${!isMe ? `<img src="${avatarSrc}" class="msg-avatar">` : ''}
-        <div style="display:flex; flex-direction:column;">
+        <div style="display:flex; flex-direction:column; max-width: 100%;">
           ${contentHtml}<div class="msg-time">${timeStr}</div>
         </div>
         ${isMe ? `<img src="${document.getElementById('myAvatar').src}" class="msg-avatar">` : ''}
@@ -487,21 +520,69 @@ function loadMessages() {
   });
 }
 
-window.initReply = (msgId, text, name) => { replyingToMsg = { id: msgId, text: text, name: name }; document.getElementById("replyPreviewName").innerText = `Replying to ${name}`; document.getElementById("replyPreviewText").innerText = text; document.getElementById("replyPreviewContainer").style.display = "flex"; msgInput.focus(); };
-document.getElementById("cancelReplyBtn").addEventListener("click", () => { replyingToMsg = null; document.getElementById("replyPreviewContainer").style.display = "none"; });
+// WhatsApp Style Context Menu Modal Options
+window.openMessageModal = (msgId, encodedText, encodedName, isMe) => {
+    activeMsgId = msgId;
+    activeMsgText = decodeURIComponent(encodedText);
+    activeMsgSender = decodeURIComponent(encodedName);
 
-window.openMessageOptions = async (msgId, currentText, isMe) => {
-  const msgRef = doc(db, "chats", currentChatId, "messages", msgId);
-  if (isMe) {
-    const action = prompt("Message Options:\n1. Edit\n2. Delete for Everyone\n3. Delete for Me", "1");
-    if (action === "1") { 
-      const newText = prompt("Edit message:", currentText); 
-      if (newText && newText !== currentText) await updateDoc(msgRef, { text: encryptMessage(newText, currentChatId), isEdited: true }); 
-    } 
-    else if (action === "2") { if(confirm("Delete for everyone?")) await updateDoc(msgRef, { isDeleted: true, text: "" }); } 
-    else if (action === "3") { await updateDoc(msgRef, { deletedFor: arrayUnion(auth.currentUser.uid) }); }
-  } else { if(confirm("Delete this message for yourself?")) await updateDoc(msgRef, { deletedFor: arrayUnion(auth.currentUser.uid) }); }
+    const list = document.getElementById("msgOptionsList");
+    list.innerHTML = ""; 
+
+    list.innerHTML += `<button class="primary-btn" style="background: var(--primary);" onclick="triggerReply()"><i class="fa-solid fa-reply"></i> Reply</button>`;
+
+    if (isMe) {
+        list.innerHTML += `<button class="primary-btn" style="background: #3b82f6;" onclick="triggerEdit()"><i class="fa-solid fa-pen"></i> Edit Message</button>`;
+        list.innerHTML += `<button class="primary-btn" style="background: #ef4444;" onclick="triggerDeleteEveryone()"><i class="fa-solid fa-trash-can"></i> Delete for Everyone</button>`;
+    }
+
+    list.innerHTML += `<button class="primary-btn" style="background: #f59e0b;" onclick="triggerDeleteMe()"><i class="fa-solid fa-eraser"></i> Delete for Me</button>`;
+
+    document.getElementById("msgOptionsModal").style.display = "flex";
 };
+
+window.closeMsgOptions = () => {
+    document.getElementById("msgOptionsModal").style.display = "none";
+};
+
+window.triggerReply = () => {
+    closeMsgOptions();
+    replyingToMsg = { id: activeMsgId, text: activeMsgText, name: activeMsgSender }; 
+    document.getElementById("replyPreviewName").innerText = `Replying to ${activeMsgSender}`; 
+    document.getElementById("replyPreviewText").innerText = activeMsgText; 
+    document.getElementById("replyPreviewContainer").style.display = "flex"; 
+    msgInput.focus();
+};
+
+window.triggerEdit = async () => {
+    closeMsgOptions();
+    const newText = prompt("Edit message:", activeMsgText);
+    if (newText && newText.trim() !== "" && newText !== activeMsgText) {
+        const msgRef = doc(db, "chats", currentChatId, "messages", activeMsgId);
+        await updateDoc(msgRef, { text: encryptMessage(newText.trim(), currentChatId), isEdited: true });
+    }
+};
+
+window.triggerDeleteEveryone = async () => {
+    closeMsgOptions();
+    if (confirm("Delete this message for everyone?")) {
+        const msgRef = doc(db, "chats", currentChatId, "messages", activeMsgId);
+        await updateDoc(msgRef, { isDeleted: true, text: "" });
+    }
+};
+
+window.triggerDeleteMe = async () => {
+    closeMsgOptions();
+    if (confirm("Delete this message for yourself?")) {
+        const msgRef = doc(db, "chats", currentChatId, "messages", activeMsgId);
+        await updateDoc(msgRef, { deletedFor: arrayUnion(auth.currentUser.uid) });
+    }
+};
+
+document.getElementById("cancelReplyBtn").addEventListener("click", () => { 
+    replyingToMsg = null; 
+    document.getElementById("replyPreviewContainer").style.display = "none"; 
+});
 
 function listenToTyping() {
   if (chatMetaUnsubscribe) chatMetaUnsubscribe();
@@ -609,11 +690,8 @@ closeGameBtn.addEventListener("click", () => {
     
     if (singlePlayerMode) {
         singlePlayerMode = false;
-        spTttActive = false; // Kill local bot if running
-        // FIX FOR MOBILE: Un-hide sidebar when returning to Arcade Zone
-        if (window.innerWidth <= 992) {
-            sidebar.classList.remove("hidden");
-        }
+        spTttActive = false;
+        if (window.innerWidth <= 992) sidebar.classList.remove("hidden");
     } else {
         if(gameUnsubscribe) gameUnsubscribe();
         if(currentGameId) { updateDoc(doc(db, "games", currentGameId), { status: "abandoned" }); }
@@ -678,7 +756,13 @@ let spTttActive = true;
 
 window.renderSinglePlayerTTT = () => {
     document.getElementById("activeGameTitle").innerText = "Tic Tac Toe (Solo)";
-    let html = `<div class="game-turn-indicator">You vs Computer</div><div class="ttt-board">`;
+    let html = `<div class="game-turn-indicator" style="margin-bottom:10px;">You vs Computer</div>
+    <select id="spDifficulty" class="difficulty-select" onchange="changeSpDifficulty(this.value)">
+        <option value="easy" ${currentSpDifficulty==='easy'?'selected':''}>Difficulty: Easy</option>
+        <option value="medium" ${currentSpDifficulty==='medium'?'selected':''}>Difficulty: Medium</option>
+        <option value="hard" ${currentSpDifficulty==='hard'?'selected':''}>Difficulty: Hard</option>
+    </select>
+    <div class="ttt-board">`;
     spTttBoard.forEach((cell, i) => {
         const cellClass = cell === 'X' ? 'x' : (cell === 'O' ? 'o' : '');
         html += `<div class="ttt-cell ${cellClass}" onclick="spTttMove(${i})">${cell}</div>`;
@@ -688,16 +772,50 @@ window.renderSinglePlayerTTT = () => {
     gameUIContainer.innerHTML = html;
 };
 
+function getBotMoveTTT(board, difficulty) {
+    let empty = board.map((c, i) => c === "" ? i : null).filter(c => c !== null);
+    if (empty.length === 0) return -1;
+    
+    if (difficulty === 'easy') return empty[Math.floor(Math.random() * empty.length)];
+    
+    const checkWin = (player) => {
+        const lines = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
+        for(let line of lines) {
+            const [a,b,c] = line;
+            if(board[a]===player && board[b]===player && board[c]==="") return c;
+            if(board[a]===player && board[c]===player && board[b]==="") return b;
+            if(board[b]===player && board[c]===player && board[a]==="") return a;
+        }
+        return null;
+    };
+
+    let winMove = checkWin("O");
+    let blockMove = checkWin("X");
+
+    if (difficulty === 'hard') {
+        if (winMove !== null) return winMove;
+        if (blockMove !== null) return blockMove;
+        if (board[4] === "") return 4;
+        const corners = [0, 2, 6, 8].filter(c => board[c] === "");
+        if (corners.length > 0) return corners[Math.floor(Math.random() * corners.length)];
+        return empty[Math.floor(Math.random() * empty.length)];
+    }
+    
+    if (Math.random() > 0.4) { 
+        if (winMove !== null) return winMove;
+        if (blockMove !== null) return blockMove;
+    }
+    return empty[Math.floor(Math.random() * empty.length)];
+}
+
 window.spTttMove = (i) => {
     if(!spTttActive || spTttBoard[i] !== "") return;
     spTttBoard[i] = "X";
     if(checkTttWin(spTttBoard, "X")) { spTttEnd("🎉 You Won!"); return; }
     if(!spTttBoard.includes("")) { spTttEnd("It's a Draw!"); return; }
     
-    // Bot move
-    let empty = spTttBoard.map((c, idx) => c === "" ? idx : null).filter(c => c !== null);
-    if(empty.length > 0) {
-        let botMove = empty[Math.floor(Math.random() * empty.length)];
+    let botMove = getBotMoveTTT(spTttBoard, currentSpDifficulty);
+    if(botMove !== -1) {
         spTttBoard[botMove] = "O";
         if(checkTttWin(spTttBoard, "O")) { spTttEnd("😞 Computer Won!"); return; }
         if(!spTttBoard.includes("")) { spTttEnd("It's a Draw!"); return; }
@@ -720,10 +838,17 @@ window.spTttReset = () => { spTttBoard = ["","","","","","","","",""]; spTttActi
 
 
 // --- Single Player: Rock Paper Scissors ---
+let spRpsHistory = [];
+
 window.renderSinglePlayerRPS = () => {
     document.getElementById("activeGameTitle").innerText = "RPS (Solo)";
     let html = `
-    <div class="game-turn-indicator">Make your choice!</div>
+    <div class="game-turn-indicator" style="margin-bottom:10px;">Make your choice!</div>
+    <select id="spDifficulty" class="difficulty-select" onchange="changeSpDifficulty(this.value)">
+        <option value="easy" ${currentSpDifficulty==='easy'?'selected':''}>Difficulty: Easy</option>
+        <option value="medium" ${currentSpDifficulty==='medium'?'selected':''}>Difficulty: Medium</option>
+        <option value="hard" ${currentSpDifficulty==='hard'?'selected':''}>Difficulty: Hard</option>
+    </select>
     <div class="rps-controls">
         <button class="rps-btn" onclick="spRpsMove('rock')"><i class="fa-solid fa-hand-back-fist"></i></button>
         <button class="rps-btn" onclick="spRpsMove('paper')"><i class="fa-solid fa-hand"></i></button>
@@ -733,19 +858,36 @@ window.renderSinglePlayerRPS = () => {
 };
 
 window.spRpsMove = (choice) => {
+    spRpsHistory.push(choice);
     const choices = ['rock', 'paper', 'scissors'];
-    const botChoice = choices[Math.floor(Math.random() * 3)];
+    let botChoice;
+
+    if (currentSpDifficulty === 'easy') { 
+        botChoice = Math.random() > 0.3 ? choices[Math.floor(Math.random() * 3)] : choice; 
+    } 
+    else if (currentSpDifficulty === 'medium' || spRpsHistory.length < 3) { 
+        botChoice = choices[Math.floor(Math.random() * 3)]; 
+    } 
+    else {
+        if (Math.random() < 0.2) {
+            botChoice = choices[Math.floor(Math.random() * 3)];
+        } else {
+            let counts = { rock: 0, paper: 0, scissors: 0 };
+            spRpsHistory.slice(-5).forEach(m => counts[m]++);
+            let maxMove = Object.keys(counts).reduce((a, b) => counts[a] > counts[b] ? a : b);
+            if (maxMove === 'rock') botChoice = 'paper';
+            else if (maxMove === 'paper') botChoice = 'scissors';
+            else botChoice = 'rock';
+        }
+    }
+
     let result = "It's a Tie!";
-    
     if (
         (choice === 'rock' && botChoice === 'scissors') ||
         (choice === 'paper' && botChoice === 'rock') ||
         (choice === 'scissors' && botChoice === 'paper')
-    ) {
-        result = "🎉 You Won!";
-    } else if (choice !== botChoice) {
-        result = "😞 Computer Won!";
-    }
+    ) { result = "🎉 You Won!"; } 
+    else if (choice !== botChoice) { result = "😞 Computer Won!"; }
     
     const icons = { rock: "fa-hand-back-fist", paper: "fa-hand", scissors: "fa-hand-scissors" };
     let html = `
@@ -772,7 +914,6 @@ window.renderSinglePlayerAction = async (gameType) => {
     try {
         const userDoc = await getDoc(doc(db, "users", auth.currentUser.uid));
         const data = userDoc.data();
-        // Check if highScores exists in DB
         spHighScore = (data && data.highScores && data.highScores[gameType]) ? data.highScores[gameType] : 0;
     } catch(e) { spHighScore = 0; }
     
@@ -798,14 +939,13 @@ window.showSpActionMenu = () => {
         </div>
     `;
 
-    // Draw the initial preview frame so it's not a black box!
     const canvas = document.getElementById('actionCanvas');
     if (canvas) {
         const ctx = canvas.getContext('2d');
         if (spGameType === 'carracing') {
-            ctx.fillStyle = '#8b5cf6'; ctx.fillRect(135, 330, 30, 50); // Preview Car
+            ctx.fillStyle = '#8b5cf6'; ctx.fillRect(135, 330, 30, 50); 
         } else {
-            ctx.fillStyle = '#10b981'; ctx.beginPath(); ctx.moveTo(150, 350); ctx.lineTo(165, 380); ctx.lineTo(135, 380); ctx.fill(); // Preview Jet
+            ctx.fillStyle = '#10b981'; ctx.beginPath(); ctx.moveTo(150, 350); ctx.lineTo(165, 380); ctx.lineTo(135, 380); ctx.fill(); 
         }
     }
     
@@ -825,7 +965,6 @@ window.handleSpActionGameOver = async (score) => {
         spHighScore = score;
         isNewHighScore = true;
         try {
-            // FIX FOR DB SAVE: SetDoc with Merge ensures it never fails if the nested field didn't exist before.
             await setDoc(doc(db, "users", auth.currentUser.uid), { 
                 highScores: { [spGameType]: score } 
             }, { merge: true });
@@ -934,7 +1073,6 @@ function startCarRacing(gameId, isPlayer1) {
     let gameSpeed = 3;
     let isGameOver = false;
 
-    // DESKTOP KEYBOARD CONTROLS
     const handleKeyDown = (e) => {
         if(!isPlayingActionGame) return;
         if(e.key === 'ArrowLeft' && carX > 35) carX -= 100;
@@ -997,7 +1135,7 @@ function startCarRacing(gameId, isPlayer1) {
     function gameOver() {
         isGameOver = true;
         isPlayingActionGame = false;
-        window.removeEventListener('keydown', handleKeyDown); // Cleanup keys
+        window.removeEventListener('keydown', handleKeyDown); 
         if(currentAnimationId) cancelAnimationFrame(currentAnimationId);
         
         const finalScore = Math.floor(score/10);
@@ -1039,13 +1177,12 @@ function startJetFighter(gameId, isPlayer1) {
     let isMovingLeft = false;
     let isMovingRight = false;
 
-    // DESKTOP KEYBOARD CONTROLS
     const handleKeyDown = (e) => {
         if(!isPlayingActionGame) return;
         if(e.key === 'ArrowLeft') isMovingLeft = true;
         if(e.key === 'ArrowRight') isMovingRight = true;
         if(e.key === ' ' || e.key === 'ArrowUp') { 
-            e.preventDefault(); // Stop page scroll
+            e.preventDefault(); 
             bullets.push({ x: jetX + jetSize/2 - 2, y: 350 }); 
         }
     };
@@ -1070,11 +1207,9 @@ function startJetFighter(gameId, isPlayer1) {
         if(isGameOver) return;
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-        // Movement
         if(isMovingLeft && jetX > 0) jetX -= 5;
         if(isMovingRight && jetX < canvas.width - jetSize) jetX += 5;
 
-        // Stars
         ctx.fillStyle = 'white';
         for(let i=0; i<3; i++) {
             ctx.fillRect(Math.random()*canvas.width, Math.random()*canvas.height, 2, 2);
@@ -1082,7 +1217,6 @@ function startJetFighter(gameId, isPlayer1) {
 
         drawJet(jetX, 350, '#10b981');
 
-        // Bullets
         ctx.fillStyle = '#f59e0b';
         for(let i=0; i<bullets.length; i++) {
             bullets[i].y -= 7;
@@ -1090,7 +1224,6 @@ function startJetFighter(gameId, isPlayer1) {
         }
         bullets = bullets.filter(b => b.y > 0);
 
-        // Enemies
         if(Math.random() < 0.03 + (score/10000)) {
             enemies.push({ x: Math.random() * (canvas.width - 20), y: -20, size: 20 });
         }
@@ -1101,7 +1234,6 @@ function startJetFighter(gameId, isPlayer1) {
             ctx.fillStyle = '#ef4444';
             ctx.fillRect(e.x, e.y, e.size, e.size);
 
-            // Collision with bullet
             for(let j=0; j<bullets.length; j++) {
                 let b = bullets[j];
                 if(b.x > e.x && b.x < e.x + e.size && b.y > e.y && b.y < e.y + e.size) {
@@ -1111,7 +1243,6 @@ function startJetFighter(gameId, isPlayer1) {
                 }
             }
 
-            // Collision with player
             if (jetX < e.x + e.size && jetX + jetSize > e.x &&
                 350 < e.y + e.size && 350 + jetSize > e.y) {
                 gameOver();
@@ -1130,7 +1261,7 @@ function startJetFighter(gameId, isPlayer1) {
     function gameOver() {
         isGameOver = true;
         isPlayingActionGame = false;
-        window.removeEventListener('keydown', handleKeyDown); // Cleanup keys
+        window.removeEventListener('keydown', handleKeyDown); 
         window.removeEventListener('keyup', handleKeyUp);
         if(currentAnimationId) cancelAnimationFrame(currentAnimationId);
         
