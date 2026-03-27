@@ -39,6 +39,8 @@ let myProfileUnsubscribe = null;
 let currentGameId = null;
 let gameUnsubscribe = null;
 let isPlayingActionGame = false;
+let singlePlayerMode = false;
+let currentAnimationId = null; 
 
 // --- 3. DOM ELEMENTS ---
 const authScreen = document.getElementById("authScreen");
@@ -551,7 +553,7 @@ sendBtn.addEventListener("click", sendMessage);
 msgInput.addEventListener("keypress", (e) => { if (e.key === "Enter") sendMessage(); });
 searchInput.addEventListener("input", (e) => { const term = e.target.value.toLowerCase(); document.querySelectorAll(".user-item").forEach(item => { item.style.display = item.innerText.toLowerCase().includes(term) ? "flex" : "none"; }); });
 
-// --- 10. REAL-TIME GAMES LOGIC ---
+// --- 10. REAL-TIME GAMES LOGIC (MULTIPLAYER) ---
 const launchGameMenuBtn = document.getElementById("launchGameMenuBtn");
 const gameSelectionModal = document.getElementById("gameSelectionModal");
 const closeGameSelectBtn = document.getElementById("closeGameSelectBtn");
@@ -603,28 +605,25 @@ window.acceptGameChallenge = async (gameId, gameType) => {
 };
 
 closeGameBtn.addEventListener("click", () => {
-    if(gameUnsubscribe) gameUnsubscribe();
-    if(currentGameId) { updateDoc(doc(db, "games", currentGameId), { status: "abandoned" }); }
+    if(currentAnimationId) cancelAnimationFrame(currentAnimationId);
+    
+    if (singlePlayerMode) {
+        singlePlayerMode = false;
+        spTttActive = false; // Kill local bot if running
+    } else {
+        if(gameUnsubscribe) gameUnsubscribe();
+        if(currentGameId) { updateDoc(doc(db, "games", currentGameId), { status: "abandoned" }); }
+    }
+    
     activeGameArea.style.display = "none";
     currentGameId = null;
     isPlayingActionGame = false;
 });
 
-// Arcade navigation fix
-const arcadeBackBtn = document.getElementById("arcadeBackBtn");
-if (arcadeBackBtn) {
-  arcadeBackBtn.addEventListener("click", () => {
-    if (window.innerWidth <= 992) {
-      sidebar.classList.remove("hidden");
-      document.getElementById("activeGameArea").style.display = "none";
-      isPlayingActionGame = false;
-    }
-  });
-}
-
 function joinGameRoom(gameId, gameType) {
     currentGameId = gameId;
     isPlayingActionGame = false;
+    singlePlayerMode = false;
     activeGameArea.style.display = "flex";
     
     let gTitle = "Game";
@@ -656,7 +655,187 @@ function joinGameRoom(gameId, gameType) {
     });
 }
 
-// ACTION GAMES LOGIC (Jet Fighter & Car Racing)
+// --- 11. SINGLE PLAYER GAMES (VS COMPUTER / HIGH SCORE) ---
+
+window.startSinglePlayer = (gameType) => {
+    singlePlayerMode = true;
+    currentGameId = null;
+    if (window.innerWidth <= 992) sidebar.classList.add("hidden");
+    activeGameArea.style.display = "flex";
+    
+    if (gameType === 'tictactoe') { spTttReset(); }
+    else if (gameType === 'rps') { renderSinglePlayerRPS(); }
+    else if (gameType === 'jetfighter' || gameType === 'carracing') { renderSinglePlayerAction(gameType); }
+};
+
+// --- Single Player: Tic Tac Toe ---
+let spTttBoard = ["","","","","","","","",""];
+let spTttActive = true;
+
+window.renderSinglePlayerTTT = () => {
+    document.getElementById("activeGameTitle").innerText = "Tic Tac Toe (Solo)";
+    let html = `<div class="game-turn-indicator">You vs Computer</div><div class="ttt-board">`;
+    spTttBoard.forEach((cell, i) => {
+        const cellClass = cell === 'X' ? 'x' : (cell === 'O' ? 'o' : '');
+        html += `<div class="ttt-cell ${cellClass}" onclick="spTttMove(${i})">${cell}</div>`;
+    });
+    html += `</div>`;
+    if(!spTttActive) html += `<button class="primary-btn glow-btn" style="max-width:200px; margin-top:20px;" onclick="spTttReset()">Play Again</button>`;
+    gameUIContainer.innerHTML = html;
+};
+
+window.spTttMove = (i) => {
+    if(!spTttActive || spTttBoard[i] !== "") return;
+    spTttBoard[i] = "X";
+    if(checkTttWin(spTttBoard, "X")) { spTttEnd("🎉 You Won!"); return; }
+    if(!spTttBoard.includes("")) { spTttEnd("It's a Draw!"); return; }
+    
+    // Bot move
+    let empty = spTttBoard.map((c, idx) => c === "" ? idx : null).filter(c => c !== null);
+    if(empty.length > 0) {
+        let botMove = empty[Math.floor(Math.random() * empty.length)];
+        spTttBoard[botMove] = "O";
+        if(checkTttWin(spTttBoard, "O")) { spTttEnd("😞 Computer Won!"); return; }
+        if(!spTttBoard.includes("")) { spTttEnd("It's a Draw!"); return; }
+    }
+    renderSinglePlayerTTT();
+};
+
+function checkTttWin(board, player) {
+    const lines = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
+    return lines.some(line => line.every(idx => board[idx] === player));
+}
+
+function spTttEnd(msg) {
+    spTttActive = false;
+    renderSinglePlayerTTT();
+    document.querySelector('.game-turn-indicator').innerText = msg;
+}
+
+window.spTttReset = () => { spTttBoard = ["","","","","","","","",""]; spTttActive = true; renderSinglePlayerTTT(); };
+
+
+// --- Single Player: Rock Paper Scissors ---
+window.renderSinglePlayerRPS = () => {
+    document.getElementById("activeGameTitle").innerText = "RPS (Solo)";
+    let html = `
+    <div class="game-turn-indicator">Make your choice!</div>
+    <div class="rps-controls">
+        <button class="rps-btn" onclick="spRpsMove('rock')"><i class="fa-solid fa-hand-back-fist"></i></button>
+        <button class="rps-btn" onclick="spRpsMove('paper')"><i class="fa-solid fa-hand"></i></button>
+        <button class="rps-btn" onclick="spRpsMove('scissors')"><i class="fa-solid fa-hand-scissors"></i></button>
+    </div>`;
+    gameUIContainer.innerHTML = html;
+};
+
+window.spRpsMove = (choice) => {
+    const choices = ['rock', 'paper', 'scissors'];
+    const botChoice = choices[Math.floor(Math.random() * 3)];
+    let result = "It's a Tie!";
+    
+    if (
+        (choice === 'rock' && botChoice === 'scissors') ||
+        (choice === 'paper' && botChoice === 'rock') ||
+        (choice === 'scissors' && botChoice === 'paper')
+    ) {
+        result = "🎉 You Won!";
+    } else if (choice !== botChoice) {
+        result = "😞 Computer Won!";
+    }
+    
+    const icons = { rock: "fa-hand-back-fist", paper: "fa-hand", scissors: "fa-hand-scissors" };
+    let html = `
+    <div class="game-turn-indicator">${result}</div>
+    <div class="rps-arena">
+        <div class="rps-player"><span>You</span><div class="rps-choice-display"><i class="fa-solid ${icons[choice]}"></i></div></div>
+        <div class="vs-badge">VS</div>
+        <div class="rps-player"><span>Computer</span><div class="rps-choice-display"><i class="fa-solid ${icons[botChoice]}" style="color: #10b981;"></i></div></div>
+    </div>
+    <button class="primary-btn glow-btn" style="max-width:200px; margin-top:20px;" onclick="renderSinglePlayerRPS()">Play Again</button>`;
+    gameUIContainer.innerHTML = html;
+};
+
+
+// --- Single Player: Action Games (High Score logic) ---
+let spGameType = '';
+let spHighScore = 0;
+
+window.renderSinglePlayerAction = async (gameType) => {
+    spGameType = gameType;
+    document.getElementById("activeGameTitle").innerText = gameType === 'carracing' ? "Car Racing (Solo)" : "Jet Fighter (Solo)";
+    gameUIContainer.innerHTML = `<h3>Loading High Score... <i class="fa-solid fa-spinner fa-spin"></i></h3>`;
+    
+    try {
+        const userDoc = await getDoc(doc(db, "users", auth.currentUser.uid));
+        const data = userDoc.data();
+        spHighScore = (data.highScores && data.highScores[gameType]) ? data.highScores[gameType] : 0;
+    } catch(e) { spHighScore = 0; }
+    
+    showSpActionMenu();
+};
+
+window.showSpActionMenu = () => {
+    isPlayingActionGame = false;
+    gameUIContainer.innerHTML = `
+        <div class="game-turn-indicator" style="margin-bottom: 5px;">Beat your High Score!</div>
+        <div style="font-size: 16px; color: var(--accent); margin-bottom: 15px; font-weight:bold;">High Score: ${spHighScore}</div>
+        <div class="action-game-container">
+            <div style="position: relative; width: 100%; max-width: 300px;">
+                <canvas id="actionCanvas" width="300" height="400" class="action-canvas" style="margin: 0;"></canvas>
+                <div id="startOverlay" style="position: absolute; top:0; left:0; width:100%; height:100%; display:flex; justify-content:center; align-items:center; background:rgba(0,0,0,0.6); border-radius:12px; z-index:10;">
+                     <button class="primary-btn glow-btn" id="btnStartGame" style="width:auto; padding:15px 40px; font-size: 16px;">Play Now</button>
+                </div>
+            </div>
+            <div class="game-btn-row" id="gameControls" style="display:none;">
+                <button class="game-control-btn" id="btnLeft">⬅️</button>
+                <button class="game-control-btn" id="btnRight">➡️</button>
+            </div>
+        </div>
+    `;
+
+    // Draw the initial preview frame so it's not a black box!
+    const canvas = document.getElementById('actionCanvas');
+    if (canvas) {
+        const ctx = canvas.getContext('2d');
+        if (spGameType === 'carracing') {
+            ctx.fillStyle = '#8b5cf6'; ctx.fillRect(135, 330, 30, 50); // Preview Car
+        } else {
+            ctx.fillStyle = '#10b981'; ctx.beginPath(); ctx.moveTo(150, 350); ctx.lineTo(165, 380); ctx.lineTo(135, 380); ctx.fill(); // Preview Jet
+        }
+    }
+    
+    document.getElementById('btnStartGame').addEventListener('click', () => {
+        isPlayingActionGame = true;
+        document.getElementById('startOverlay').style.display = 'none';
+        document.getElementById('gameControls').style.display = 'flex';
+        
+        if (spGameType === 'carracing') startCarRacing(null, true);
+        else startJetFighter(null, true);
+    });
+};
+
+window.handleSpActionGameOver = async (score) => {
+    let isNewHighScore = false;
+    if (score > spHighScore) {
+        spHighScore = score;
+        isNewHighScore = true;
+        try {
+            await updateDoc(doc(db, "users", auth.currentUser.uid), { [`highScores.${spGameType}`]: score }, { merge: true });
+        } catch(e) { console.error("High score save failed", e); }
+    }
+    
+    gameUIContainer.innerHTML = `
+        <div class="game-turn-indicator" style="color:${isNewHighScore ? 'var(--primary)' : 'white'}">${isNewHighScore ? '🏆 NEW HIGH SCORE!' : 'GAME OVER'}</div>
+        <div style="font-size: 24px; text-align: center; margin: 20px 0;">
+            Your Score: <b style="color:var(--primary)">${score}</b><br>
+            High Score: <b style="color:var(--accent)">${spHighScore}</b>
+        </div>
+        <button class="primary-btn glow-btn" style="max-width:200px; margin-top:20px;" onclick="showSpActionMenu()">Play Again</button>
+    `;
+};
+
+
+// --- MULTIPLAYER ACTION & BOARD RENDERING ---
 function renderActionGame(data, gameId, gameType) {
     const isPlayer1 = data.player1 === auth.currentUser.uid;
     const myScore = isPlayer1 ? data.p1Score : data.p2Score;
@@ -690,26 +869,38 @@ function renderActionGame(data, gameId, gameType) {
         return;
     }
 
-    // Don't interrupt if they are currently playing
     if (isPlayingActionGame) return;
 
     gameUIContainer.innerHTML = `
-        <div class="game-turn-indicator">High Score Challenge!</div>
+        <div class="game-turn-indicator" style="margin-bottom: 5px;">High Score Challenge!</div>
         <div class="action-game-container">
-            <canvas id="actionCanvas" width="300" height="400" class="action-canvas"></canvas>
-            <div class="game-btn-row" id="gameControls">
+            <div style="position: relative; width: 100%; max-width: 300px;">
+                <canvas id="actionCanvas" width="300" height="400" class="action-canvas" style="margin: 0;"></canvas>
+                <div id="startOverlay" style="position: absolute; top:0; left:0; width:100%; height:100%; display:flex; justify-content:center; align-items:center; background:rgba(0,0,0,0.6); border-radius:12px; z-index:10; flex-direction:column; gap:10px;">
+                     <span style="color:white; font-size:14px;">Opponent is ready!</span>
+                     <button class="primary-btn glow-btn" id="btnStartGame" style="width:auto; padding:15px 40px; font-size: 16px;">Play Now</button>
+                </div>
+            </div>
+            <div class="game-btn-row" id="gameControls" style="display:none;">
                 <button class="game-control-btn" id="btnLeft">⬅️</button>
                 <button class="game-control-btn" id="btnRight">➡️</button>
             </div>
-            <button class="primary-btn glow-btn" id="btnStartGame" style="margin-top:20px;">Start Game</button>
         </div>
     `;
-    
-    document.getElementById('gameControls').style.display = 'none';
 
+    const canvas = document.getElementById('actionCanvas');
+    if (canvas) {
+        const ctx = canvas.getContext('2d');
+        if (gameType === 'carracing') {
+            ctx.fillStyle = '#8b5cf6'; ctx.fillRect(135, 330, 30, 50);
+        } else {
+            ctx.fillStyle = '#10b981'; ctx.beginPath(); ctx.moveTo(150, 350); ctx.lineTo(165, 380); ctx.lineTo(135, 380); ctx.fill();
+        }
+    }
+    
     document.getElementById('btnStartGame').addEventListener('click', () => {
         isPlayingActionGame = true;
-        document.getElementById('btnStartGame').style.display = 'none';
+        document.getElementById('startOverlay').style.display = 'none';
         document.getElementById('gameControls').style.display = 'flex';
         
         if (gameType === 'carracing') startCarRacing(gameId, isPlayer1);
@@ -721,7 +912,8 @@ window.resetActionGame = async (gameId) => {
     await updateDoc(doc(db, "games", gameId), { p1Score: null, p2Score: null });
 };
 
-// 10a. Car Racing Logic
+// --- CORE GAME LOOPS (Used by both Multi and Solo modes) ---
+
 function startCarRacing(gameId, isPlayer1) {
     const canvas = document.getElementById('actionCanvas');
     if (!canvas) return;
@@ -732,8 +924,15 @@ function startCarRacing(gameId, isPlayer1) {
     let score = 0;
     let obstacles = [];
     let gameSpeed = 3;
-    let animationId;
     let isGameOver = false;
+
+    // DESKTOP KEYBOARD CONTROLS
+    const handleKeyDown = (e) => {
+        if(!isPlayingActionGame) return;
+        if(e.key === 'ArrowLeft' && carX > 35) carX -= 100;
+        if(e.key === 'ArrowRight' && carX < 235) carX += 100;
+    };
+    window.addEventListener('keydown', handleKeyDown);
 
     function drawCar(x, y, color) {
         ctx.fillStyle = color;
@@ -784,13 +983,15 @@ function startCarRacing(gameId, isPlayer1) {
         ctx.font = 'bold 16px Inter';
         ctx.fillText('Score: ' + Math.floor(score/10), 10, 25);
 
-        animationId = requestAnimationFrame(gameLoop);
+        currentAnimationId = requestAnimationFrame(gameLoop);
     }
 
     function gameOver() {
         isGameOver = true;
         isPlayingActionGame = false;
-        cancelAnimationFrame(animationId);
+        window.removeEventListener('keydown', handleKeyDown); // Cleanup keys
+        if(currentAnimationId) cancelAnimationFrame(currentAnimationId);
+        
         const finalScore = Math.floor(score/10);
         ctx.fillStyle = 'rgba(0,0,0,0.7)';
         ctx.fillRect(0,0,canvas.width,canvas.height);
@@ -799,9 +1000,13 @@ function startCarRacing(gameId, isPlayer1) {
         ctx.fillText('CRASHED!', 100, 180);
         ctx.fillText('Score: ' + finalScore, 100, 220);
 
-        const field = isPlayer1 ? 'p1Score' : 'p2Score';
         setTimeout(() => {
-            updateDoc(doc(db, "games", gameId), { [field]: finalScore });
+            if (singlePlayerMode) {
+                handleSpActionGameOver(finalScore);
+            } else {
+                const field = isPlayer1 ? 'p1Score' : 'p2Score';
+                updateDoc(doc(db, "games", gameId), { [field]: finalScore });
+            }
         }, 1500);
     }
 
@@ -813,7 +1018,6 @@ function startCarRacing(gameId, isPlayer1) {
     gameLoop();
 }
 
-// 10b. Jet Fighter Logic
 function startJetFighter(gameId, isPlayer1) {
     const canvas = document.getElementById('actionCanvas');
     if (!canvas) return;
@@ -823,10 +1027,27 @@ function startJetFighter(gameId, isPlayer1) {
     let bullets = [];
     let enemies = [];
     let score = 0;
-    let animationId;
     let isGameOver = false;
     let isMovingLeft = false;
     let isMovingRight = false;
+
+    // DESKTOP KEYBOARD CONTROLS
+    const handleKeyDown = (e) => {
+        if(!isPlayingActionGame) return;
+        if(e.key === 'ArrowLeft') isMovingLeft = true;
+        if(e.key === 'ArrowRight') isMovingRight = true;
+        if(e.key === ' ' || e.key === 'ArrowUp') { 
+            e.preventDefault(); // Stop page scroll
+            bullets.push({ x: jetX + jetSize/2 - 2, y: 350 }); 
+        }
+    };
+    const handleKeyUp = (e) => {
+        if(!isPlayingActionGame) return;
+        if(e.key === 'ArrowLeft') isMovingLeft = false;
+        if(e.key === 'ArrowRight') isMovingRight = false;
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
 
     function drawJet(x, y, color) {
         ctx.fillStyle = color;
@@ -895,13 +1116,16 @@ function startJetFighter(gameId, isPlayer1) {
         ctx.font = 'bold 16px Inter';
         ctx.fillText('Score: ' + score, 10, 25);
 
-        animationId = requestAnimationFrame(gameLoop);
+        currentAnimationId = requestAnimationFrame(gameLoop);
     }
 
     function gameOver() {
         isGameOver = true;
         isPlayingActionGame = false;
-        cancelAnimationFrame(animationId);
+        window.removeEventListener('keydown', handleKeyDown); // Cleanup keys
+        window.removeEventListener('keyup', handleKeyUp);
+        if(currentAnimationId) cancelAnimationFrame(currentAnimationId);
+        
         ctx.fillStyle = 'rgba(0,0,0,0.7)';
         ctx.fillRect(0,0,canvas.width,canvas.height);
         ctx.fillStyle = 'white';
@@ -909,9 +1133,13 @@ function startJetFighter(gameId, isPlayer1) {
         ctx.fillText('DESTROYED!', 90, 180);
         ctx.fillText('Score: ' + score, 105, 220);
 
-        const field = isPlayer1 ? 'p1Score' : 'p2Score';
         setTimeout(() => {
-            updateDoc(doc(db, "games", gameId), { [field]: score });
+            if (singlePlayerMode) {
+                handleSpActionGameOver(score);
+            } else {
+                const field = isPlayer1 ? 'p1Score' : 'p2Score';
+                updateDoc(doc(db, "games", gameId), { [field]: score });
+            }
         }, 1500);
     }
 
