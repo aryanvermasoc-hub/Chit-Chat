@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Chit-Chat | Premium Messaging</title>
-  <link rel="stylesheet" href="style.css?v=6">
+  <title>Chit-Chat | Premium Messaging & Games</title>
+  <link rel="stylesheet" href="style.css?v=13">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
@@ -23,42 +23,29 @@
         <div class="auth-header">
           <div class="logo-box"><i class="fa-regular fa-comments"></i></div>
           <h2>Chit-Chat</h2>
-          <p>Connect securely, beautifully.</p>
+          <p>Connect securely, play instantly.</p>
         </div>
-
         <div class="auth-tabs">
           <button id="tabLogin" class="active">Login</button>
           <button id="tabSignup">Sign Up</button>
         </div>
-
         <form id="authForm" onsubmit="return false;">
-          <div class="input-group" id="nameGroup" style="display: none;">
-            <i class="fa-regular fa-user"></i>
-            <input type="text" id="fullName" placeholder="Display Name">
-          </div>
-          <div class="input-group">
-            <i class="fa-solid fa-at"></i>
-            <input type="text" id="username" placeholder="Username (Unique)">
-          </div>
-          <div class="input-group">
-            <i class="fa-solid fa-lock"></i>
-            <input type="password" id="password" placeholder="Password">
-          </div>
+          <div class="input-group" id="nameGroup" style="display: none;"><i class="fa-regular fa-user"></i><input type="text" id="fullName" placeholder="Display Name"></div>
+          <div class="input-group"><i class="fa-solid fa-at"></i><input type="text" id="username" placeholder="Username"></div>
+          <div class="input-group"><i class="fa-solid fa-lock"></i><input type="password" id="password" placeholder="Password"></div>
           <button id="authActionBtn" class="primary-btn glow-btn">Enter Chit-Chat</button>
         </form>
       </div>
-
       <div class="auth-footer">
         <span>Developed by <span class="developer-name">Aryan Verma</span></span>
-        <a href="https://aryanvermasoc-hub.github.io/My-Info-ARYAN-VERMA/" target="_blank" class="about-link">
-          About <i class="fa-solid fa-arrow-up-right-from-square"></i>
-        </a>
+        <a href="https://aryanvermasoc-hub.github.io/My-Info-ARYAN-VERMA/" target="_blank" class="about-link">About <i class="fa-solid fa-arrow-up-right-from-square"></i></a>
       </div>
     </div>
   </div>
 
   <div id="appScreen" class="screen app-layout" style="display: none;">
     <aside class="sidebar" id="sidebar">
+      
       <div class="sidebar-header">
         <div class="current-user" title="View My Profile">
           <img id="myAvatar" src="" alt="Me" class="avatar">
@@ -67,64 +54,109 @@
             <span id="myUsername" class="handle">@...</span>
           </div>
         </div> 
+        <button id="chatToggleBtn" class="primary-btn" style="padding: 6px 14px; font-size: 12px; width: auto; border-radius: 20px; box-shadow: 0 4px 10px rgba(139,92,246,0.3);">
+          <i class="fa-solid fa-message"></i> Chats
+        </button>
       </div>
 
-      <div class="search-container">
-        <i class="fa-solid fa-magnifying-glass search-icon"></i>
-        <input type="text" id="searchInput" placeholder="Search connections...">
+      <div id="newsFeedContainer" class="users-list" style="display: none; flex-direction: column; gap: 15px; padding: 15px; overflow-y: auto;">
       </div>
 
-      <div class="users-list" id="usersList">
+      <div id="gamesNavContainer" class="users-list" style="display: flex; flex-direction: column; gap: 15px; padding: 15px; overflow-y: auto;">
+        <div class="games-header-banner">
+            <h3>Arcade Zone</h3>
+            <p>Challenge friends in chat to play!</p>
+        </div>
+        <div class="game-card" onclick="alert('Open a chat and click the Gamepad icon to challenge a friend to Tic Tac Toe!')">
+            <div class="game-icon"><i class="fa-solid fa-table-cells"></i></div>
+            <div class="game-info">
+                <h4>Tic Tac Toe</h4>
+                <span>Multiplayer • Classic</span>
+            </div>
+        </div>
+        <div class="game-card" onclick="alert('Open a chat and click the Gamepad icon to challenge a friend to Rock Paper Scissors!')">
+            <div class="game-icon"><i class="fa-solid fa-hand-scissors"></i></div>
+            <div class="game-info">
+                <h4>Rock Paper Scissors</h4>
+                <span>Multiplayer • Quick Match</span>
+            </div>
+        </div>
+        <div class="game-card" onclick="alert('Open a chat and click the Gamepad icon to challenge a friend to Jet Fighter!')">
+            <div class="game-icon"><i class="fa-solid fa-jet-fighter"></i></div>
+            <div class="game-info">
+                <h4>Jet Fighter</h4>
+                <span>Multiplayer • Action</span>
+            </div>
+        </div>
+        <div class="game-card" onclick="alert('Open a chat and click the Gamepad icon to challenge a friend to Car Racing!')">
+            <div class="game-icon"><i class="fa-solid fa-car"></i></div>
+            <div class="game-info">
+                <h4>Car Racing</h4>
+                <span>Multiplayer • Racing</span>
+            </div>
+        </div>
+      </div>
+
+      <div id="chatListContainer" style="display: none; flex-direction: column; flex: 1; overflow: hidden;">
+        <div class="search-container">
+          <i class="fa-solid fa-magnifying-glass search-icon"></i>
+          <input type="text" id="searchInput" placeholder="Search connections...">
+        </div>
+        <div class="users-list" id="usersList"></div>
       </div>
 
       <div class="sidebar-footer">
-        <button id="discoverBtn" class="nav-btn" title="Discover">
-          <i class="fa-solid fa-compass"></i><span>Discover</span>
+        <button id="homeGamesBtn" class="nav-btn" style="color: var(--primary);"><i class="fa-solid fa-gamepad"></i><span>Games</span></button>
+        <button id="createGroupBtn" class="nav-btn"><i class="fa-solid fa-users"></i><span>Group</span></button>
+        <button id="shortsBtn" class="nav-btn">
+            <div class="custom-reels-logo"><i class="fa-solid fa-circle-play"></i></div>
+            <span class="reels-brand-name">Chit-Reels</span>
         </button>
-        <button id="createGroupBtn" class="nav-btn" title="New Group">
-          <i class="fa-solid fa-users"></i><span>Group</span>
-        </button>
-        <button id="appInfoBtn" class="nav-btn" title="About App">
-          <i class="fa-solid fa-circle-info"></i><span>Info</span>
-        </button>
-        <button id="logoutBtn" class="nav-btn" title="Logout">
-          <i class="fa-solid fa-right-from-bracket"></i><span>Logout</span>
-        </button>
+        <button id="appInfoBtn" class="nav-btn"><i class="fa-solid fa-circle-info"></i><span>Info</span></button>
+        <button id="logoutBtn" class="nav-btn"><i class="fa-solid fa-right-from-bracket"></i><span>Logout</span></button>
       </div>
     </aside>
 
-    <main class="chat-area" id="chatArea">
+    <main class="chat-area" id="mainArea">
+      
+      <div id="reelsArea" class="reels-container" style="display: none;">
+        <button id="closeReels" class="icon-btn" style="position: fixed; top: 20px; left: 20px; z-index: 100; background: rgba(0,0,0,0.5); color: white;"><i class="fa-solid fa-arrow-left"></i></button>
+        <div id="reelsWrapper" class="reels-wrapper"></div>
+      </div>
+
+      <div id="activeGameArea" class="game-overlay-container" style="display: none;">
+        <div class="game-header">
+            <button id="closeGameBtn" class="icon-btn"><i class="fa-solid fa-chevron-left"></i> Leave Game</button>
+            <span id="activeGameTitle">Game Name</span>
+            <div id="gameStatusIndicator" class="game-status">Live</div>
+        </div>
+        <div id="gameUIContainer" class="game-ui-wrapper">
+            </div>
+      </div>
+
       <div id="emptyChatState" class="empty-state">
-        <div class="empty-icon"><i class="fa-regular fa-comments"></i></div>
-        <h3>Select a conversation</h3>
-        <p>Choose a user from the sidebar to start chatting.</p>
+        <div class="empty-icon"><i class="fa-solid fa-gamepad"></i></div>
+        <h3>Arcade & Chat</h3>
+        <p>Select a conversation to chat or challenge.</p>
       </div>
 
       <div id="activeChatState" style="display: none; height: 100%; flex-direction: column;">
         <header class="chat-header glass-panel">
           <button id="backToUsersBtn" class="mobile-back-btn icon-btn"><i class="fa-solid fa-chevron-left"></i></button>
-          <div class="chat-target-info" title="View Profile">
-            <div class="avatar-wrapper">
-              <img id="chatTargetAvatar" src="" alt="Avatar" class="avatar">
-              <div id="chatTargetStatus" class="status-dot"></div>
-            </div>
+          <div class="chat-target-info">
+            <img id="chatTargetAvatar" src="" class="avatar">
             <div class="user-meta">
               <span id="chatTargetName" class="name">User Name</span>
-              <span id="typingIndicator" class="typing-text" style="display: none;">typing...</span>
-              <span id="lastSeenText" class="chat-meta-subtitle" style="display: none;"></span>
+              <span id="typingIndicator" class="typing-text" style="display:none;">typing...</span>
+              <span id="chatTargetStatus" class="chat-meta-subtitle">Offline</span>
             </div>
           </div>
-          <div class="chat-actions">
-            <button class="icon-btn"><i class="fa-solid fa-phone"></i></button>
-            <button class="icon-btn"><i class="fa-solid fa-video"></i></button>
-          </div>
         </header>
-
-        <div class="messages-container" id="chatBox">
-        </div>
-
+        
+        <div class="messages-container" id="chatBox"></div>
+        
         <div id="replyPreviewContainer" class="glass-panel" style="display: none; padding: 10px 20px; border-bottom: 1px solid rgba(255,255,255,0.1); align-items: center; justify-content: space-between; background: rgba(0,0,0,0.3);">
-          <div style="border-left: 3px solid #8b5cf6; padding-left: 10px; display: flex; flex-direction: column;">
+          <div style="border-left: 3px solid #8b5cf6; padding-left: 10px; display: flex; flex-direction: column; overflow: hidden;">
             <span id="replyPreviewName" style="font-size: 12px; font-weight: bold; color: #8b5cf6;">Replying to...</span>
             <span id="replyPreviewText" style="font-size: 13px; color: #94a3b8; max-width: 250px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Message</span>
           </div>
@@ -132,15 +164,57 @@
         </div>
 
         <div class="chat-input-wrapper glass-panel">
-          <button class="icon-btn action-icon"><i class="fa-solid fa-paperclip"></i></button>
-          <div class="input-pill">
-            
-            <input type="text" id="msg" placeholder="Message(double click to reply)" autocomplete="off">
-          </div>
-          <button id="sendBtn" class="primary-btn circle-btn glow-btn"><i class="fa-solid fa-paper-plane"></i></button>
+          <button id="launchGameMenuBtn" class="icon-btn" title="Challenge to Game" style="color: var(--accent);"><i class="fa-solid fa-gamepad"></i></button>
+          <button class="icon-btn"><i class="fa-solid fa-paperclip"></i></button>
+          <div class="input-pill"><input type="text" id="msg" placeholder="Type a message..."></div>
+          <button id="sendBtn" class="primary-btn circle-btn"><i class="fa-solid fa-paper-plane"></i></button>
         </div>
       </div>
     </main>
+  </div>
+
+  <div id="gameSelectionModal" class="modal-overlay" style="display: none;">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>Challenge Friend</h3>
+        <button id="closeGameSelectBtn" class="icon-btn"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="game-select-grid">
+          <button class="game-select-btn" data-game="tictactoe">
+              <i class="fa-solid fa-table-cells"></i>
+              <span>Tic Tac Toe</span>
+          </button>
+          <button class="game-select-btn" data-game="rps">
+              <i class="fa-solid fa-hand-scissors"></i>
+              <span>Rock Paper Scissors</span>
+          </button>
+          <button class="game-select-btn" data-game="jetfighter">
+              <i class="fa-solid fa-jet-fighter"></i>
+              <span>Jet Fighter</span>
+          </button>
+          <button class="game-select-btn" data-game="carracing">
+              <i class="fa-solid fa-car"></i>
+              <span>Car Racing</span>
+          </button>
+      </div>
+    </div>
+  </div>
+
+  <div id="profileModal" class="modal-overlay" style="display: none;">
+    <div class="modal-content profile-content">
+      <button id="closeProfileBtn" class="icon-btn close-modal-corner"><i class="fa-solid fa-xmark"></i></button>
+      <div class="profile-header">
+        <div style="position: relative; display: inline-block;">
+          <img id="profileAvatar" src="" class="profile-avatar-large">
+          <input type="file" id="profileAvatarInput" style="display: none;" accept="image/*">
+          <button id="editAvatarBtn" style="display:none; position:absolute; bottom:10px; right:0; background:var(--primary); color:white; border-radius:50%; width:35px; height:35px; border:none; cursor:pointer;"><i class="fa-solid fa-camera"></i></button>
+        </div>
+        <h2 id="profileName">Name</h2><p id="profileHandle" class="text-muted">@user</p>
+      </div>
+      <div class="bio-section"><p id="profileBioDisplay">Hey there! I am using Chit-Chat.</p><textarea id="profileBioEdit" style="display:none;"></textarea></div>
+      <div style="color:var(--text-muted); font-size:12px; margin-top:10px;"><i class="fa-solid fa-calendar-days"></i> <span id="profileJoinDate">Joined: ...</span></div>
+      <div class="profile-actions"><button id="editProfileBtn" class="primary-btn" style="display:none;">Edit Profile</button><button id="saveProfileBtn" class="primary-btn" style="display:none;">Save Changes</button></div>
+    </div>
   </div>
 
   <div id="infoModal" class="modal-overlay" style="display: none;">
@@ -150,7 +224,7 @@
         <button id="closeModalBtn" class="icon-btn"><i class="fa-solid fa-xmark"></i></button>
       </div>
       <p style="color: var(--text-muted); font-size: 14px; margin-bottom: 25px; line-height: 1.5;">
-        Experience real-time, secure messaging. Connect instantly with friends, share media, and create groups in a premium environment.
+        Experience real-time, secure E2EE messaging and instant gaming. Connect instantly with friends, challenge them to games, and explore tech news in a premium environment.
       </p>
       <a href="https://aryanvermasoc-hub.github.io/My-Info-ARYAN-VERMA/" target="_blank" class="primary-btn glow-btn" style="text-decoration: none;">
        Owner's Info <i class="fa-solid fa-arrow-up-right-from-square" style="margin-left: 5px;"></i>
@@ -158,52 +232,7 @@
     </div>
   </div>
 
-  <div id="discoverModal" class="modal-overlay" style="display: none;">
-    <div class="modal-content" style="max-width: 500px; max-height: 80vh; display: flex; flex-direction: column; padding: 25px;">
-      <div class="modal-header">
-        <h3><i class="fa-solid fa-earth-americas" style="color: var(--primary); margin-right: 8px;"></i> Discover</h3>
-        <button id="closeDiscoverBtn" class="icon-btn"><i class="fa-solid fa-xmark"></i></button>
-      </div>
-      <div class="auth-tabs" style="margin-bottom: 15px; flex-shrink: 0;">
-        <button id="tabNews" class="active"><i class="fa-regular fa-newspaper"></i> Tech News</button>
-        <button id="tabVideo"><i class="fa-brands fa-youtube"></i> YouTube</button>
-      </div>
-      <div id="discoverNews" style="overflow-y: auto; text-align: left; padding-right: 10px; flex: 1;"></div>
-      <div id="discoverVideo" style="overflow-y: auto; text-align: left; padding-right: 10px; flex: 1; display: none;"></div>
-    </div>
-  </div>
-
-  <div id="profileModal" class="modal-overlay" style="display: none;">
-    <div class="modal-content profile-content">
-      <button id="closeProfileBtn" class="icon-btn close-modal-corner"><i class="fa-solid fa-xmark"></i></button>
-      
-      <div class="profile-header">
-        <div style="position: relative; display: inline-block;">
-          <img id="profileAvatar" src="" alt="Profile" class="profile-avatar-large">
-          <input type="file" id="profileAvatarInput" accept="image/*" style="display: none;">
-          <button id="editAvatarBtn" style="display:none; position:absolute; bottom:15px; right:-5px; background:var(--primary); color:white; border-radius:50%; width:35px; height:35px; border:3px solid var(--glass-bg); cursor:pointer; box-shadow:0 4px 10px rgba(0,0,0,0.5); justify-content:center; align-items:center;">
-            <i class="fa-solid fa-camera" style="font-size:13px;"></i>
-          </button>
-        </div>
-        <h2 id="profileName">Loading...</h2>
-        <p id="profileHandle" class="text-muted">@username</p>
-      </div>
-      
-      <div class="profile-body">
-        <div class="bio-section">
-          <p id="profileBioDisplay">Hey there! I am using Chit-Chat.</p>
-          <textarea id="profileBioEdit" style="display:none;" rows="3" placeholder="Write a short bio about yourself..."></textarea>
-        </div>
-        <p id="profileJoinDate" class="text-muted" style="font-size: 12px; margin-top: 15px;"></p>
-      </div>
-      
-      <div class="profile-actions">
-        <button id="editProfileBtn" class="primary-btn" style="display:none;"><i class="fa-solid fa-pen"></i> Edit Profile</button>
-        <button id="saveProfileBtn" class="primary-btn glow-btn" style="display:none;"><i class="fa-solid fa-check"></i> Save Changes</button>
-      </div>
-    </div>
-  </div>
-
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
   <script type="module" src="script.js"></script>
 </body>
 </html>
