@@ -23,9 +23,11 @@ const YOUTUBE_KEY = "AIzaSyA_jYFuW-ANA-VPqX1wHpWmg6m-FiOxaD8";
 
 // --- 2. GLOBAL STATE ---
 let currentChatId = null;
+let currentChatStatus = null;
 let targetUserUid = null;
 let messagesUnsubscribe = null;
 let chatMetaUnsubscribe = null;
+let chatDocUnsubscribe = null; // New state for Request System
 let typingTimeout = null;
 let isSignupMode = false;
 let replyingToMsg = null;
@@ -41,7 +43,7 @@ let gameUnsubscribe = null;
 let isPlayingActionGame = false;
 let singlePlayerMode = false;
 let currentAnimationId = null; 
-let currentSpDifficulty = 'medium'; // Global difficulty tracker
+let currentSpDifficulty = 'medium'; 
 
 // MESSAGE MODAL STATE
 let activeMsgId = null;
@@ -76,6 +78,7 @@ const homeGamesBtn = document.getElementById("homeGamesBtn");
 const newsFeedContainer = document.getElementById("newsFeedContainer");
 const chatListContainer = document.getElementById("chatListContainer");
 const gamesNavContainer = document.getElementById("gamesNavContainer");
+const openUsersListBtn = document.getElementById("openUsersListBtn");
 
 // Screen State Management
 function switchSidebarView(view) {
@@ -88,16 +91,19 @@ function switchSidebarView(view) {
         chatToggleBtn.innerHTML = '<i class="fa-solid fa-message"></i> Chats';
         chatToggleBtn.style.color = "white";
         homeGamesBtn.style.color = "var(--text-muted)";
+        if(openUsersListBtn) openUsersListBtn.style.color = "var(--text-muted)";
     } else if (view === 'games') {
         gamesNavContainer.style.display = "flex";
         chatToggleBtn.innerHTML = '<i class="fa-solid fa-fire"></i> Feed';
         chatToggleBtn.style.color = "white";
         homeGamesBtn.style.color = "var(--primary)";
+        if(openUsersListBtn) openUsersListBtn.style.color = "var(--text-muted)";
     } else if (view === 'feed') {
         newsFeedContainer.style.display = "flex";
         chatToggleBtn.innerHTML = '<i class="fa-solid fa-fire"></i> Feed (Active)';
         chatToggleBtn.style.color = "var(--accent)";
         homeGamesBtn.style.color = "var(--text-muted)";
+        if(openUsersListBtn) openUsersListBtn.style.color = "var(--text-muted)";
     }
 }
 
@@ -108,6 +114,9 @@ chatToggleBtn.addEventListener("click", () => {
   else { switchSidebarView('chats'); }
 });
 homeGamesBtn.addEventListener("click", () => { switchSidebarView('games'); });
+if(openUsersListBtn) {
+    openUsersListBtn.addEventListener("click", () => { switchSidebarView('chats'); openUsersListBtn.style.color = "var(--primary)"; });
+}
 
 // --- 4. ENCRYPTION ENGINE ---
 const encryptMessage = (text, secretKey) => {
@@ -354,25 +363,28 @@ function renderSidebar() {
   });
 }
 
-document.getElementById("createGroupBtn").addEventListener("click", () => {
-  const groupName = prompt("Enter a name for the new Group:");
-  if (!groupName) return;
-  let promptText = "Select members by typing their numbers:\n\n";
-  const selectableUsers = allUsers.filter(u => u.id !== auth.currentUser.uid);
-  selectableUsers.forEach((u, index) => { promptText += `${index + 1}. ${u.fullName || u.username}\n`; });
-  const selections = prompt(promptText);
-  if (!selections) return;
-  let members = [auth.currentUser.uid]; 
-  selections.split(',').forEach(numText => {
-    const idx = parseInt(numText.trim()) - 1;
-    if (selectableUsers[idx]) members.push(selectableUsers[idx].id);
+const createGroupBtn = document.getElementById("createGroupBtn");
+if(createGroupBtn) {
+  createGroupBtn.addEventListener("click", () => {
+    const groupName = prompt("Enter a name for the new Group:");
+    if (!groupName) return;
+    let promptText = "Select members by typing their numbers:\n\n";
+    const selectableUsers = allUsers.filter(u => u.id !== auth.currentUser.uid);
+    selectableUsers.forEach((u, index) => { promptText += `${index + 1}. ${u.fullName || u.username}\n`; });
+    const selections = prompt(promptText);
+    if (!selections) return;
+    let members = [auth.currentUser.uid]; 
+    selections.split(',').forEach(numText => {
+      const idx = parseInt(numText.trim()) - 1;
+      if (selectableUsers[idx]) members.push(selectableUsers[idx].id);
+    });
+    if (members.length > 1) { 
+      addDoc(collection(db, "groups"), { name: groupName, members: members, createdAt: Date.now(), createdBy: auth.currentUser.uid }); 
+      showToast("Group Created", `${groupName} was created successfully.`); 
+    } 
+    else { alert("You must add at least one other person."); }
   });
-  if (members.length > 1) { 
-    addDoc(collection(db, "groups"), { name: groupName, members: members, createdAt: Date.now(), createdBy: auth.currentUser.uid }); 
-    showToast("Group Created", `${groupName} was created successfully.`); 
-  } 
-  else { alert("You must add at least one other person."); }
-});
+}
 
 if (backToUsersBtn) {
   backToUsersBtn.addEventListener("click", () => { 
@@ -392,6 +404,120 @@ window.addEventListener("popstate", (e) => {
     }
   }
 });
+
+// --- NEW: CHAT REQUEST SYSTEM ---
+// --- NEW: ADVANCED CHAT REQUEST SYSTEM ---
+function listenToChatStatus(targetName) {
+    if (chatDocUnsubscribe) chatDocUnsubscribe();
+    
+    const overlay = document.getElementById("chatStateOverlay");
+    const inputWrapper = document.querySelector(".chat-input-wrapper");
+    
+    if (isCurrentChatGroup) {
+        currentChatStatus = 'accepted';
+        if(overlay) overlay.style.display = "none";
+        if(inputWrapper) inputWrapper.style.display = "flex";
+        return;
+    }
+
+    chatDocUnsubscribe = onSnapshot(doc(db, "chats", currentChatId), (snap) => {
+        if (snap.exists()) {
+            const data = snap.data();
+            currentChatStatus = data.status;
+
+            if (data.status === 'pending') {
+                if(overlay) overlay.style.display = "flex";
+                if(inputWrapper) inputWrapper.style.display = "none";
+
+                if (data.initiator === auth.currentUser.uid) {
+                    // Maine request bheji hai
+                    overlay.innerHTML = `<p style="font-size: 14px; margin: 0; color: var(--text-muted);"><i class="fa-solid fa-clock"></i> Request sent to <b>${targetName}</b>. Waiting for approval...</p>`;
+                } else {
+                    // Mujhe request aayi hai
+                    overlay.innerHTML = `
+                        <p style="font-size: 14px; margin-bottom: 15px;"><strong style="color:var(--primary);">${targetName}</strong> wants to connect with you.</p>
+                        <div style="display:flex; gap: 15px; justify-content: center;">
+                            <button onclick="acceptChatRequest()" class="primary-btn glow-btn" style="width:auto; padding: 8px 25px; background:#10b981;">Accept</button>
+                            <button onclick="declineChatRequest()" class="primary-btn" style="width:auto; padding: 8px 25px; background:rgba(255,255,255,0.1); color:var(--text-muted);">Decline</button>
+                        </div>
+                    `;
+                }
+            } else if (data.status === 'accepted') {
+                // Request accept ho gayi hai
+                if(overlay) overlay.style.display = "none";
+                if(inputWrapper) inputWrapper.style.display = "flex";
+            }
+        } else {
+            // Chat abhi tak start nahi hui hai
+            currentChatStatus = 'none';
+            if(overlay) overlay.style.display = "flex";
+            if(inputWrapper) inputWrapper.style.display = "none";
+            overlay.innerHTML = `
+                <p style="font-size: 14px; margin-bottom: 15px;">You are not connected with <b>${targetName}</b>.</p>
+                <button onclick="sendChatRequest()" class="primary-btn glow-btn" style="width:auto; padding: 8px 25px;"><i class="fa-solid fa-user-plus"></i> Send Request</button>
+            `;
+        }
+    });
+}
+
+window.sendChatRequest = async () => {
+    const overlay = document.getElementById("chatStateOverlay");
+    overlay.innerHTML = `<p style="font-size: 14px; margin: 0; color: var(--text-muted);"><i class="fa-solid fa-spinner fa-spin"></i> Sending Request...</p>`;
+
+    // 1. Chat document banao
+    await setDoc(doc(db, "chats", currentChatId), {
+        status: 'pending',
+        initiator: auth.currentUser.uid,
+        createdAt: Date.now()
+    });
+
+    // 2. Samne wale ke sidebar mein dikhane ke liye update karo
+    try {
+        await setDoc(doc(db, "users", auth.currentUser.uid), {
+            chatMeta: { [targetUserUid]: { time: Date.now(), text: `Request Sent`, unread: false } }
+        }, { merge: true });
+
+        await setDoc(doc(db, "users", targetUserUid), {
+            chatMeta: { [auth.currentUser.uid]: { time: Date.now(), text: `👋 New Connection Request`, unread: true } }
+        }, { merge: true });
+    } catch(err) { console.error("Error updating chat meta:", err); }
+};
+
+window.acceptChatRequest = async () => {
+    await updateDoc(doc(db, "chats", currentChatId), { status: 'accepted' });
+};
+
+window.declineChatRequest = async () => {
+    if(confirm("Are you sure you want to decline and delete this request?")) {
+        document.getElementById("backToUsersBtn").click(); // Screen close karo
+        await deleteDoc(doc(db, "chats", currentChatId)); // Chat delete karo
+        
+        // Sidebar se meta hatao
+        try {
+             const myUserDoc = await getDoc(doc(db, "users", auth.currentUser.uid));
+             let currentMeta = myUserDoc.data().chatMeta || {};
+             delete currentMeta[targetUserUid]; 
+             await updateDoc(doc(db, "users", auth.currentUser.uid), { chatMeta: currentMeta });
+        } catch(e) {}
+    }
+};
+window.declineChatRequest = async () => {
+    if(confirm("Are you sure you want to decline and delete this request?")) {
+        document.getElementById("backToUsersBtn").click();
+        
+        // Chat delete karna
+        await deleteDoc(doc(db, "chats", currentChatId));
+        
+        // Sidebar se turant hatane ke liye chatMeta delete karna
+        try {
+             // Firebase v10 syntax ke bina manual overwrite karke hata rahe hain
+             const myUserDoc = await getDoc(doc(db, "users", auth.currentUser.uid));
+             let currentMeta = myUserDoc.data().chatMeta || {};
+             delete currentMeta[targetUserUid]; // Sender ko list se hata diya
+             await updateDoc(doc(db, "users", auth.currentUser.uid), { chatMeta: currentMeta });
+        } catch(e) { console.error("Error clearing chat meta", e); }
+    }
+};
 
 // --- 9. CHAT ENGINE ---
 function openChat(targetUid, targetName, targetAvatar, isTargetOnline, targetLastSeen) {
@@ -413,23 +539,30 @@ function openChat(targetUid, targetName, targetAvatar, isTargetOnline, targetLas
   
   emptyChatState.style.display = "none"; activeChatState.style.display = "flex";
   if(window.innerWidth <= 992) { sidebar.classList.add("hidden"); history.pushState({ page: "chat" }, ""); }
-  loadMessages(); listenToTyping();
+  
+  loadMessages(); 
+  listenToTyping();
+  listenToChatStatus(targetName); // Listen for Chat Requests
 }
 
 function openGroupChat(groupId, groupName, memberCount) {
   isCurrentChatGroup = true; currentChatId = groupId; targetUserUid = null;
   document.getElementById("launchGameMenuBtn").style.display = "none";
-  
   document.getElementById("chatBox").innerHTML = "";
   if(replyingToMsg) document.getElementById("cancelReplyBtn").click();
 
+  const groupData = allGroups.find(g => g.id === groupId);
+  const avatarToUse = groupData && groupData.avatarUrl ? groupData.avatarUrl : `https://ui-avatars.com/api/?name=${encodeURIComponent(groupName)}&background=8b5cf6&color=fff`;
+
   document.getElementById("chatTargetName").innerText = groupName;
-  document.getElementById("chatTargetAvatar").src = `https://ui-avatars.com/api/?name=${encodeURIComponent(groupName)}&background=8b5cf6&color=fff`;
-  document.getElementById("chatTargetStatus").innerText = `${memberCount} members`;
+  document.getElementById("chatTargetAvatar").src = avatarToUse;
+  document.getElementById("chatTargetStatus").innerText = `${memberCount} members (Tap for Info)`;
   
   emptyChatState.style.display = "none"; activeChatState.style.display = "flex";
   if(window.innerWidth <= 992) { sidebar.classList.add("hidden"); history.pushState({ page: "chat" }, ""); }
+  
   loadMessages();
+  listenToChatStatus(groupName); 
 }
 
 function loadMessages() {
@@ -438,24 +571,22 @@ function loadMessages() {
   
   messagesUnsubscribe = onSnapshot(q, (snapshot) => {
     chatBox.innerHTML = "";
+    let lastMyMsg = null; // NEW: Track my last message for Seen indicator
     
-    const now = Date.now();
-    
-    // ⏳ 24 HOURS TIME LIMIT 
-    const TIME_LIMIT = 60 * 1000; 
-
     snapshot.forEach(docSnap => {
       const msg = docSnap.data();
       const msgId = docSnap.id;
-      
-      // 🛑 AUTO-DELETE LOGIC
-      if (now - msg.time > TIME_LIMIT) {
-          deleteDoc(doc(db, "chats", currentChatId, "messages", msgId)).catch(e=>{});
-          return; 
-      }
-
       const isMe = msg.sender === auth.currentUser.uid;
       
+      if (isMe) lastMyMsg = msg;
+      
+      // AUTO-DELETE TRACKER: Mark message as seen by the other user
+      if (!isMe && !msg.seenAt) {
+          updateDoc(doc(db, "chats", currentChatId, "messages", msgId), {
+              seenAt: Date.now()
+          }).catch(e => console.error(e));
+      }
+
       if (msg.deletedFor && msg.deletedFor.includes(auth.currentUser.uid)) return;
 
       const timeStr = new Date(msg.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -483,8 +614,6 @@ function loadMessages() {
         contentHtml = `<div class="msg-bubble msg-deleted"><i class="fa-solid fa-ban"></i> This message was deleted</div>`;
       } else {
         let decryptedText = decryptMessage(msg.text, currentChatId);
-        
-        // 🛑 INVISIBLE BUBBLE FIX
         if (!decryptedText && !msg.imageUrl) return;
 
         let replyHtml = msg.replyToText ? `<div class="replied-msg-box" onclick="event.stopPropagation();"><b>${msg.replyToName}</b><div class="preview-text">${decryptMessage(msg.replyToText, currentChatId)}</div></div>` : "";
@@ -516,11 +645,23 @@ function loadMessages() {
       `;
       chatBox.appendChild(div);
     });
+
+    // NEW: INSTAGRAM STYLE SEEN INDICATOR
+    if (lastMyMsg && lastMyMsg.seenAt) {
+        const seenDiv = document.createElement("div");
+        seenDiv.style.textAlign = "right";
+        seenDiv.style.fontSize = "11px";
+        seenDiv.style.color = "var(--text-muted)";
+        seenDiv.style.marginTop = "-15px";
+        seenDiv.style.paddingRight = "45px";
+        seenDiv.innerHTML = `<i class="fa-solid fa-check-double" style="color: #3b82f6;"></i> Seen`;
+        chatBox.appendChild(seenDiv);
+    }
+
     chatBox.scrollTop = chatBox.scrollHeight;
   });
 }
 
-// WhatsApp Style Context Menu Modal Options
 window.openMessageModal = (msgId, encodedText, encodedName, isMe) => {
     activeMsgId = msgId;
     activeMsgText = decodeURIComponent(encodedText);
@@ -609,6 +750,9 @@ async function sendMessage() {
   if (!text) return;
   msgInput.value = ""; msgInput.focus(); 
   
+  // Extra security check: Bina accept hue message nahi jayega
+  if (!isCurrentChatGroup && currentChatStatus !== 'accepted') return;
+
   const encryptedText = encryptMessage(text, currentChatId);
 
   if (!isCurrentChatGroup) {
@@ -625,8 +769,7 @@ async function sendMessage() {
   try {
     await addDoc(collection(db, "chats", currentChatId, "messages"), payload);
   } catch (e) {
-    console.error("Message send error:", e);
-    showToast("Error", "Message failed to send. Please check your connection.", "https://cdn-icons-png.flaticon.com/512/564/564619.png");
+    showToast("Error", "Message failed to send.", "https://cdn-icons-png.flaticon.com/512/564/564619.png");
   }
 }
 
@@ -750,7 +893,6 @@ window.startSinglePlayer = (gameType) => {
     else if (gameType === 'jetfighter' || gameType === 'carracing') { renderSinglePlayerAction(gameType); }
 };
 
-// --- Single Player: Tic Tac Toe ---
 let spTttBoard = ["","","","","","","","",""];
 let spTttActive = true;
 
@@ -775,9 +917,7 @@ window.renderSinglePlayerTTT = () => {
 function getBotMoveTTT(board, difficulty) {
     let empty = board.map((c, i) => c === "" ? i : null).filter(c => c !== null);
     if (empty.length === 0) return -1;
-    
     if (difficulty === 'easy') return empty[Math.floor(Math.random() * empty.length)];
-    
     const checkWin = (player) => {
         const lines = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
         for(let line of lines) {
@@ -788,10 +928,8 @@ function getBotMoveTTT(board, difficulty) {
         }
         return null;
     };
-
     let winMove = checkWin("O");
     let blockMove = checkWin("X");
-
     if (difficulty === 'hard') {
         if (winMove !== null) return winMove;
         if (blockMove !== null) return blockMove;
@@ -800,7 +938,6 @@ function getBotMoveTTT(board, difficulty) {
         if (corners.length > 0) return corners[Math.floor(Math.random() * corners.length)];
         return empty[Math.floor(Math.random() * empty.length)];
     }
-    
     if (Math.random() > 0.4) { 
         if (winMove !== null) return winMove;
         if (blockMove !== null) return blockMove;
@@ -836,8 +973,6 @@ function spTttEnd(msg) {
 
 window.spTttReset = () => { spTttBoard = ["","","","","","","","",""]; spTttActive = true; renderSinglePlayerTTT(); };
 
-
-// --- Single Player: Rock Paper Scissors ---
 let spRpsHistory = [];
 
 window.renderSinglePlayerRPS = () => {
@@ -861,17 +996,11 @@ window.spRpsMove = (choice) => {
     spRpsHistory.push(choice);
     const choices = ['rock', 'paper', 'scissors'];
     let botChoice;
-
-    if (currentSpDifficulty === 'easy') { 
-        botChoice = Math.random() > 0.3 ? choices[Math.floor(Math.random() * 3)] : choice; 
-    } 
-    else if (currentSpDifficulty === 'medium' || spRpsHistory.length < 3) { 
-        botChoice = choices[Math.floor(Math.random() * 3)]; 
-    } 
+    if (currentSpDifficulty === 'easy') { botChoice = Math.random() > 0.3 ? choices[Math.floor(Math.random() * 3)] : choice; } 
+    else if (currentSpDifficulty === 'medium' || spRpsHistory.length < 3) { botChoice = choices[Math.floor(Math.random() * 3)]; } 
     else {
-        if (Math.random() < 0.2) {
-            botChoice = choices[Math.floor(Math.random() * 3)];
-        } else {
+        if (Math.random() < 0.2) { botChoice = choices[Math.floor(Math.random() * 3)]; } 
+        else {
             let counts = { rock: 0, paper: 0, scissors: 0 };
             spRpsHistory.slice(-5).forEach(m => counts[m]++);
             let maxMove = Object.keys(counts).reduce((a, b) => counts[a] > counts[b] ? a : b);
@@ -880,29 +1009,14 @@ window.spRpsMove = (choice) => {
             else botChoice = 'rock';
         }
     }
-
     let result = "It's a Tie!";
-    if (
-        (choice === 'rock' && botChoice === 'scissors') ||
-        (choice === 'paper' && botChoice === 'rock') ||
-        (choice === 'scissors' && botChoice === 'paper')
-    ) { result = "🎉 You Won!"; } 
+    if ((choice === 'rock' && botChoice === 'scissors') || (choice === 'paper' && botChoice === 'rock') || (choice === 'scissors' && botChoice === 'paper')) { result = "🎉 You Won!"; } 
     else if (choice !== botChoice) { result = "😞 Computer Won!"; }
-    
     const icons = { rock: "fa-hand-back-fist", paper: "fa-hand", scissors: "fa-hand-scissors" };
-    let html = `
-    <div class="game-turn-indicator">${result}</div>
-    <div class="rps-arena">
-        <div class="rps-player"><span>You</span><div class="rps-choice-display"><i class="fa-solid ${icons[choice]}"></i></div></div>
-        <div class="vs-badge">VS</div>
-        <div class="rps-player"><span>Computer</span><div class="rps-choice-display"><i class="fa-solid ${icons[botChoice]}" style="color: #10b981;"></i></div></div>
-    </div>
-    <button class="primary-btn glow-btn" style="max-width:200px; margin-top:20px;" onclick="renderSinglePlayerRPS()">Play Again</button>`;
+    let html = `<div class="game-turn-indicator">${result}</div><div class="rps-arena"><div class="rps-player"><span>You</span><div class="rps-choice-display"><i class="fa-solid ${icons[choice]}"></i></div></div><div class="vs-badge">VS</div><div class="rps-player"><span>Computer</span><div class="rps-choice-display"><i class="fa-solid ${icons[botChoice]}" style="color: #10b981;"></i></div></div></div><button class="primary-btn glow-btn" style="max-width:200px; margin-top:20px;" onclick="renderSinglePlayerRPS()">Play Again</button>`;
     gameUIContainer.innerHTML = html;
 };
 
-
-// --- Single Player: Action Games (High Score logic) ---
 let spGameType = '';
 let spHighScore = 0;
 
@@ -910,13 +1024,11 @@ window.renderSinglePlayerAction = async (gameType) => {
     spGameType = gameType;
     document.getElementById("activeGameTitle").innerText = gameType === 'carracing' ? "Car Racing (Solo)" : "Jet Fighter (Solo)";
     gameUIContainer.innerHTML = `<h3>Loading High Score... <i class="fa-solid fa-spinner fa-spin"></i></h3>`;
-    
     try {
         const userDoc = await getDoc(doc(db, "users", auth.currentUser.uid));
         const data = userDoc.data();
         spHighScore = (data && data.highScores && data.highScores[gameType]) ? data.highScores[gameType] : 0;
     } catch(e) { spHighScore = 0; }
-    
     showSpActionMenu();
 };
 
@@ -942,18 +1054,14 @@ window.showSpActionMenu = () => {
     const canvas = document.getElementById('actionCanvas');
     if (canvas) {
         const ctx = canvas.getContext('2d');
-        if (spGameType === 'carracing') {
-            ctx.fillStyle = '#8b5cf6'; ctx.fillRect(135, 330, 30, 50); 
-        } else {
-            ctx.fillStyle = '#10b981'; ctx.beginPath(); ctx.moveTo(150, 350); ctx.lineTo(165, 380); ctx.lineTo(135, 380); ctx.fill(); 
-        }
+        if (spGameType === 'carracing') { ctx.fillStyle = '#8b5cf6'; ctx.fillRect(135, 330, 30, 50); } 
+        else { ctx.fillStyle = '#10b981'; ctx.beginPath(); ctx.moveTo(150, 350); ctx.lineTo(165, 380); ctx.lineTo(135, 380); ctx.fill(); }
     }
     
     document.getElementById('btnStartGame').addEventListener('click', () => {
         isPlayingActionGame = true;
         document.getElementById('startOverlay').style.display = 'none';
         document.getElementById('gameControls').style.display = 'flex';
-        
         if (spGameType === 'carracing') startCarRacing(null, true);
         else startJetFighter(null, true);
     });
@@ -962,27 +1070,17 @@ window.showSpActionMenu = () => {
 window.handleSpActionGameOver = async (score) => {
     let isNewHighScore = false;
     if (score > spHighScore) {
-        spHighScore = score;
-        isNewHighScore = true;
-        try {
-            await setDoc(doc(db, "users", auth.currentUser.uid), { 
-                highScores: { [spGameType]: score } 
-            }, { merge: true });
-        } catch(e) { console.error("High score save failed", e); }
+        spHighScore = score; isNewHighScore = true;
+        try { await setDoc(doc(db, "users", auth.currentUser.uid), { highScores: { [spGameType]: score } }, { merge: true }); } 
+        catch(e) { console.error("High score save failed", e); }
     }
-    
     gameUIContainer.innerHTML = `
         <div class="game-turn-indicator" style="color:${isNewHighScore ? 'var(--primary)' : 'white'}">${isNewHighScore ? '🏆 NEW HIGH SCORE!' : 'GAME OVER'}</div>
-        <div style="font-size: 24px; text-align: center; margin: 20px 0;">
-            Your Score: <b style="color:var(--primary)">${score}</b><br>
-            High Score: <b style="color:var(--accent)">${spHighScore}</b>
-        </div>
+        <div style="font-size: 24px; text-align: center; margin: 20px 0;">Your Score: <b style="color:var(--primary)">${score}</b><br>High Score: <b style="color:var(--accent)">${spHighScore}</b></div>
         <button class="primary-btn glow-btn" style="max-width:200px; margin-top:20px;" onclick="showSpActionMenu()">Play Again</button>
     `;
 };
 
-
-// --- MULTIPLAYER ACTION & BOARD RENDERING ---
 function renderActionGame(data, gameId, gameType) {
     const isPlayer1 = data.player1 === auth.currentUser.uid;
     const myScore = isPlayer1 ? data.p1Score : data.p2Score;
@@ -994,28 +1092,15 @@ function renderActionGame(data, gameId, gameType) {
         if (myScore > oppScore) statusText = "🎉 You Won!";
         else if (myScore < oppScore) statusText = "😞 You Lost!";
         
-        gameUIContainer.innerHTML = `
-            <div class="game-turn-indicator">${statusText}</div>
-            <div style="font-size: 24px; text-align: center; margin: 20px 0;">
-                Your Score: <b style="color:var(--primary)">${myScore}</b><br>
-                Opponent's Score: <b style="color:var(--accent)">${oppScore}</b>
-            </div>
-            <button class="primary-btn glow-btn" style="max-width:200px; margin-top:20px;" onclick="resetActionGame('${gameId}')">Play Again</button>
-        `;
+        gameUIContainer.innerHTML = `<div class="game-turn-indicator">${statusText}</div><div style="font-size: 24px; text-align: center; margin: 20px 0;">Your Score: <b style="color:var(--primary)">${myScore}</b><br>Opponent's Score: <b style="color:var(--accent)">${oppScore}</b></div><button class="primary-btn glow-btn" style="max-width:200px; margin-top:20px;" onclick="resetActionGame('${gameId}')">Play Again</button>`;
         return;
     }
 
     if (myScore !== undefined && myScore !== null) {
         isPlayingActionGame = false;
-        gameUIContainer.innerHTML = `
-            <div class="game-turn-indicator">Waiting for opponent to finish...</div>
-            <div style="font-size: 20px; text-align: center; margin: 20px 0;">
-                Your Score: <b style="color:var(--primary)">${myScore}</b>
-            </div>
-        `;
+        gameUIContainer.innerHTML = `<div class="game-turn-indicator">Waiting for opponent to finish...</div><div style="font-size: 20px; text-align: center; margin: 20px 0;">Your Score: <b style="color:var(--primary)">${myScore}</b></div>`;
         return;
     }
-
     if (isPlayingActionGame) return;
 
     gameUIContainer.innerHTML = `
@@ -1028,50 +1113,32 @@ function renderActionGame(data, gameId, gameType) {
                      <button class="primary-btn glow-btn" id="btnStartGame" style="width:auto; padding:15px 40px; font-size: 16px;">Play Now</button>
                 </div>
             </div>
-            <div class="game-btn-row" id="gameControls" style="display:none;">
-                <button class="game-control-btn" id="btnLeft">⬅️</button>
-                <button class="game-control-btn" id="btnRight">➡️</button>
-            </div>
+            <div class="game-btn-row" id="gameControls" style="display:none;"><button class="game-control-btn" id="btnLeft">⬅️</button><button class="game-control-btn" id="btnRight">➡️</button></div>
         </div>
     `;
 
     const canvas = document.getElementById('actionCanvas');
     if (canvas) {
         const ctx = canvas.getContext('2d');
-        if (gameType === 'carracing') {
-            ctx.fillStyle = '#8b5cf6'; ctx.fillRect(135, 330, 30, 50);
-        } else {
-            ctx.fillStyle = '#10b981'; ctx.beginPath(); ctx.moveTo(150, 350); ctx.lineTo(165, 380); ctx.lineTo(135, 380); ctx.fill();
-        }
+        if (gameType === 'carracing') { ctx.fillStyle = '#8b5cf6'; ctx.fillRect(135, 330, 30, 50); } 
+        else { ctx.fillStyle = '#10b981'; ctx.beginPath(); ctx.moveTo(150, 350); ctx.lineTo(165, 380); ctx.lineTo(135, 380); ctx.fill(); }
     }
     
     document.getElementById('btnStartGame').addEventListener('click', () => {
         isPlayingActionGame = true;
-        document.getElementById('startOverlay').style.display = 'none';
-        document.getElementById('gameControls').style.display = 'flex';
-        
-        if (gameType === 'carracing') startCarRacing(gameId, isPlayer1);
-        else startJetFighter(gameId, isPlayer1);
+        document.getElementById('startOverlay').style.display = 'none'; document.getElementById('gameControls').style.display = 'flex';
+        if (gameType === 'carracing') startCarRacing(gameId, isPlayer1); else startJetFighter(gameId, isPlayer1);
     });
 }
 
-window.resetActionGame = async (gameId) => {
-    await updateDoc(doc(db, "games", gameId), { p1Score: null, p2Score: null });
-};
-
-// --- CORE GAME LOOPS (Used by both Multi and Solo modes) ---
+window.resetActionGame = async (gameId) => { await updateDoc(doc(db, "games", gameId), { p1Score: null, p2Score: null }); };
 
 function startCarRacing(gameId, isPlayer1) {
     const canvas = document.getElementById('actionCanvas');
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
-    let carX = 135; 
-    const carWidth = 30;
-    const carHeight = 50;
-    let score = 0;
-    let obstacles = [];
-    let gameSpeed = 3;
-    let isGameOver = false;
+    let carX = 135; const carWidth = 30; const carHeight = 50;
+    let score = 0; let obstacles = []; let gameSpeed = 3; let isGameOver = false;
 
     const handleKeyDown = (e) => {
         if(!isPlayingActionGame) return;
@@ -1081,86 +1148,47 @@ function startCarRacing(gameId, isPlayer1) {
     window.addEventListener('keydown', handleKeyDown);
 
     function drawCar(x, y, color) {
-        ctx.fillStyle = color;
-        ctx.fillRect(x, y, carWidth, carHeight);
-        ctx.fillStyle = '#333';
-        ctx.fillRect(x - 5, y + 5, 5, 15);
-        ctx.fillRect(x + carWidth, y + 5, 5, 15);
-        ctx.fillRect(x - 5, y + 30, 5, 15);
-        ctx.fillRect(x + carWidth, y + 30, 5, 15);
+        ctx.fillStyle = color; ctx.fillRect(x, y, carWidth, carHeight); ctx.fillStyle = '#333';
+        ctx.fillRect(x - 5, y + 5, 5, 15); ctx.fillRect(x + carWidth, y + 5, 5, 15);
+        ctx.fillRect(x - 5, y + 30, 5, 15); ctx.fillRect(x + carWidth, y + 30, 5, 15);
     }
 
     function gameLoop() {
         if(isGameOver) return;
         ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-        ctx.strokeStyle = '#555';
-        ctx.setLineDash([20, 20]);
+        ctx.strokeStyle = '#555'; ctx.setLineDash([20, 20]);
         ctx.beginPath(); ctx.moveTo(100, 0); ctx.lineTo(100, 400); ctx.stroke();
-        ctx.beginPath(); ctx.moveTo(200, 0); ctx.lineTo(200, 400); ctx.stroke();
-        ctx.setLineDash([]);
-
+        ctx.beginPath(); ctx.moveTo(200, 0); ctx.lineTo(200, 400); ctx.stroke(); ctx.setLineDash([]);
         drawCar(carX, 330, '#8b5cf6');
 
         if(Math.random() < 0.02 + (score/20000)) {
-            const lanes = [35, 135, 235];
-            const lane = lanes[Math.floor(Math.random() * lanes.length)];
-            if (!obstacles.some(o => Math.abs(o.y - (-50)) < 150 && o.x === lane)) {
-                 obstacles.push({ x: lane, y: -50, width: 30, height: 50 });
-            }
+            const lanes = [35, 135, 235]; const lane = lanes[Math.floor(Math.random() * lanes.length)];
+            if (!obstacles.some(o => Math.abs(o.y - (-50)) < 150 && o.x === lane)) { obstacles.push({ x: lane, y: -50, width: 30, height: 50 }); }
         }
 
         for(let i=0; i<obstacles.length; i++) {
-            let obs = obstacles[i];
-            obs.y += gameSpeed;
-            drawCar(obs.x, obs.y, '#ec4899');
-
-            if (carX < obs.x + obs.width && carX + carWidth > obs.x &&
-                330 < obs.y + obs.height && 330 + carHeight > obs.y) {
-                gameOver();
-            }
+            let obs = obstacles[i]; obs.y += gameSpeed; drawCar(obs.x, obs.y, '#ec4899');
+            if (carX < obs.x + obs.width && carX + carWidth > obs.x && 330 < obs.y + obs.height && 330 + carHeight > obs.y) { gameOver(); }
         }
         obstacles = obstacles.filter(o => o.y < 450);
-
-        score++;
-        if(score % 500 === 0) gameSpeed += 0.5;
-
-        ctx.fillStyle = 'white';
-        ctx.font = 'bold 16px Inter';
-        ctx.fillText('Score: ' + Math.floor(score/10), 10, 25);
-
+        score++; if(score % 500 === 0) gameSpeed += 0.5;
+        ctx.fillStyle = 'white'; ctx.font = 'bold 16px Inter'; ctx.fillText('Score: ' + Math.floor(score/10), 10, 25);
         currentAnimationId = requestAnimationFrame(gameLoop);
     }
 
     function gameOver() {
-        isGameOver = true;
-        isPlayingActionGame = false;
+        isGameOver = true; isPlayingActionGame = false;
         window.removeEventListener('keydown', handleKeyDown); 
         if(currentAnimationId) cancelAnimationFrame(currentAnimationId);
-        
         const finalScore = Math.floor(score/10);
-        ctx.fillStyle = 'rgba(0,0,0,0.7)';
-        ctx.fillRect(0,0,canvas.width,canvas.height);
-        ctx.fillStyle = 'white';
-        ctx.font = 'bold 20px Inter';
-        ctx.fillText('CRASHED!', 100, 180);
-        ctx.fillText('Score: ' + finalScore, 100, 220);
-
-        setTimeout(() => {
-            if (singlePlayerMode) {
-                handleSpActionGameOver(finalScore);
-            } else {
-                const field = isPlayer1 ? 'p1Score' : 'p2Score';
-                updateDoc(doc(db, "games", gameId), { [field]: finalScore });
-            }
-        }, 1500);
+        ctx.fillStyle = 'rgba(0,0,0,0.7)'; ctx.fillRect(0,0,canvas.width,canvas.height);
+        ctx.fillStyle = 'white'; ctx.font = 'bold 20px Inter'; ctx.fillText('CRASHED!', 100, 180); ctx.fillText('Score: ' + finalScore, 100, 220);
+        setTimeout(() => { if (singlePlayerMode) { handleSpActionGameOver(finalScore); } else { updateDoc(doc(db, "games", gameId), { [isPlayer1 ? 'p1Score' : 'p2Score']: finalScore }); } }, 1500);
     }
 
-    const btnLeft = document.getElementById('btnLeft');
-    const btnRight = document.getElementById('btnRight');
+    const btnLeft = document.getElementById('btnLeft'); const btnRight = document.getElementById('btnRight');
     btnLeft.onmousedown = btnLeft.ontouchstart = (e) => { e.preventDefault(); if(carX > 35) carX -= 100; };
     btnRight.onmousedown = btnRight.ontouchstart = (e) => { e.preventDefault(); if(carX < 235) carX += 100; };
-
     gameLoop();
 }
 
@@ -1168,143 +1196,71 @@ function startJetFighter(gameId, isPlayer1) {
     const canvas = document.getElementById('actionCanvas');
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
-    let jetX = 135;
-    const jetSize = 30;
-    let bullets = [];
-    let enemies = [];
-    let score = 0;
-    let isGameOver = false;
-    let isMovingLeft = false;
-    let isMovingRight = false;
+    let jetX = 135; const jetSize = 30; let bullets = []; let enemies = []; let score = 0; let isGameOver = false; let isMovingLeft = false; let isMovingRight = false;
 
     const handleKeyDown = (e) => {
         if(!isPlayingActionGame) return;
         if(e.key === 'ArrowLeft') isMovingLeft = true;
         if(e.key === 'ArrowRight') isMovingRight = true;
-        if(e.key === ' ' || e.key === 'ArrowUp') { 
-            e.preventDefault(); 
-            bullets.push({ x: jetX + jetSize/2 - 2, y: 350 }); 
-        }
+        if(e.key === ' ' || e.key === 'ArrowUp') { e.preventDefault(); bullets.push({ x: jetX + jetSize/2 - 2, y: 350 }); }
     };
     const handleKeyUp = (e) => {
         if(!isPlayingActionGame) return;
         if(e.key === 'ArrowLeft') isMovingLeft = false;
         if(e.key === 'ArrowRight') isMovingRight = false;
     };
-    window.addEventListener('keydown', handleKeyDown);
-    window.addEventListener('keyup', handleKeyUp);
+    window.addEventListener('keydown', handleKeyDown); window.addEventListener('keyup', handleKeyUp);
 
-    function drawJet(x, y, color) {
-        ctx.fillStyle = color;
-        ctx.beginPath();
-        ctx.moveTo(x + jetSize/2, y);
-        ctx.lineTo(x + jetSize, y + jetSize);
-        ctx.lineTo(x, y + jetSize);
-        ctx.fill();
-    }
+    function drawJet(x, y, color) { ctx.fillStyle = color; ctx.beginPath(); ctx.moveTo(x + jetSize/2, y); ctx.lineTo(x + jetSize, y + jetSize); ctx.lineTo(x, y + jetSize); ctx.fill(); }
 
     function gameLoop() {
         if(isGameOver) return;
         ctx.clearRect(0, 0, canvas.width, canvas.height);
-
         if(isMovingLeft && jetX > 0) jetX -= 5;
         if(isMovingRight && jetX < canvas.width - jetSize) jetX += 5;
 
         ctx.fillStyle = 'white';
-        for(let i=0; i<3; i++) {
-            ctx.fillRect(Math.random()*canvas.width, Math.random()*canvas.height, 2, 2);
-        }
-
+        for(let i=0; i<3; i++) { ctx.fillRect(Math.random()*canvas.width, Math.random()*canvas.height, 2, 2); }
         drawJet(jetX, 350, '#10b981');
 
         ctx.fillStyle = '#f59e0b';
-        for(let i=0; i<bullets.length; i++) {
-            bullets[i].y -= 7;
-            ctx.fillRect(bullets[i].x, bullets[i].y, 4, 10);
-        }
+        for(let i=0; i<bullets.length; i++) { bullets[i].y -= 7; ctx.fillRect(bullets[i].x, bullets[i].y, 4, 10); }
         bullets = bullets.filter(b => b.y > 0);
 
-        if(Math.random() < 0.03 + (score/10000)) {
-            enemies.push({ x: Math.random() * (canvas.width - 20), y: -20, size: 20 });
-        }
+        if(Math.random() < 0.03 + (score/10000)) { enemies.push({ x: Math.random() * (canvas.width - 20), y: -20, size: 20 }); }
 
         for(let i=0; i<enemies.length; i++) {
-            let e = enemies[i];
-            e.y += 2.5;
-            ctx.fillStyle = '#ef4444';
-            ctx.fillRect(e.x, e.y, e.size, e.size);
-
+            let e = enemies[i]; e.y += 2.5; ctx.fillStyle = '#ef4444'; ctx.fillRect(e.x, e.y, e.size, e.size);
             for(let j=0; j<bullets.length; j++) {
                 let b = bullets[j];
-                if(b.x > e.x && b.x < e.x + e.size && b.y > e.y && b.y < e.y + e.size) {
-                    e.dead = true;
-                    b.dead = true;
-                    score += 10;
-                }
+                if(b.x > e.x && b.x < e.x + e.size && b.y > e.y && b.y < e.y + e.size) { e.dead = true; b.dead = true; score += 10; }
             }
-
-            if (jetX < e.x + e.size && jetX + jetSize > e.x &&
-                350 < e.y + e.size && 350 + jetSize > e.y) {
-                gameOver();
-            }
+            if (jetX < e.x + e.size && jetX + jetSize > e.x && 350 < e.y + e.size && 350 + jetSize > e.y) { gameOver(); }
         }
-        enemies = enemies.filter(e => !e.dead && e.y < 450);
-        bullets = bullets.filter(b => !b.dead);
-
-        ctx.fillStyle = 'white';
-        ctx.font = 'bold 16px Inter';
-        ctx.fillText('Score: ' + score, 10, 25);
-
+        enemies = enemies.filter(e => !e.dead && e.y < 450); bullets = bullets.filter(b => !b.dead);
+        ctx.fillStyle = 'white'; ctx.font = 'bold 16px Inter'; ctx.fillText('Score: ' + score, 10, 25);
         currentAnimationId = requestAnimationFrame(gameLoop);
     }
 
     function gameOver() {
-        isGameOver = true;
-        isPlayingActionGame = false;
-        window.removeEventListener('keydown', handleKeyDown); 
-        window.removeEventListener('keyup', handleKeyUp);
+        isGameOver = true; isPlayingActionGame = false;
+        window.removeEventListener('keydown', handleKeyDown); window.removeEventListener('keyup', handleKeyUp);
         if(currentAnimationId) cancelAnimationFrame(currentAnimationId);
-        
-        ctx.fillStyle = 'rgba(0,0,0,0.7)';
-        ctx.fillRect(0,0,canvas.width,canvas.height);
-        ctx.fillStyle = 'white';
-        ctx.font = 'bold 20px Inter';
-        ctx.fillText('DESTROYED!', 90, 180);
-        ctx.fillText('Score: ' + score, 105, 220);
-
-        setTimeout(() => {
-            if (singlePlayerMode) {
-                handleSpActionGameOver(score);
-            } else {
-                const field = isPlayer1 ? 'p1Score' : 'p2Score';
-                updateDoc(doc(db, "games", gameId), { [field]: score });
-            }
-        }, 1500);
+        ctx.fillStyle = 'rgba(0,0,0,0.7)'; ctx.fillRect(0,0,canvas.width,canvas.height);
+        ctx.fillStyle = 'white'; ctx.font = 'bold 20px Inter'; ctx.fillText('DESTROYED!', 90, 180); ctx.fillText('Score: ' + score, 105, 220);
+        setTimeout(() => { if (singlePlayerMode) { handleSpActionGameOver(score); } else { updateDoc(doc(db, "games", gameId), { [isPlayer1 ? 'p1Score' : 'p2Score']: score }); } }, 1500);
     }
 
-    const btnLeft = document.getElementById('btnLeft');
-    const btnRight = document.getElementById('btnRight');
-    
+    const btnLeft = document.getElementById('btnLeft'); const btnRight = document.getElementById('btnRight');
     btnLeft.onmousedown = btnLeft.ontouchstart = (e) => { e.preventDefault(); isMovingLeft = true; };
     btnLeft.onmouseup = btnLeft.ontouchend = btnLeft.onmouseleave = (e) => { e.preventDefault(); isMovingLeft = false; };
     btnRight.onmousedown = btnRight.ontouchstart = (e) => { e.preventDefault(); isMovingRight = true; };
     btnRight.onmouseup = btnRight.ontouchend = btnRight.onmouseleave = (e) => { e.preventDefault(); isMovingRight = false; };
 
     if(!document.getElementById('btnShoot')) {
-        const btnShoot = document.createElement('button');
-        btnShoot.id = 'btnShoot';
-        btnShoot.className = 'game-control-btn';
-        btnShoot.style.background = 'rgba(236, 72, 153, 0.2)';
-        btnShoot.style.borderColor = 'var(--accent)';
-        btnShoot.innerText = '🔥';
-        document.getElementById('gameControls').appendChild(btnShoot);
-
-        btnShoot.onmousedown = btnShoot.ontouchstart = (e) => {
-            e.preventDefault();
-            bullets.push({ x: jetX + jetSize/2 - 2, y: 350 });
-        };
+        const btnShoot = document.createElement('button'); btnShoot.id = 'btnShoot'; btnShoot.className = 'game-control-btn'; btnShoot.style.background = 'rgba(236, 72, 153, 0.2)'; btnShoot.style.borderColor = 'var(--accent)'; btnShoot.innerText = '🔥'; document.getElementById('gameControls').appendChild(btnShoot);
+        btnShoot.onmousedown = btnShoot.ontouchstart = (e) => { e.preventDefault(); bullets.push({ x: jetX + jetSize/2 - 2, y: 350 }); };
     }
-
     gameLoop();
 }
 
@@ -1315,22 +1271,25 @@ function renderTicTacToe(data, gameId) {
         (data.winner === 'draw' ? "It's a Draw!" : (data.winner === auth.currentUser.uid ? "🎉 You Won!" : "😞 You Lost!")) :
         (isMyTurn ? "Your Turn" : "Opponent's Turn");
 
-    let html = `<div class="game-turn-indicator" style="color: ${isMyTurn && !data.winner ? 'var(--primary)' : 'white'}">${turnText}</div>`;
-    html += `<div class="ttt-board">`;
+    let html = `<div class="game-turn-indicator" style="color: ${isMyTurn && !data.winner ? 'var(--primary)' : 'white'}">${turnText}</div><div class="ttt-board">`;
     data.board.forEach((cell, index) => {
         const cellClass = cell === 'X' ? 'x' : (cell === 'O' ? 'o' : '');
-        html += `<div class="ttt-cell ${cellClass}" onclick="makeMoveTTT(${index}, '${data.board[index]}', ${isMyTurn}, '${mySymbol}', '${data.winner}')">${cell}</div>`;
+        html += `<div class="ttt-cell ${cellClass}" onclick="makeMoveTTT(${index}, '${data.board[index]}', ${isMyTurn}, '${mySymbol}')">${cell}</div>`;
     });
     html += `</div>`;
     if(data.winner) html += `<button class="primary-btn glow-btn" style="max-width:200px; margin-top:20px;" onclick="resetTTT('${gameId}')">Play Again</button>`;
     gameUIContainer.innerHTML = html;
 }
 
-window.makeMoveTTT = async (index, currentVal, isMyTurn, mySymbol, winner) => {
-    if(!isMyTurn || currentVal !== "" || winner || !currentGameId) return;
+window.makeMoveTTT = async (index, currentVal, isMyTurn, mySymbol) => {
+    if(!isMyTurn || currentVal !== "" || !currentGameId) return;
     const docRef = doc(db, "games", currentGameId);
     const snap = await getDoc(docRef);
     const data = snap.data();
+    
+    // BUG FIX: Prevent further moves if game is already won
+    if(data.winner) return;
+
     let newBoard = [...data.board];
     newBoard[index] = mySymbol;
     const lines = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
@@ -1354,8 +1313,7 @@ function renderRPS(data, gameId) {
     const isPlayer1 = data.player1 === auth.currentUser.uid;
     const myChoice = isPlayer1 ? data.p1Choice : data.p2Choice;
     const oppChoice = isPlayer1 ? data.p2Choice : data.p1Choice;
-    let statusText = "Make your choice!";
-    let bothSelected = data.p1Choice && data.p2Choice;
+    let statusText = "Make your choice!"; let bothSelected = data.p1Choice && data.p2Choice;
     if (bothSelected) {
         if (myChoice === oppChoice) statusText = "It's a Tie!";
         else if ((myChoice === 'rock' && oppChoice === 'scissors') || (myChoice === 'paper' && oppChoice === 'rock') || (myChoice === 'scissors' && oppChoice === 'paper')) statusText = "🎉 You Won!";
@@ -1373,13 +1331,10 @@ window.makeMoveRPS = async (choice) => {
     const docRef = doc(db, "games", currentGameId);
     const snap = await getDoc(docRef);
     const isPlayer1 = snap.data().player1 === auth.currentUser.uid;
-    if (isPlayer1) await updateDoc(docRef, { p1Choice: choice });
-    else await updateDoc(docRef, { p2Choice: choice });
+    if (isPlayer1) await updateDoc(docRef, { p1Choice: choice }); else await updateDoc(docRef, { p2Choice: choice });
 };
 
-window.resetRPS = async (gameId) => {
-    await updateDoc(doc(db, "games", gameId), { p1Choice: null, p2Choice: null });
-};
+window.resetRPS = async (gameId) => { await updateDoc(doc(db, "games", gameId), { p1Choice: null, p2Choice: null }); };
 
 // --- YOUTUBE SHORTS (REELS) ---
 const shortsBtn = document.getElementById("shortsBtn");
@@ -1438,7 +1393,18 @@ fileInput.addEventListener("change", async (e) => {
     const response = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`, { method: "POST", body: formData });
     const data = await response.json();
     if (!response.ok) throw new Error(data.error.message || "Upload failed");
-    await addDoc(collection(db, "chats", currentChatId, "messages"), { text: "", imageUrl: data.secure_url, sender: auth.currentUser.uid, senderName: document.getElementById("myName").innerText, time: Date.now(), isEdited: false, isDeleted: false });
+    
+    // Saving imagePublicId for backend auto-deletion
+    await addDoc(collection(db, "chats", currentChatId, "messages"), { 
+      text: "", 
+      imageUrl: data.secure_url, 
+      imagePublicId: data.public_id, 
+      sender: auth.currentUser.uid, 
+      senderName: document.getElementById("myName").innerText, 
+      time: Date.now(), 
+      isEdited: false, 
+      isDeleted: false 
+    });
   } catch (err) { alert("Upload failed: " + err.message); } 
   finally { sendBtn.innerHTML = originalHtml; sendBtn.disabled = false; fileInput.value = ""; }
 });
@@ -1514,10 +1480,11 @@ profileAvatarInput.addEventListener("change", async (e) => {
   finally { editAvatarBtn.innerHTML = '<i class="fa-solid fa-camera"></i>'; editAvatarBtn.disabled = false; profileAvatarInput.value = ""; }
 });
 
+// User Profile Click
 document.querySelector(".current-user").addEventListener("click", () => { if(auth.currentUser) openProfile(auth.currentUser.uid); });
 document.querySelector(".chat-target-info").addEventListener("click", () => { if(targetUserUid && !isCurrentChatGroup) openProfile(targetUserUid); });
 
-// App info modal logic
+// App Info Modal Logic
 const appInfoBtn = document.getElementById("appInfoBtn");
 const infoModal = document.getElementById("infoModal");
 const closeModalBtn = document.getElementById("closeModalBtn");
@@ -1526,3 +1493,64 @@ if (appInfoBtn && infoModal && closeModalBtn) {
   closeModalBtn.addEventListener("click", () => { infoModal.style.display = "none"; });
   infoModal.addEventListener("click", (e) => { if (e.target === infoModal) infoModal.style.display = "none"; });
 }
+
+// --- NEW: GROUP MANAGEMENT (Add Member & Update Avatar) ---
+document.querySelector(".chat-header").addEventListener("click", (e) => {
+    // Agar mobile back button ya game menu click hua hai toh modal open mat karo
+    if (e.target.closest('.mobile-back-btn') || e.target.closest('#launchGameMenuBtn')) return;
+    
+    if (isCurrentChatGroup && currentChatId) {
+        const group = allGroups.find(g => g.id === currentChatId);
+        if(group) {
+            document.getElementById("groupSettingsName").innerText = group.name;
+            document.getElementById("groupMemberCount").innerText = group.members.length;
+            document.getElementById("groupSettingsAvatar").src = group.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(group.name)}&background=8b5cf6&color=fff`;
+            document.getElementById("groupSettingsModal").style.display = "flex";
+        }
+    }
+});
+
+window.triggerAddGroupMember = async () => {
+    const group = allGroups.find(g => g.id === currentChatId);
+    if(!group) return;
+    
+    let promptText = "Type the number of the user to add:\n\n";
+    const selectableUsers = allUsers.filter(u => u.id !== auth.currentUser.uid && !group.members.includes(u.id));
+    
+    if(selectableUsers.length === 0) { alert("All users are already in the group!"); return; }
+    
+    selectableUsers.forEach((u, index) => { promptText += `${index + 1}. ${u.fullName || u.username}\n`; });
+    const selection = prompt(promptText);
+    
+    if(selection) {
+        const idx = parseInt(selection.trim()) - 1;
+        if(selectableUsers[idx]) {
+            await updateDoc(doc(db, "groups", currentChatId), { members: arrayUnion(selectableUsers[idx].id) });
+            showToast("Member Added", `${selectableUsers[idx].fullName || selectableUsers[idx].username} was added to the group.`);
+            document.getElementById("groupSettingsModal").style.display = "none";
+        }
+    }
+};
+
+window.triggerGroupAvatarUpload = () => {
+    const input = document.createElement("input");
+    input.type = "file"; input.accept = "image/*";
+    input.onchange = async (e) => {
+        const file = e.target.files[0];
+        if(!file) return;
+        
+        try {
+            showToast("Uploading...", "Updating group icon", "https://ui-avatars.com/api/?name=Wait&background=f59e0b&color=fff");
+            const formData = new FormData(); formData.append("file", file); formData.append("upload_preset", UPLOAD_PRESET); 
+            const response = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`, { method: "POST", body: formData });
+            const data = await response.json();
+            if (!response.ok) throw new Error("Upload failed");
+            
+            await updateDoc(doc(db, "groups", currentChatId), { avatarUrl: data.secure_url });
+            document.getElementById("groupSettingsAvatar").src = data.secure_url;
+            document.getElementById("chatTargetAvatar").src = data.secure_url;
+            showToast("Success", "Group icon updated!", data.secure_url);
+        } catch(err) { alert("Failed to update group image."); }
+    };
+    input.click();
+};
