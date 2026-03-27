@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Chit-Chat | Premium Messaging & Games</title>
-  <link rel="stylesheet" href="style.css?v=14">
+  <link rel="stylesheet" href="style.css?v=15">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
@@ -65,34 +65,34 @@
       <div id="gamesNavContainer" class="users-list" style="display: flex; flex-direction: column; gap: 15px; padding: 15px; overflow-y: auto;">
         <div class="games-header-banner">
             <h3>Arcade Zone</h3>
-            <p>Challenge friends in chat to play!</p>
+            <p>Play Solo or Challenge Friends!</p>
         </div>
-        <div class="game-card" onclick="alert('Open a chat and click the Gamepad icon at the top to challenge a friend to Tic Tac Toe!')">
+        <div class="game-card" onclick="startSinglePlayer('tictactoe')">
             <div class="game-icon"><i class="fa-solid fa-table-cells"></i></div>
             <div class="game-info">
                 <h4>Tic Tac Toe</h4>
-                <span>Multiplayer • Classic</span>
+                <span>Vs Computer</span>
             </div>
         </div>
-        <div class="game-card" onclick="alert('Open a chat and click the Gamepad icon at the top to challenge a friend to Rock Paper Scissors!')">
+        <div class="game-card" onclick="startSinglePlayer('rps')">
             <div class="game-icon"><i class="fa-solid fa-hand-scissors"></i></div>
             <div class="game-info">
                 <h4>Rock Paper Scissors</h4>
-                <span>Multiplayer • Quick Match</span>
+                <span>Vs Computer</span>
             </div>
         </div>
-        <div class="game-card" onclick="alert('Open a chat and click the Gamepad icon at the top to challenge a friend to Jet Fighter!')">
+        <div class="game-card" onclick="startSinglePlayer('jetfighter')">
             <div class="game-icon"><i class="fa-solid fa-jet-fighter"></i></div>
             <div class="game-info">
                 <h4>Jet Fighter</h4>
-                <span>Multiplayer • Action</span>
+                <span>Solo • High Score</span>
             </div>
         </div>
-        <div class="game-card" onclick="alert('Open a chat and click the Gamepad icon at the top to challenge a friend to Car Racing!')">
+        <div class="game-card" onclick="startSinglePlayer('carracing')">
             <div class="game-icon"><i class="fa-solid fa-car"></i></div>
             <div class="game-info">
                 <h4>Car Racing</h4>
-                <span>Multiplayer • Racing</span>
+                <span>Solo • High Score</span>
             </div>
         </div>
       </div>
