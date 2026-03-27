@@ -610,6 +610,10 @@ closeGameBtn.addEventListener("click", () => {
     if (singlePlayerMode) {
         singlePlayerMode = false;
         spTttActive = false; // Kill local bot if running
+        // FIX FOR MOBILE: Un-hide sidebar when returning to Arcade Zone
+        if (window.innerWidth <= 992) {
+            sidebar.classList.remove("hidden");
+        }
     } else {
         if(gameUnsubscribe) gameUnsubscribe();
         if(currentGameId) { updateDoc(doc(db, "games", currentGameId), { status: "abandoned" }); }
@@ -768,7 +772,8 @@ window.renderSinglePlayerAction = async (gameType) => {
     try {
         const userDoc = await getDoc(doc(db, "users", auth.currentUser.uid));
         const data = userDoc.data();
-        spHighScore = (data.highScores && data.highScores[gameType]) ? data.highScores[gameType] : 0;
+        // Check if highScores exists in DB
+        spHighScore = (data && data.highScores && data.highScores[gameType]) ? data.highScores[gameType] : 0;
     } catch(e) { spHighScore = 0; }
     
     showSpActionMenu();
@@ -820,7 +825,10 @@ window.handleSpActionGameOver = async (score) => {
         spHighScore = score;
         isNewHighScore = true;
         try {
-            await updateDoc(doc(db, "users", auth.currentUser.uid), { [`highScores.${spGameType}`]: score }, { merge: true });
+            // FIX FOR DB SAVE: SetDoc with Merge ensures it never fails if the nested field didn't exist before.
+            await setDoc(doc(db, "users", auth.currentUser.uid), { 
+                highScores: { [spGameType]: score } 
+            }, { merge: true });
         } catch(e) { console.error("High score save failed", e); }
     }
     
