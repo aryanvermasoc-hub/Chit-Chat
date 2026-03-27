@@ -98,7 +98,10 @@
       </div>
 
       <div id="chatListContainer" style="display: none; flex-direction: column; flex: 1; overflow: hidden;">
-        <div class="search-container">
+        <div style="padding: 15px 15px 0 15px;">
+           <button id="createGroupBtn" class="primary-btn glow-btn" style="width: 100%; margin-bottom: 10px; background: rgba(139, 92, 246, 0.2); color: var(--text-main); border: 1px solid var(--primary);"><i class="fa-solid fa-users"></i> Create New Group</button>
+        </div>
+        <div class="search-container" style="padding-top: 5px;">
           <i class="fa-solid fa-magnifying-glass search-icon"></i>
           <input type="text" id="searchInput" placeholder="Search connections...">
         </div>
@@ -107,7 +110,7 @@
 
       <div class="sidebar-footer">
         <button id="homeGamesBtn" class="nav-btn" style="color: var(--primary);"><i class="fa-solid fa-gamepad"></i><span>Games</span></button>
-        <button id="createGroupBtn" class="nav-btn"><i class="fa-solid fa-users"></i><span>Group</span></button>
+        <button id="openUsersListBtn" class="nav-btn"><i class="fa-solid fa-user-group"></i><span>People</span></button>
         <button id="shortsBtn" class="nav-btn">
             <div class="custom-reels-logo"><i class="fa-solid fa-circle-play"></i></div>
             <span class="reels-brand-name">Chit-Reels</span>
@@ -164,6 +167,9 @@
             <span id="replyPreviewText" style="font-size: 12px; color: var(--text-muted); display: -webkit-box; -webkit-line-clamp: 1; line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; text-overflow: ellipsis; white-space: normal; word-break: break-word;">Message</span>
           </div>
           <button id="cancelReplyBtn" class="icon-btn" style="margin-left: 10px;"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+
+        <div id="chatStateOverlay" class="glass-panel" style="display:none; padding: 20px; text-align: center; border-top: 1px solid var(--glass-border); flex-shrink: 0; flex-direction: column; align-items: center; justify-content: center; background: rgba(0,0,0,0.4);">
         </div>
 
         <div class="chat-input-wrapper glass-panel">
@@ -242,6 +248,23 @@
       <a href="https://aryanvermasoc-hub.github.io/My-Info-ARYAN-VERMA/" target="_blank" class="primary-btn glow-btn" style="text-decoration: none;">
        Owner's Info <i class="fa-solid fa-arrow-up-right-from-square" style="margin-left: 5px;"></i>
       </a>
+    </div>
+  </div>
+
+  <div id="groupSettingsModal" class="modal-overlay" style="display: none;">
+    <div class="modal-content profile-content">
+      <button onclick="document.getElementById('groupSettingsModal').style.display='none'" class="icon-btn close-modal-corner"><i class="fa-solid fa-xmark"></i></button>
+      <div class="profile-header">
+        <div style="position: relative; display: inline-block;">
+          <img id="groupSettingsAvatar" src="" class="profile-avatar-large">
+          <button onclick="triggerGroupAvatarUpload()" style="position:absolute; bottom:10px; right:0; background:var(--primary); color:white; border-radius:50%; width:35px; height:35px; border:none; cursor:pointer;"><i class="fa-solid fa-camera"></i></button>
+        </div>
+        <h2 id="groupSettingsName">Group Name</h2>
+        <p class="text-muted"><span id="groupMemberCount">0</span> Members</p>
+      </div>
+      <div class="profile-actions">
+        <button onclick="triggerAddGroupMember()" class="primary-btn" style="background: #3b82f6;"><i class="fa-solid fa-user-plus"></i> Add New Member</button>
+      </div>
     </div>
   </div>
 
