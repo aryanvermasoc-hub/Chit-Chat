@@ -442,7 +442,7 @@ function loadMessages() {
     const now = Date.now();
     
     // ⏳ 24 HOURS TIME LIMIT 
-    const TIME_LIMIT = 24 * 60 * 60 * 1000; 
+    const TIME_LIMIT = 60 * 1000; 
 
     snapshot.forEach(docSnap => {
       const msg = docSnap.data();
