@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Chit-Chat | Premium Messaging & Games</title>
-  <link rel="stylesheet" href="style.css?v=15">
+  <link rel="stylesheet" href="style.css?v=18">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
@@ -137,7 +137,7 @@
       <div id="emptyChatState" class="empty-state">
         <div class="empty-icon"><i class="fa-solid fa-gamepad"></i></div>
         <h3>Arcade & Chat</h3>
-        <p>Select a conversation to chat or challenge.</p>
+        <p>Select a conversation to chat or challenge your friends for a quick game.</p>
       </div>
 
       <div id="activeChatState" style="display: none; height: 100%; flex-direction: column;">
@@ -158,12 +158,12 @@
         
         <div class="messages-container" id="chatBox"></div>
         
-        <div id="replyPreviewContainer" class="glass-panel" style="display: none; padding: 10px 20px; border-bottom: 1px solid rgba(255,255,255,0.1); align-items: center; justify-content: space-between; background: rgba(0,0,0,0.3);">
-          <div style="border-left: 3px solid #8b5cf6; padding-left: 10px; display: flex; flex-direction: column; overflow: hidden;">
-            <span id="replyPreviewName" style="font-size: 12px; font-weight: bold; color: #8b5cf6;">Replying to...</span>
-            <span id="replyPreviewText" style="font-size: 13px; color: #94a3b8; max-width: 250px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Message</span>
+        <div id="replyPreviewContainer" class="reply-preview-container">
+          <div class="preview-content">
+            <span id="replyPreviewName" style="font-size: 13px; font-weight: bold; color: var(--primary); margin-bottom: 3px;">Replying to...</span>
+            <span id="replyPreviewText" style="font-size: 12px; color: var(--text-muted); display: -webkit-box; -webkit-line-clamp: 1; line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; text-overflow: ellipsis; white-space: normal; word-break: break-word;">Message</span>
           </div>
-          <button id="cancelReplyBtn" class="icon-btn"><i class="fa-solid fa-xmark"></i></button>
+          <button id="cancelReplyBtn" class="icon-btn" style="margin-left: 10px;"><i class="fa-solid fa-xmark"></i></button>
         </div>
 
         <div class="chat-input-wrapper glass-panel">
@@ -173,6 +173,17 @@
         </div>
       </div>
     </main>
+  </div>
+
+  <div id="msgOptionsModal" class="modal-overlay" style="display: none;">
+    <div class="modal-content" style="padding: 25px;">
+      <div class="modal-header">
+        <h3>Message Options</h3>
+        <button onclick="closeMsgOptions()" class="icon-btn"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div id="msgOptionsList" style="display: flex; flex-direction: column; gap: 12px; margin-top: 15px;">
+         </div>
+    </div>
   </div>
 
   <div id="gameSelectionModal" class="modal-overlay" style="display: none;">
