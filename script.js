@@ -462,10 +462,9 @@ exploreBtn.addEventListener("click", () => {
     exploreArea.style.display = "flex";
     if(window.innerWidth <= 992) sidebar.classList.add("hidden");
     
-    // Default load Lounge
-    document.querySelector('.explore-tab[data-target="exploreLounge"]').click();
+    // Default load Memes
+    document.querySelector('.explore-tab[data-target="exploreMemes"]').click();
 });
-
 // Close Explore Hub
 closeExploreBtn.addEventListener("click", () => {
     exploreArea.style.display = "none";
