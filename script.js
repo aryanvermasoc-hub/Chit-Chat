@@ -611,11 +611,17 @@ const exploreSections = document.querySelectorAll(".explore-section");
 let globalChatUnsubscribe = null;
 
 exploreBtn.addEventListener("click", () => {
+    history.pushState({ page: "explore" }, ""); // <-- YEH LINE ADD HUI HAI
     exploreArea.style.display = "flex";
     if(window.innerWidth <= 992) sidebar.classList.add("hidden");
-    document.querySelector('.explore-tab[data-target="exploreMemes"]').click();
+    
+    // Saare tabs reset karo aur Memes ko default open karo
+    exploreTabs.forEach(t => t.classList.remove("active"));
+    exploreSections.forEach(s => s.classList.remove("active"));
+    document.querySelector('.explore-tab[data-target="exploreMemes"]').classList.add("active");
+    document.getElementById("exploreMemes").classList.add("active");
+    initMemesFeed();
 });
-
 closeExploreBtn.addEventListener("click", () => {
     exploreArea.style.display = "none";
     if(globalChatUnsubscribe) globalChatUnsubscribe();
