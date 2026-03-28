@@ -105,7 +105,14 @@
           <i class="fa-solid fa-magnifying-glass search-icon"></i>
           <input type="text" id="searchInput" placeholder="Search connections...">
         </div>
+        
+        <div class="sidebar-tabs" style="display: flex; gap: 10px; padding: 10px 15px; border-bottom: 1px solid var(--glass-border);">
+          <button id="showUsersTab" class="tab-btn active" style="flex:1;">Chats</button>
+          <button id="showGroupsTab" class="tab-btn" style="flex:1;">Groups</button>
+        </div>
+        
         <div class="users-list" id="usersList"></div>
+        <div class="users-list" id="groupsList" style="display: none;"></div>
       </div>
 
       <div class="sidebar-footer">
@@ -174,6 +181,14 @@
 
         <div class="chat-input-wrapper glass-panel">
           <button class="icon-btn"><i class="fa-solid fa-paperclip"></i></button>
+          
+          <select id="msgTimerSelect" style="background: transparent; color: var(--text-muted); border: none; outline: none; margin-right: 5px; cursor: pointer; font-family: 'Inter';">
+          
+            <option value="60000">⏱️ 1 Min</option>
+            <option value="3600000">⏱️ 1 Hour</option>
+            <option value="86400000">⏱️ 1 Day</option>
+          </select>
+
           <div class="input-pill"><input type="text" id="msg" placeholder="Type a message..."></div>
           <button id="sendBtn" class="primary-btn circle-btn"><i class="fa-solid fa-paper-plane"></i></button>
         </div>
@@ -262,8 +277,13 @@
         <h2 id="groupSettingsName">Group Name</h2>
         <p class="text-muted"><span id="groupMemberCount">0</span> Members</p>
       </div>
+      
+      <div id="groupMembersList" style="margin-top: 15px; max-height: 150px; overflow-y: auto; text-align: left; background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px;">
+          </div>
+
       <div class="profile-actions">
         <button onclick="triggerAddGroupMember()" class="primary-btn" style="background: #3b82f6;"><i class="fa-solid fa-user-plus"></i> Add New Member</button>
+        <button id="deleteGroupBtn" class="primary-btn" style="background: #ef4444; display: none; margin-top: 10px;"><i class="fa-solid fa-trash"></i> Delete Group</button>
       </div>
     </div>
   </div>
