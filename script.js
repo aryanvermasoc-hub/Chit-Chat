@@ -16,7 +16,6 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const auth = getAuth(app); 
-
 const CLOUD_NAME = "ddkov7oka"; 
 const UPLOAD_PRESET = "chitchat_preset"; 
 
@@ -30,6 +29,8 @@ let currentGameId = null; let gameUnsubscribe = null; let isPlayingActionGame = 
 let singlePlayerMode = false; let currentAnimationId = null; let currentSpDifficulty = 'medium'; 
 
 let activeMsgId = null; let activeMsgText = ""; let activeMsgSender = "";
+let activeMsgContext = 'chat'; // TRACKS IF WE ARE IN PERSONAL CHAT OR GLOBAL LOUNGE
+let pDoodleUnsubscribe = null; window.msgTimeouts = [];
 
 window.changeSpDifficulty = (val) => { currentSpDifficulty = val; };
 
@@ -53,23 +54,22 @@ const modalMsgTimerSelect = document.getElementById("modalMsgTimerSelect"); cons
 const wallpaperInput = document.getElementById("wallpaperInput"); const clearChatMeBtn = document.getElementById("clearChatMeBtn");
 const removeWallpaperBtn = document.getElementById("removeWallpaperBtn");
 
+const launchGameMenuBtn = document.getElementById("launchGameMenuBtn");
+const chatDoodleBtn = document.getElementById("chatDoodleBtn");
+
 function switchSidebarView(view) {
     newsFeedContainer.style.display = "none"; chatListContainer.style.display = "none"; gamesNavContainer.style.display = "none";
     if (view === 'chats') { chatListContainer.style.display = "flex"; chatToggleBtn.innerHTML = '<i class="fa-solid fa-message"></i> Chats'; chatToggleBtn.style.color = "white"; homeGamesBtn.style.color = "var(--text-muted)"; if(openUsersListBtn) openUsersListBtn.style.color = "var(--text-muted)"; } 
     else if (view === 'games') { gamesNavContainer.style.display = "flex"; chatToggleBtn.innerHTML = '<i class="fa-solid fa-fire"></i> Feed'; chatToggleBtn.style.color = "white"; homeGamesBtn.style.color = "var(--primary)"; if(openUsersListBtn) openUsersListBtn.style.color = "var(--text-muted)"; } 
     else if (view === 'feed') { newsFeedContainer.style.display = "flex"; chatToggleBtn.innerHTML = '<i class="fa-solid fa-fire"></i> Feed (Active)'; chatToggleBtn.style.color = "var(--accent)"; homeGamesBtn.style.color = "var(--text-muted)"; if(openUsersListBtn) openUsersListBtn.style.color = "var(--text-muted)"; }
 }
-
 switchSidebarView('games');
 chatToggleBtn.addEventListener("click", () => { if (chatListContainer.style.display === "flex") { switchSidebarView('feed'); } else { switchSidebarView('chats'); } });
 homeGamesBtn.addEventListener("click", () => { switchSidebarView('games'); });
 if(openUsersListBtn) { openUsersListBtn.addEventListener("click", () => { switchSidebarView('chats'); openUsersListBtn.style.color = "var(--primary)"; }); }
 
-// --- 4. ENCRYPTION ENGINE ---
 const encryptMessage = (text, secretKey) => { if (!text) return text; return CryptoJS.AES.encrypt(text, secretKey).toString(); };
 const decryptMessage = (cipherText, secretKey) => { if (!cipherText) return cipherText; try { const bytes = CryptoJS.AES.decrypt(cipherText, secretKey); return bytes.toString(CryptoJS.enc.Utf8); } catch (e) { return "[Encrypted Message]"; } };
-
-// --- 5. UTILS & TOAST ---
 const getFakeEmail = (username) => `${username.toLowerCase().trim()}@chitchat.app`;
 const generateAvatar = (userObj, fallbackName) => { if (userObj && userObj.avatarUrl) return userObj.avatarUrl; const name = (userObj && (userObj.fullName || userObj.username)) || fallbackName || "User"; return `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=random&color=fff&rounded=true&bold=true`; };
 function timeAgo(ms) { if (!ms) return ""; const seconds = Math.floor((Date.now() - ms) / 1000); if (seconds < 60) return "Just now"; const minutes = Math.floor(seconds / 60); if (minutes < 60) return `${minutes} min ago`; const hours = Math.floor(minutes / 60); if (hours < 24) return `${hours} hr ago`; return `${Math.floor(hours / 24)} days ago`; }
@@ -82,7 +82,6 @@ window.showToast = function(title, message, avatarUrl) {
   container.appendChild(toast); setTimeout(() => { toast.style.animation = "fadeOutToast 0.5s ease forwards"; setTimeout(() => { if(toast.parentElement) toast.remove(); }, 500); }, 4000);
 };
 
-// --- 6. AUTHENTICATION ---
 const toggleAuthMode = (signup) => { isSignupMode = signup; if (signup) { tabSignup.classList.add("active"); tabLogin.classList.remove("active"); nameGroup.style.display = "block"; authActionBtn.innerText = "Create Account"; } else { tabLogin.classList.add("active"); tabSignup.classList.remove("active"); nameGroup.style.display = "none"; authActionBtn.innerText = "Enter Chit-Chat"; } };
 tabLogin.addEventListener("click", () => toggleAuthMode(false)); tabSignup.addEventListener("click", () => toggleAuthMode(true));
 
@@ -99,12 +98,11 @@ document.getElementById("logoutBtn").addEventListener("click", async () => {
   if (confirm("Disconnect from Chit-Chat?")) { try { await updateDoc(doc(db, "users", auth.currentUser.uid), { isOnline: false, lastSeen: Date.now() }); } catch (e) {} if(myProfileUnsubscribe) myProfileUnsubscribe(); signOut(auth); }
 });
 
-// --- 7. AUTH STATE OBSERVER ---
 onAuthStateChanged(auth, async (user) => {
   if (user) {
     authScreen.style.display = "none"; appScreen.style.display = "flex"; history.pushState({ page: "home" }, ""); 
     await updateDoc(doc(db, "users", user.uid), { isOnline: true });
-    showToast("Welcome Back!", "You are securely connected.", "https://ui-avatars.com/api/?name=Chit+Chat&background=10b981&color=fff");
+    showToast("Welcome Back!", "You are securely connected.");
     window.addEventListener("beforeunload", () => updateDoc(doc(db, "users", user.uid), { isOnline: false, lastSeen: Date.now() }));
     startMyProfileListener(user.uid); loadSidebarData(); loadNewsFeed(); 
   } else {
@@ -133,7 +131,7 @@ function startMyProfileListener(uid) {
             if (currentChatId && targetUserUid === otherUid) { updateDoc(doc(db, "users", uid), { [`chatMeta.${otherUid}.unread`]: false }); } 
             else {
               const sender = allUsers.find(u => u.id === otherUid); const sName = sender ? (sender.fullName || sender.username) : "Someone"; const sAvatar = generateAvatar(sender, sName); let preview = newMeta.text;
-              if(preview === "🎮 GAME CHALLENGE") { showToast(`Game Request!`, `${sName} challenged you to a game.`, sAvatar); } 
+              if(preview === "🎮 GAME CHALLENGE" || preview === "🎨 DOODLE REQUEST") { showToast(`Challenge!`, `${sName} sent you a request.`, sAvatar); } 
               else {
                   if (preview.startsWith("U2FsdGVkX1") || preview.startsWith("U2Fz")) { const pChatId = uid < otherUid ? `${uid}_${otherUid}` : `${otherUid}_${uid}`; const decrypted = decryptMessage(preview, pChatId); preview = decrypted ? decrypted : "🔒 Encrypted Message"; }
                   showToast(`New Message from ${sName}`, preview, sAvatar);
@@ -149,7 +147,6 @@ function startMyProfileListener(uid) {
   });
 }
 
-// --- 8. SIDEBAR & SORTING ---
 function loadSidebarData() {
   onSnapshot(collection(db, "users"), (snapshot) => { allUsers = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })); renderSidebar(); });
   onSnapshot(collection(db, "groups"), (snapshot) => { allGroups = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })); renderSidebar(); });
@@ -196,60 +193,108 @@ if(createGroupBtn) {
     if (members.length > 1) { addDoc(collection(db, "groups"), { name: groupName, members: members, createdAt: Date.now(), createdBy: auth.currentUser.uid }); showToast("Group Created", `${groupName} was created successfully.`); } else { alert("You must add at least one other person."); }
   });
 }
-
 if (backToUsersBtn) { backToUsersBtn.addEventListener("click", () => { if (window.innerWidth <= 992) { sidebar.classList.remove("hidden"); activeChatState.style.display = "none"; emptyChatState.style.display = "flex"; } }); }
-
-// --- CHAT LOGIC ---
+// --- 9. CHAT LOGIC, REQUESTS & DISAPPEARING MESSAGES ---
 function listenToChatStatus(targetName) {
     if (chatDocUnsubscribe) chatDocUnsubscribe();
-    const overlay = document.getElementById("chatStateOverlay"); const inputWrapper = document.querySelector(".chat-input-wrapper");
-    if (isCurrentChatGroup) { currentChatStatus = 'accepted'; if(overlay) overlay.style.display = "none"; if(inputWrapper) inputWrapper.style.display = "flex"; return; }
+    const overlay = document.getElementById("chatStateOverlay"); 
+    const inputWrapper = document.querySelector(".chat-input-wrapper");
+    
+    if (isCurrentChatGroup) { 
+        currentChatStatus = 'accepted'; 
+        if(overlay) overlay.style.display = "none"; 
+        if(inputWrapper) inputWrapper.style.display = "flex"; 
+        return; 
+    }
+    
     chatDocUnsubscribe = onSnapshot(doc(db, "chats", currentChatId), (snap) => {
         if (snap.exists()) {
             const data = snap.data(); currentChatStatus = data.status;
-            if (data.messageTimer !== undefined && modalMsgTimerSelect && modalMsgTimerSelect.value != data.messageTimer) { modalMsgTimerSelect.value = data.messageTimer; }
+            if (data.messageTimer !== undefined && modalMsgTimerSelect && modalMsgTimerSelect.value != data.messageTimer) { 
+                modalMsgTimerSelect.value = data.messageTimer; 
+            }
+            
+            if (data.doodleActive) {
+                initPrivateDoodle();
+            } else {
+                document.getElementById("privateDoodleArea").style.display = "none";
+                if(pDoodleUnsubscribe) { pDoodleUnsubscribe(); pDoodleUnsubscribe = null; }
+            }
+
+            // ICON VISIBILITY LOGIC
             if (data.status === 'pending') {
-                if(overlay) overlay.style.display = "flex"; if(inputWrapper) inputWrapper.style.display = "none";
-                if (data.initiator === auth.currentUser.uid) { overlay.innerHTML = `<p style="font-size: 14px; margin: 0; color: var(--text-muted);"><i class="fa-solid fa-clock"></i> Request sent to <b>${targetName}</b>. Waiting for approval...</p>`; } 
-                else { overlay.innerHTML = `<p style="font-size: 14px; margin-bottom: 15px;"><strong style="color:var(--primary);">${targetName}</strong> wants to connect with you.</p><div style="display:flex; gap: 15px; justify-content: center;"><button onclick="acceptChatRequest()" class="primary-btn glow-btn" style="width:auto; padding: 8px 25px; background:#10b981;">Accept</button><button onclick="declineChatRequest()" class="primary-btn" style="width:auto; padding: 8px 25px; background:rgba(255,255,255,0.1); color:var(--text-muted);">Decline</button></div>`; }
-            } else if (data.status === 'accepted') { if(overlay) overlay.style.display = "none"; if(inputWrapper) inputWrapper.style.display = "flex"; }
+                document.getElementById("chatDoodleBtn").style.display = "none"; 
+                document.getElementById("launchGameMenuBtn").style.display = "none";
+                document.getElementById("chatSettingsBtn").style.display = "none";
+                if(overlay) overlay.style.display = "flex"; 
+                if(inputWrapper) inputWrapper.style.display = "none";
+                
+                if (data.initiator === auth.currentUser.uid) { 
+                    overlay.innerHTML = `<p style="font-size: 14px; margin: 0; color: var(--text-muted);"><i class="fa-solid fa-clock"></i> Request sent to <b>${targetName}</b>. Waiting for approval...</p>`; 
+                } else { 
+                    overlay.innerHTML = `<p style="font-size: 14px; margin-bottom: 15px;"><strong style="color:var(--primary);">${targetName}</strong> wants to connect with you.</p><div style="display:flex; gap: 15px; justify-content: center;"><button onclick="acceptChatRequest()" class="primary-btn glow-btn" style="width:auto; padding: 8px 25px; background:#10b981;">Accept</button><button onclick="declineChatRequest()" class="primary-btn" style="width:auto; padding: 8px 25px; background:rgba(255,255,255,0.1); color:var(--text-muted);">Decline</button></div>`; 
+                }
+            } else if (data.status === 'accepted') { 
+                // ONLY SHOW ICONS IF ACCEPTED
+                document.getElementById("chatDoodleBtn").style.display = "block"; 
+                document.getElementById("launchGameMenuBtn").style.display = "block"; 
+                document.getElementById("chatSettingsBtn").style.display = "block"; 
+                if(overlay) overlay.style.display = "none"; 
+                if(inputWrapper) inputWrapper.style.display = "flex"; 
+            }
         } else {
-            currentChatStatus = 'none'; if(overlay) overlay.style.display = "flex"; if(inputWrapper) inputWrapper.style.display = "none";
+            currentChatStatus = 'none'; 
+            document.getElementById("chatDoodleBtn").style.display = "none";
+            document.getElementById("launchGameMenuBtn").style.display = "none";
+            document.getElementById("chatSettingsBtn").style.display = "none";
+            if(overlay) overlay.style.display = "flex"; 
+            if(inputWrapper) inputWrapper.style.display = "none";
             overlay.innerHTML = `<p style="font-size: 14px; margin-bottom: 15px;">You are not connected with <b>${targetName}</b>.</p><button onclick="sendChatRequest()" class="primary-btn glow-btn" style="width:auto; padding: 8px 25px;"><i class="fa-solid fa-user-plus"></i> Send Request</button>`;
         }
     });
 }
 
-chatSettingsBtn.addEventListener("click", () => { chatSettingsModal.style.display = "flex"; });
-modalMsgTimerSelect.addEventListener("change", async (e) => { if (!currentChatId || isCurrentChatGroup) return; const newTimerValue = parseInt(e.target.value); await setDoc(doc(db, "chats", currentChatId), { messageTimer: newTimerValue }, { merge: true }); showToast("Timer Updated", "Disappearing messages timer synced.", "https://cdn-icons-png.flaticon.com/512/2088/2088617.png"); });
-
-changeWallpaperBtn.addEventListener("click", () => wallpaperInput.click());
-wallpaperInput.addEventListener("change", async (e) => {
-    const file = e.target.files[0]; if (!file || !currentChatId) return; changeWallpaperBtn.innerHTML = "<i class='fa-solid fa-spinner fa-spin'></i> Uploading...";
-    try { const formData = new FormData(); formData.append("file", file); formData.append("upload_preset", UPLOAD_PRESET); const response = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`, { method: "POST", body: formData }); const data = await response.json(); await setDoc(doc(db, "users", auth.currentUser.uid), { chatMeta: { [targetUserUid]: { wallpaperUrl: data.secure_url } } }, { merge: true }); document.getElementById("chatBox").style.backgroundImage = `linear-gradient(rgba(10,10,15,0.8), rgba(10,10,15,0.8)), url('${data.secure_url}')`; showToast("Wallpaper Set", "Your chat background has been updated."); } 
-    catch (err) { alert("Upload failed: " + err.message); } finally { changeWallpaperBtn.innerHTML = "<i class='fa-regular fa-image'></i> Change Wallpaper"; wallpaperInput.value = ""; }
-});
-removeWallpaperBtn.addEventListener("click", async () => { if (!currentChatId || isCurrentChatGroup) return; removeWallpaperBtn.innerHTML = "<i class='fa-solid fa-spinner fa-spin'></i> Removing..."; try { await setDoc(doc(db, "users", auth.currentUser.uid), { chatMeta: { [targetUserUid]: { wallpaperUrl: null } } }, { merge: true }); document.getElementById("chatBox").style.backgroundImage = "none"; showToast("Wallpaper Removed", "Chat background reset to default."); document.getElementById("chatSettingsModal").style.display = "none"; } catch (err) {} finally { removeWallpaperBtn.innerHTML = "<i class='fa-solid fa-rotate-left'></i> Default Wallpaper"; } });
-
-clearChatMeBtn.addEventListener("click", async () => { if(!confirm("Are you sure you want to hide all messages for yourself?")) return; const q = query(collection(db, "chats", currentChatId, "messages")); const snapshot = await getDocs(q); const batch = writeBatch(db); snapshot.docs.forEach((msgDoc) => { batch.update(msgDoc.ref, { deletedFor: arrayUnion(auth.currentUser.uid) }); }); await batch.commit(); chatSettingsModal.style.display = 'none'; showToast("Chat Cleared", "Messages hidden from your view."); });
-
-window.sendChatRequest = async () => { document.getElementById("chatStateOverlay").innerHTML = `<p style="font-size: 14px; margin: 0; color: var(--text-muted);"><i class="fa-solid fa-spinner fa-spin"></i> Sending Request...</p>`; await setDoc(doc(db, "chats", currentChatId), { status: 'pending', initiator: auth.currentUser.uid, createdAt: Date.now() }); try { await setDoc(doc(db, "users", auth.currentUser.uid), { chatMeta: { [targetUserUid]: { time: Date.now(), text: `Request Sent`, unread: false } } }, { merge: true }); await setDoc(doc(db, "users", targetUserUid), { chatMeta: { [auth.currentUser.uid]: { time: Date.now(), text: `👋 New Connection Request`, unread: true } } }, { merge: true }); } catch(err) {} };
-window.acceptChatRequest = async () => { await updateDoc(doc(db, "chats", currentChatId), { status: 'accepted' }); };
-window.declineChatRequest = async () => { if(confirm("Are you sure you want to decline and delete this request?")) { document.getElementById("backToUsersBtn").click(); await deleteDoc(doc(db, "chats", currentChatId)); try { const myUserDoc = await getDoc(doc(db, "users", auth.currentUser.uid)); let currentMeta = myUserDoc.data().chatMeta || {}; delete currentMeta[targetUserUid]; await updateDoc(doc(db, "users", auth.currentUser.uid), { chatMeta: currentMeta }); } catch(e) {} } };
-
 function openChat(targetUid, targetName, targetAvatar, isTargetOnline, targetLastSeen) {
-  isCurrentChatGroup = false; currentChatId = auth.currentUser.uid < targetUid ? `${auth.currentUser.uid}_${targetUid}` : `${targetUid}_${auth.currentUser.uid}`; targetUserUid = targetUid;
-  document.getElementById("launchGameMenuBtn").style.display = "block"; document.getElementById("chatSettingsBtn").style.display = "block"; document.getElementById("chatBox").innerHTML = ""; if(replyingToMsg) document.getElementById("cancelReplyBtn").click();
-  if (myUserData && myUserData.chatMeta && myUserData.chatMeta[targetUserUid] && myUserData.chatMeta[targetUserUid].wallpaperUrl) { document.getElementById("chatBox").style.backgroundImage = `linear-gradient(rgba(10,10,15,0.8), rgba(10,10,15,0.8)), url('${myUserData.chatMeta[targetUserUid].wallpaperUrl}')`; } else { document.getElementById("chatBox").style.backgroundImage = "none"; }
-  document.getElementById("chatTargetName").innerText = targetName; document.getElementById("chatTargetAvatar").src = targetAvatar; const targetStatus = document.getElementById("chatTargetStatus");
-  if (isTargetOnline) { targetStatus.classList.add('online'); targetStatus.innerText = "Online"; } else { targetStatus.classList.remove('online'); targetStatus.innerText = `Last seen: ${timeAgo(targetLastSeen)}`; }
-  emptyChatState.style.display = "none"; activeChatState.style.display = "flex"; if(window.innerWidth <= 992) { sidebar.classList.add("hidden"); history.pushState({ page: "chat" }, ""); }
+  isCurrentChatGroup = false; 
+  currentChatId = auth.currentUser.uid < targetUid ? `${auth.currentUser.uid}_${targetUid}` : `${targetUid}_${auth.currentUser.uid}`; 
+  targetUserUid = targetUid;
+  
+  // DEFAULT HIDE ICONS WHEN OPENING CHAT
+  document.getElementById("chatSettingsBtn").style.display = "none"; 
+  document.getElementById("chatDoodleBtn").style.display = "none"; 
+  document.getElementById("launchGameMenuBtn").style.display = "none"; 
+  
+  document.getElementById("chatBox").innerHTML = ""; 
+  if(replyingToMsg) document.getElementById("cancelReplyBtn").click();
+  document.getElementById("privateDoodleArea").style.display = "none";
+
+  if (myUserData && myUserData.chatMeta && myUserData.chatMeta[targetUserUid] && myUserData.chatMeta[targetUserUid].wallpaperUrl) { 
+      document.getElementById("chatBox").style.backgroundImage = `linear-gradient(rgba(10,10,15,0.8), rgba(10,10,15,0.8)), url('${myUserData.chatMeta[targetUserUid].wallpaperUrl}')`; 
+  } else { 
+      document.getElementById("chatBox").style.backgroundImage = "none"; 
+  }
+  
+  document.getElementById("chatTargetName").innerText = targetName; 
+  document.getElementById("chatTargetAvatar").src = targetAvatar; 
+  const targetStatus = document.getElementById("chatTargetStatus");
+  
+  if (isTargetOnline) { 
+      targetStatus.classList.add('online'); targetStatus.innerText = "Online"; 
+  } else { 
+      targetStatus.classList.remove('online'); targetStatus.innerText = `Last seen: ${timeAgo(targetLastSeen)}`; 
+  }
+  
+  emptyChatState.style.display = "none"; 
+  activeChatState.style.display = "flex"; 
+  if(window.innerWidth <= 992) { sidebar.classList.add("hidden"); history.pushState({ page: "chat" }, ""); }
+  
   loadMessages(); listenToTyping(); listenToChatStatus(targetName); 
 }
-
 function openGroupChat(groupId, groupName, memberCount) {
   isCurrentChatGroup = true; currentChatId = groupId; targetUserUid = null;
-  document.getElementById("launchGameMenuBtn").style.display = "none"; document.getElementById("chatSettingsBtn").style.display = "none"; document.getElementById("chatBox").innerHTML = ""; document.getElementById("chatBox").style.backgroundImage = "none"; if(replyingToMsg) document.getElementById("cancelReplyBtn").click();
+  document.getElementById("launchGameMenuBtn").style.display = "none"; document.getElementById("chatSettingsBtn").style.display = "none"; document.getElementById("chatDoodleBtn").style.display = "none"; document.getElementById("chatBox").innerHTML = ""; document.getElementById("chatBox").style.backgroundImage = "none"; if(replyingToMsg) document.getElementById("cancelReplyBtn").click();
+  if(pDoodleUnsubscribe) { pDoodleUnsubscribe(); pDoodleUnsubscribe = null; }
+  
   const groupData = allGroups.find(g => g.id === groupId); const avatarToUse = groupData && groupData.avatarUrl ? groupData.avatarUrl : `https://ui-avatars.com/api/?name=${encodeURIComponent(groupName)}&background=8b5cf6&color=fff`;
   document.getElementById("chatTargetName").innerText = groupName; document.getElementById("chatTargetAvatar").src = avatarToUse; document.getElementById("chatTargetStatus").innerText = `${memberCount} members (Tap for Info)`;
   emptyChatState.style.display = "none"; activeChatState.style.display = "flex"; if(window.innerWidth <= 992) { sidebar.classList.add("hidden"); history.pushState({ page: "chat" }, ""); }
@@ -259,13 +304,23 @@ function openGroupChat(groupId, groupName, memberCount) {
 function loadMessages() {
   if (messagesUnsubscribe) messagesUnsubscribe(); 
   const q = query(collection(db, "chats", currentChatId, "messages"), orderBy("time", "asc"));
+  
   messagesUnsubscribe = onSnapshot(q, (snapshot) => {
     chatBox.innerHTML = ""; let lastMyMsg = null; 
     if(window.msgTimeouts) window.msgTimeouts.forEach(clearTimeout); window.msgTimeouts = [];
+    
     snapshot.forEach(docSnap => {
       const msg = docSnap.data(); const msgId = docSnap.id; const isMe = msg.sender === auth.currentUser.uid;
       if (isMe) lastMyMsg = msg; if (msg.isExpired) return;
-      if (!isMe && !msg.seenAt) { const updateData = { seenAt: Date.now() }; if (msg.timerDuration) { updateData.expiresAt = Date.now() + msg.timerDuration; } updateDoc(doc(db, "chats", currentChatId, "messages", msgId), updateData).catch(e=>{}); }
+
+      // Disappearing Message Activation
+      if (!isMe && !msg.seenAt) { 
+          const updateData = { seenAt: Date.now() }; 
+          if (msg.timerDuration) { updateData.expiresAt = Date.now() + msg.timerDuration; } 
+          updateDoc(doc(db, "chats", currentChatId, "messages", msgId), updateData).catch(e=>{}); 
+      }
+
+      // Disappearing Wipe Logic (Works on ALL messages, including requests)
       if (msg.expiresAt) {
           const timeLeft = msg.expiresAt - Date.now();
           const wipeMessage = async () => {
@@ -273,15 +328,20 @@ function loadMessages() {
               else { try { await deleteDoc(doc(db, "chats", currentChatId, "messages", msgId)); } catch(e) { await updateDoc(doc(db, "chats", currentChatId, "messages", msgId), { text: "", expiresAt: null, isExpired: true }); } }
               if (!isCurrentChatGroup) { try { const expiredMeta = { time: Date.now(), text: "🚫 Message Expired", unread: false }; await setDoc(doc(db, "users", auth.currentUser.uid), { chatMeta: { [targetUserUid]: expiredMeta } }, { merge: true }); await setDoc(doc(db, "users", targetUserUid), { chatMeta: { [auth.currentUser.uid]: expiredMeta } }, { merge: true }); } catch(err) {} }
           };
-          if (timeLeft <= 0) { wipeMessage(); return; } else { const timerId = setTimeout(() => { wipeMessage(); }, timeLeft); window.msgTimeouts.push(timerId); }
+          if (timeLeft <= 0) { wipeMessage(); return; } 
+          else { const timerId = setTimeout(() => { wipeMessage(); }, timeLeft); window.msgTimeouts.push(timerId); }
       }
+
       if (msg.deletedFor && msg.deletedFor.includes(auth.currentUser.uid)) return;
 
       const timeStr = new Date(msg.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
       const div = document.createElement("div"); div.className = `message-wrapper ${isMe ? 'sent' : 'received'}`;
       let contentHtml = "";
 
-      if (msg.isGameChallenge) {
+      if (msg.isDoodleRequest) {
+          if (isMe) { contentHtml = `<div class="challenge-bubble" onclick="event.stopPropagation();"><h4>🎨 Doodle Request Sent</h4><p>Waiting for opponent to accept...</p></div>`; }
+          else { contentHtml = `<div class="challenge-bubble" onclick="event.stopPropagation();"><h4>🎨 Shared Whiteboard</h4><p>Wants to draw with you!</p><div class="challenge-actions"><button class="btn-accept" onclick="acceptDoodle()">Accept</button></div></div>`; }
+      } else if (msg.isGameChallenge) {
           const gameNames = { "ludo": "Ludo Arena", "tictactoe": "Tic Tac Toe", "rps": "Rock Paper Scissors", "jetfighter": "Jet Fighter", "carracing": "Car Racing" };
           if (isMe) { contentHtml = `<div class="challenge-bubble" onclick="event.stopPropagation();"><h4>🎮 Challenge Sent</h4><p>Waiting for opponent to accept ${gameNames[msg.gameType] || 'a Game'}...</p></div>`; } 
           else { contentHtml = `<div class="challenge-bubble" onclick="event.stopPropagation();"><h4>🎮 Game Request</h4><p>Wants to play <b>${gameNames[msg.gameType] || 'a Game'}</b></p><div class="challenge-actions"><button class="btn-accept" onclick="acceptGameChallenge('${msg.gameId}', '${msg.gameType}')">Accept</button></div></div>`; }
@@ -292,24 +352,96 @@ function loadMessages() {
         let imgHtml = msg.imageUrl ? `<img src="${msg.imageUrl}" style="max-width:100%; border-radius:12px; margin-bottom:8px; cursor:pointer;" onclick="event.stopPropagation(); window.open('${msg.imageUrl}')" />` : "";
         let groupSenderHtml = (isCurrentChatGroup && !isMe) ? `<div style="font-size:11px; color:var(--primary); font-weight:600; margin-bottom:4px;">${msg.senderName}</div>` : "";
         const encodedText = encodeURIComponent(decryptedText || (msg.imageUrl ? 'Image' : '')); const encodedName = encodeURIComponent(isMe ? 'You' : (msg.senderName || document.getElementById('chatTargetName').innerText));
-        contentHtml = `<div class="msg-bubble" onclick="openMessageModal('${msgId}', '${encodedText}', '${encodedName}', ${isMe})">${groupSenderHtml}${replyHtml}${imgHtml}<span style="word-wrap: break-word; white-space: pre-wrap; display: block; max-width: 100%;">${decryptedText}</span> ${msg.isEdited ? '<span style="font-size:10px; opacity:0.5; display:block; margin-top:5px;">(edited)</span>' : ''}</div>`;
+        contentHtml = `<div class="msg-bubble" onclick="openMessageModal('${msgId}', '${encodedText}', '${encodedName}', ${isMe}, 'chat')">${groupSenderHtml}${replyHtml}${imgHtml}<span style="word-wrap: break-word; white-space: pre-wrap; display: block; max-width: 100%;">${decryptedText}</span> ${msg.isEdited ? '<span style="font-size:10px; opacity:0.5; display:block; margin-top:5px;">(edited)</span>' : ''}</div>`;
       }
+      
       let avatarSrc = isCurrentChatGroup && !isMe ? generateAvatar(allUsers.find(u=>u.id===msg.sender), msg.senderName) : document.getElementById('chatTargetAvatar').src;
       div.innerHTML = `${!isMe ? `<img src="${avatarSrc}" class="msg-avatar">` : ''}<div style="display:flex; flex-direction:column; max-width: 100%;">${contentHtml}<div class="msg-time">${timeStr}</div></div>${isMe ? `<img src="${document.getElementById('myAvatar').src}" class="msg-avatar">` : ''}`;
       chatBox.appendChild(div);
     });
+
     if (lastMyMsg && lastMyMsg.seenAt) { const seenDiv = document.createElement("div"); seenDiv.style.textAlign = "right"; seenDiv.style.fontSize = "11px"; seenDiv.style.color = "var(--text-muted)"; seenDiv.style.marginTop = "-15px"; seenDiv.style.paddingRight = "45px"; seenDiv.innerHTML = `<i class="fa-solid fa-check-double" style="color: #3b82f6;"></i> Seen`; chatBox.appendChild(seenDiv); }
     chatBox.scrollTop = chatBox.scrollHeight;
   });
 }
 
-window.openMessageModal = (msgId, encodedText, encodedName, isMe) => { activeMsgId = msgId; activeMsgText = decodeURIComponent(encodedText); activeMsgSender = decodeURIComponent(encodedName); const list = document.getElementById("msgOptionsList"); list.innerHTML = `<button class="primary-btn" style="background: var(--primary);" onclick="triggerReply()"><i class="fa-solid fa-reply"></i> Reply</button>`; if (isMe) { list.innerHTML += `<button class="primary-btn" style="background: #3b82f6;" onclick="triggerEdit()"><i class="fa-solid fa-pen"></i> Edit Message</button><button class="primary-btn" style="background: #ef4444;" onclick="triggerDeleteEveryone()"><i class="fa-solid fa-trash-can"></i> Delete for Everyone</button>`; } list.innerHTML += `<button class="primary-btn" style="background: #f59e0b;" onclick="triggerDeleteMe()"><i class="fa-solid fa-eraser"></i> Delete for Me</button>`; document.getElementById("msgOptionsModal").style.display = "flex"; };
+// MSG OPTIONS MODAL & ACTIONS
+window.openMessageModal = (msgId, encodedText, encodedName, isMe, context = 'chat') => { 
+    activeMsgId = msgId; 
+    activeMsgText = decodeURIComponent(encodedText); 
+    activeMsgSender = decodeURIComponent(encodedName); 
+    activeMsgContext = context;
+    
+    const list = document.getElementById("msgOptionsList"); 
+    list.innerHTML = `<button class="primary-btn" style="background: var(--primary);" onclick="triggerReply()"><i class="fa-solid fa-reply"></i> Reply</button>`; 
+    if (isMe) { 
+        list.innerHTML += `<button class="primary-btn" style="background: #3b82f6;" onclick="triggerEdit()"><i class="fa-solid fa-pen"></i> Edit Message</button><button class="primary-btn" style="background: #ef4444;" onclick="triggerDeleteEveryone()"><i class="fa-solid fa-trash-can"></i> Delete for Everyone</button>`; 
+    } 
+    list.innerHTML += `<button class="primary-btn" style="background: #f59e0b;" onclick="triggerDeleteMe()"><i class="fa-solid fa-eraser"></i> Delete for Me</button>`; 
+    document.getElementById("msgOptionsModal").style.display = "flex"; 
+};
+
 window.closeMsgOptions = () => { document.getElementById("msgOptionsModal").style.display = "none"; };
-window.triggerReply = () => { closeMsgOptions(); replyingToMsg = { id: activeMsgId, text: activeMsgText, name: activeMsgSender }; document.getElementById("replyPreviewName").innerText = `Replying to ${activeMsgSender}`; document.getElementById("replyPreviewText").innerText = activeMsgText; document.getElementById("replyPreviewContainer").style.display = "flex"; msgInput.focus(); };
-window.triggerEdit = async () => { closeMsgOptions(); const newText = prompt("Edit message:", activeMsgText); if (newText && newText.trim() !== "" && newText !== activeMsgText) { await updateDoc(doc(db, "chats", currentChatId, "messages", activeMsgId), { text: encryptMessage(newText.trim(), currentChatId), isEdited: true }); } };
-window.triggerDeleteEveryone = async () => { closeMsgOptions(); if (confirm("Delete this message for everyone?")) { await updateDoc(doc(db, "chats", currentChatId, "messages", activeMsgId), { isDeleted: true, text: "" }); } };
-window.triggerDeleteMe = async () => { closeMsgOptions(); if (confirm("Delete this message for yourself?")) { await updateDoc(doc(db, "chats", currentChatId, "messages", activeMsgId), { deletedFor: arrayUnion(auth.currentUser.uid) }); } };
-document.getElementById("cancelReplyBtn").addEventListener("click", () => { replyingToMsg = null; document.getElementById("replyPreviewContainer").style.display = "none"; });
+
+window.triggerReply = () => { 
+    closeMsgOptions(); 
+    replyingToMsg = { id: activeMsgId, text: activeMsgText, name: activeMsgSender, context: activeMsgContext }; 
+    document.getElementById("replyPreviewName").innerText = `Replying to ${activeMsgSender}`; 
+    document.getElementById("replyPreviewText").innerText = activeMsgText; 
+    
+    const previewContainer = document.getElementById("replyPreviewContainer");
+    previewContainer.style.display = "flex"; 
+    
+    if (activeMsgContext === 'global') {
+        document.getElementById("exploreLounge").insertBefore(previewContainer, document.querySelector("#exploreLounge .chat-input-wrapper"));
+        globalMsgInput.focus();
+    } else {
+        document.getElementById("activeChatState").insertBefore(previewContainer, document.querySelector("#activeChatState .chat-input-wrapper"));
+        msgInput.focus();
+    }
+};
+
+window.triggerEdit = async () => { 
+    closeMsgOptions(); 
+    const newText = prompt("Edit message:", activeMsgText); 
+    if (newText && newText.trim() !== "" && newText !== activeMsgText) { 
+        if (activeMsgContext === 'global') {
+            await updateDoc(doc(db, "global_lounge", activeMsgId), { text: newText.trim(), isEdited: true });
+        } else {
+            await updateDoc(doc(db, "chats", currentChatId, "messages", activeMsgId), { text: encryptMessage(newText.trim(), currentChatId), isEdited: true }); 
+        }
+    } 
+};
+
+window.triggerDeleteEveryone = async () => { 
+    closeMsgOptions(); 
+    if (confirm("Delete this message for everyone?")) { 
+        if (activeMsgContext === 'global') {
+            await updateDoc(doc(db, "global_lounge", activeMsgId), { isDeleted: true, text: "" });
+        } else {
+            await updateDoc(doc(db, "chats", currentChatId, "messages", activeMsgId), { isDeleted: true, text: "" }); 
+        }
+    } 
+};
+
+window.triggerDeleteMe = async () => { 
+    closeMsgOptions(); 
+    if (confirm("Delete this message for yourself?")) { 
+        if (activeMsgContext === 'global') {
+            await updateDoc(doc(db, "global_lounge", activeMsgId), { deletedFor: arrayUnion(auth.currentUser.uid) });
+        } else {
+            await updateDoc(doc(db, "chats", currentChatId, "messages", activeMsgId), { deletedFor: arrayUnion(auth.currentUser.uid) }); 
+        }
+    } 
+};
+
+document.getElementById("cancelReplyBtn").addEventListener("click", () => { 
+    replyingToMsg = null; 
+    const previewContainer = document.getElementById("replyPreviewContainer");
+    previewContainer.style.display = "none"; 
+    document.getElementById("activeChatState").insertBefore(previewContainer, document.querySelector("#activeChatState .chat-input-wrapper")); 
+});
+
 
 function listenToTyping() { if (chatMetaUnsubscribe) chatMetaUnsubscribe(); if (isCurrentChatGroup) return; chatMetaUnsubscribe = onSnapshot(doc(db, "chats", currentChatId), (docSnap) => { if (docSnap.exists() && docSnap.data()[`typing_${targetUserUid}`]) { document.getElementById("chatTargetStatus").innerText = "typing..."; } else { const targetUser = allUsers.find(u => u.id === targetUserUid); if (targetUser && targetUser.isOnline) { document.getElementById("chatTargetStatus").innerText = "Online"; } else if (targetUser) { document.getElementById("chatTargetStatus").innerText = `Last seen: ${timeAgo(targetUser.lastSeen)}`; } } }); }
 msgInput.addEventListener("input", async () => { if(!currentChatId || isCurrentChatGroup) return; await setDoc(doc(db, "chats", currentChatId), { [`typing_${auth.currentUser.uid}`]: true }, { merge: true }); clearTimeout(typingTimeout); typingTimeout = setTimeout(async () => { await setDoc(doc(db, "chats", currentChatId), { [`typing_${auth.currentUser.uid}`]: false }, { merge: true }); }, 1500); });
@@ -318,17 +450,19 @@ async function sendMessage() {
   const text = msgInput.value.trim(); if (!text) return;
   const timerValue = modalMsgTimerSelect ? parseInt(modalMsgTimerSelect.value) : 60000;
   msgInput.value = ""; msgInput.focus(); if (!isCurrentChatGroup && currentChatStatus !== 'accepted') return;
+  
   const encryptedText = encryptMessage(text, currentChatId);
   if (!isCurrentChatGroup) { await setDoc(doc(db, "chats", currentChatId), { [`typing_${auth.currentUser.uid}`]: false }, { merge: true }); try { await setDoc(doc(db, "users", auth.currentUser.uid), { chatMeta: { [targetUserUid]: { time: Date.now(), text: `You: ${text}`, unread: false } } }, { merge: true }); await setDoc(doc(db, "users", targetUserUid), { chatMeta: { [auth.currentUser.uid]: { time: Date.now(), text: encryptedText, unread: true } } }, { merge: true }); } catch(err) {} }
+  
   const payload = { text: encryptedText, sender: auth.currentUser.uid, senderName: document.getElementById("myName").innerText, time: Date.now(), isEdited: false, isDeleted: false, isGameChallenge: false };
-  if (timerValue > 0) payload.timerDuration = timerValue;
-  if (replyingToMsg) { payload.replyToId = replyingToMsg.id; payload.replyToText = encryptMessage(replyingToMsg.text, currentChatId); payload.replyToName = replyingToMsg.name; document.getElementById("cancelReplyBtn").click(); }
-  try { await addDoc(collection(db, "chats", currentChatId, "messages"), payload); } catch (e) { showToast("Error", "Message failed to send.", "https://cdn-icons-png.flaticon.com/512/564/564619.png"); }
+  if (timerValue > 0) payload.timerDuration = timerValue; 
+  
+  if (replyingToMsg && replyingToMsg.context === 'chat') { payload.replyToId = replyingToMsg.id; payload.replyToText = encryptMessage(replyingToMsg.text, currentChatId); payload.replyToName = replyingToMsg.name; document.getElementById("cancelReplyBtn").click(); }
+  try { await addDoc(collection(db, "chats", currentChatId, "messages"), payload); } catch (e) { showToast("Error", "Message failed to send."); }
 }
 sendBtn.addEventListener("click", sendMessage); msgInput.addEventListener("keypress", (e) => { if (e.key === "Enter") sendMessage(); });
 searchInput.addEventListener("input", (e) => { const term = e.target.value.toLowerCase(); document.querySelectorAll(".user-item").forEach(item => { item.style.display = item.innerText.toLowerCase().includes(term) ? "flex" : "none"; }); });
 
-// CLOUDINARY
 const fileInput = document.createElement("input"); fileInput.type = "file"; fileInput.accept = "image/*"; fileInput.style.display = "none"; document.body.appendChild(fileInput);
 document.querySelector('.fa-paperclip').parentElement.addEventListener("click", () => fileInput.click());
 fileInput.addEventListener("change", async (e) => {
@@ -336,18 +470,16 @@ fileInput.addEventListener("change", async (e) => {
   try { const formData = new FormData(); formData.append("file", file); formData.append("upload_preset", UPLOAD_PRESET); const response = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`, { method: "POST", body: formData }); const data = await response.json(); const timerValue = modalMsgTimerSelect ? parseInt(modalMsgTimerSelect.value) : 60000; const payload = { text: "", imageUrl: data.secure_url, imagePublicId: data.public_id, sender: auth.currentUser.uid, senderName: document.getElementById("myName").innerText, time: Date.now(), isEdited: false, isDeleted: false }; if (timerValue > 0) payload.timerDuration = timerValue; await addDoc(collection(db, "chats", currentChatId, "messages"), payload); } catch (err) { alert("Upload failed: " + err.message); } finally { sendBtn.innerHTML = originalHtml; sendBtn.disabled = false; fileInput.value = ""; }
 });
 
-// PROFILE MODALS & GROUP WIPE (Minified for space)
 const profileModal = document.getElementById("profileModal"); const closeProfileBtn = document.getElementById("closeProfileBtn"); const profileAvatar = document.getElementById("profileAvatar"); const profileName = document.getElementById("profileName"); const profileHandle = document.getElementById("profileHandle"); const profileBioDisplay = document.getElementById("profileBioDisplay"); const profileBioEdit = document.getElementById("profileBioEdit"); const profileJoinDate = document.getElementById("profileJoinDate"); const editProfileBtn = document.getElementById("editProfileBtn"); const saveProfileBtn = document.getElementById("saveProfileBtn"); const profileAvatarInput = document.getElementById("profileAvatarInput"); const editAvatarBtn = document.getElementById("editAvatarBtn");
 window.openProfile = async (uid) => { profileModal.style.display = "flex"; editProfileBtn.style.display = "none"; saveProfileBtn.style.display = "none"; editAvatarBtn.style.display = "none"; profileBioEdit.style.display = "none"; profileBioDisplay.style.display = "block"; profileBioDisplay.innerText = "Loading..."; const isCurrentUser = auth.currentUser && uid === auth.currentUser.uid; if (isCurrentUser) { editProfileBtn.style.display = "block"; editAvatarBtn.style.display = "block"; } try { const docSnap = await getDoc(doc(db, "users", uid)); if (docSnap.exists()) { const data = docSnap.data(); const dName = data.fullName || data.username; profileName.innerText = dName; profileHandle.innerText = `@${data.username}`; profileAvatar.src = generateAvatar(data, dName); const bioText = data.bio || "Hey there! I am using Chit-Chat."; profileBioDisplay.innerText = bioText; profileBioEdit.value = bioText; profileJoinDate.innerText = `Joined: ${new Date(data.createdAt || Date.now()).toLocaleDateString()}`; } } catch (e) {} };
 closeProfileBtn.addEventListener("click", () => profileModal.style.display = "none"); profileModal.addEventListener("click", (e) => { if(e.target === profileModal) profileModal.style.display = "none"; });
 editProfileBtn.addEventListener("click", () => { profileBioDisplay.style.display = "none"; profileBioEdit.style.display = "block"; editProfileBtn.style.display = "none"; saveProfileBtn.style.display = "block"; profileBioEdit.focus(); });
-saveProfileBtn.addEventListener("click", async () => { const newBio = profileBioEdit.value.trim(); saveProfileBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Saving...'; try { await updateDoc(doc(db, "users", auth.currentUser.uid), { bio: newBio }); profileBioDisplay.innerText = newBio || "Hey there! I am using Chit-Chat."; profileBioEdit.style.display = "none"; profileBioDisplay.style.display = "block"; saveProfileBtn.style.display = "none"; editProfileBtn.style.display = "block"; showToast("Profile Updated", "Your bio has been saved.", "https://ui-avatars.com/api/?name=Success&background=10b981&color=fff"); } catch(e) {} finally { saveProfileBtn.innerHTML = 'Save Changes'; } });
-editAvatarBtn.addEventListener("click", () => profileAvatarInput.click()); profileAvatarInput.addEventListener("change", async (e) => { const file = e.target.files[0]; if (!file) return; editAvatarBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin" style="font-size:12px;"></i>'; editAvatarBtn.disabled = true; try { const formData = new FormData(); formData.append("file", file); formData.append("upload_preset", UPLOAD_PRESET); const response = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`, { method: "POST", body: formData }); const data = await response.json(); await updateDoc(doc(db, "users", auth.currentUser.uid), { avatarUrl: data.secure_url }); profileAvatar.src = data.secure_url; document.getElementById("myAvatar").src = data.secure_url; showToast("Avatar Updated", "Your new profile picture looks great!", data.secure_url); } catch(err) { alert("Upload failed: " + err.message); } finally { editAvatarBtn.innerHTML = '<i class="fa-solid fa-camera"></i>'; editAvatarBtn.disabled = false; profileAvatarInput.value = ""; } });
+saveProfileBtn.addEventListener("click", async () => { const newBio = profileBioEdit.value.trim(); saveProfileBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Saving...'; try { await updateDoc(doc(db, "users", auth.currentUser.uid), { bio: newBio }); profileBioDisplay.innerText = newBio || "Hey there! I am using Chit-Chat."; profileBioEdit.style.display = "none"; profileBioDisplay.style.display = "block"; saveProfileBtn.style.display = "none"; editProfileBtn.style.display = "block"; showToast("Profile Updated", "Your bio has been saved."); } catch(e) {} finally { saveProfileBtn.innerHTML = 'Save Changes'; } });
+editAvatarBtn.addEventListener("click", () => profileAvatarInput.click()); profileAvatarInput.addEventListener("change", async (e) => { const file = e.target.files[0]; if (!file) return; editAvatarBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin" style="font-size:12px;"></i>'; editAvatarBtn.disabled = true; try { const formData = new FormData(); formData.append("file", file); formData.append("upload_preset", UPLOAD_PRESET); const response = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`, { method: "POST", body: formData }); const data = await response.json(); await updateDoc(doc(db, "users", auth.currentUser.uid), { avatarUrl: data.secure_url }); profileAvatar.src = data.secure_url; document.getElementById("myAvatar").src = data.secure_url; showToast("Avatar Updated", "Your new profile picture looks great!", data.secure_url); } catch(err) {} finally { editAvatarBtn.innerHTML = '<i class="fa-solid fa-camera"></i>'; editAvatarBtn.disabled = false; profileAvatarInput.value = ""; } });
 document.querySelector(".current-user").addEventListener("click", () => { if(auth.currentUser) openProfile(auth.currentUser.uid); }); document.querySelector(".chat-target-info").addEventListener("click", () => { if(targetUserUid && !isCurrentChatGroup) openProfile(targetUserUid); });
-const appInfoBtn = document.getElementById("appInfoBtn"); const infoModal = document.getElementById("infoModal"); const closeModalBtn = document.getElementById("closeModalBtn"); if (appInfoBtn && infoModal && closeModalBtn) { appInfoBtn.addEventListener("click", () => { infoModal.style.display = "flex"; }); closeModalBtn.addEventListener("click", () => { infoModal.style.display = "none"; }); infoModal.addEventListener("click", (e) => { if (e.target === infoModal) infoModal.style.display = "none"; }); }
 
 document.querySelector(".chat-header").addEventListener("click", (e) => {
-    if (e.target.closest('.mobile-back-btn') || e.target.closest('#launchGameMenuBtn') || e.target.closest('#chatSettingsBtn')) return;
+    if (e.target.closest('.mobile-back-btn') || e.target.closest('#launchGameMenuBtn') || e.target.closest('#chatSettingsBtn') || e.target.closest('#chatDoodleBtn')) return;
     if (isCurrentChatGroup && currentChatId) {
         const group = allGroups.find(g => g.id === currentChatId); if(group) {
             document.getElementById("groupSettingsName").innerText = group.name; document.getElementById("groupMemberCount").innerText = group.members.length; document.getElementById("groupSettingsAvatar").src = group.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(group.name)}&background=8b5cf6&color=fff`;
@@ -360,19 +492,41 @@ document.querySelector(".chat-header").addEventListener("click", (e) => {
 });
 window.triggerAddGroupMember = async () => { const group = allGroups.find(g => g.id === currentChatId); if(!group) return; let promptText = "Type the number of the user to add:\n\n"; const selectableUsers = allUsers.filter(u => u.id !== auth.currentUser.uid && !group.members.includes(u.id)); if(selectableUsers.length === 0) { alert("All users are already in the group!"); return; } selectableUsers.forEach((u, index) => { promptText += `${index + 1}. ${u.fullName || u.username}\n`; }); const selection = prompt(promptText); if(selection) { const idx = parseInt(selection.trim()) - 1; if(selectableUsers[idx]) { await updateDoc(doc(db, "groups", currentChatId), { members: arrayUnion(selectableUsers[idx].id) }); showToast("Member Added", `${selectableUsers[idx].fullName || selectableUsers[idx].username} was added.`); document.getElementById("groupSettingsModal").style.display = "none"; } } };
 window.triggerGroupAvatarUpload = () => { const input = document.createElement("input"); input.type = "file"; input.accept = "image/*"; input.onchange = async (e) => { const file = e.target.files[0]; if(!file) return; try { showToast("Uploading...", "Updating group icon"); const formData = new FormData(); formData.append("file", file); formData.append("upload_preset", UPLOAD_PRESET); const response = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`, { method: "POST", body: formData }); const data = await response.json(); await updateDoc(doc(db, "groups", currentChatId), { avatarUrl: data.secure_url }); document.getElementById("groupSettingsAvatar").src = data.secure_url; document.getElementById("chatTargetAvatar").src = data.secure_url; showToast("Success", "Group icon updated!"); } catch(err) { alert("Failed to update group image."); } }; input.click(); };
-
-
-// --- 10. REAL-TIME MULTIPLAYER GAMES LOGIC ---
-const launchGameMenuBtn = document.getElementById("launchGameMenuBtn"); const gameSelectionModal = document.getElementById("gameSelectionModal"); const closeGameSelectBtn = document.getElementById("closeGameSelectBtn"); const activeGameArea = document.getElementById("activeGameArea"); const closeGameBtn = document.getElementById("closeGameBtn"); const gameUIContainer = document.getElementById("gameUIContainer");
-launchGameMenuBtn.addEventListener("click", () => { gameSelectionModal.style.display = "flex"; }); closeGameSelectBtn.addEventListener("click", () => { gameSelectionModal.style.display = "none"; });
+// ==========================================
+// 10. REAL-TIME GAMES & DOODLE REQUEST
+// ==========================================
+launchGameMenuBtn.addEventListener("click", () => { gameSelectionModal.style.display = "flex"; }); 
+closeGameSelectBtn.addEventListener("click", () => { gameSelectionModal.style.display = "none"; });
 
 document.querySelectorAll(".game-select-btn").forEach(btn => {
     btn.addEventListener("click", async () => {
-        const gameType = btn.getAttribute("data-game"); const gameId = `game_${Date.now()}_${auth.currentUser.uid}`; gameSelectionModal.style.display = "none";
+        const gameType = btn.getAttribute("data-game");
+        gameSelectionModal.style.display = "none";
+
+        const timerValue = modalMsgTimerSelect ? parseInt(modalMsgTimerSelect.value) : 60000;
+
+        if (gameType === 'doodle') {
+            if (isCurrentChatGroup) { alert("Doodle is for 1v1 only!"); return; }
+            await updateDoc(doc(db, "chats", currentChatId), { doodleReq: auth.currentUser.uid });
+            
+            const payload = { sender: auth.currentUser.uid, time: Date.now(), isDoodleRequest: true, isDeleted: false };
+            if (timerValue > 0) payload.timerDuration = timerValue; // Disappearing Setup
+            
+            await addDoc(collection(db, "chats", currentChatId, "messages"), payload);
+            await setDoc(doc(db, "users", targetUserUid), { chatMeta: { [auth.currentUser.uid]: { time: Date.now(), text: "🎨 DOODLE REQUEST", unread: true } } }, { merge: true });
+            showToast("Request Sent", "Doodle request sent to friend.");
+            return;
+        }
+
+        const gameId = `game_${Date.now()}_${auth.currentUser.uid}`;
         let initialData = { type: gameType, status: "waiting", player1: auth.currentUser.uid, player2: targetUserUid, createdAt: Date.now(), turn: auth.currentUser.uid, winner: null, p1Score: null, p2Score: null, board: ["","","","","","","","",""], p1Choice: null, p2Choice: null };
         if(gameType === 'ludo') { initialData.ludoTokens = { p1: [-1, -1, -1, -1], p2: [-1, -1, -1, -1] }; initialData.diceValue = null; }
         await setDoc(doc(db, "games", gameId), initialData);
-        await addDoc(collection(db, "chats", currentChatId, "messages"), { sender: auth.currentUser.uid, time: Date.now(), isGameChallenge: true, gameType: gameType, gameId: gameId, isDeleted: false });
+        
+        const gPayload = { sender: auth.currentUser.uid, time: Date.now(), isGameChallenge: true, gameType: gameType, gameId: gameId, isDeleted: false };
+        if (timerValue > 0) gPayload.timerDuration = timerValue; // Disappearing Setup
+        
+        await addDoc(collection(db, "chats", currentChatId, "messages"), gPayload);
         await setDoc(doc(db, "users", targetUserUid), { chatMeta: { [auth.currentUser.uid]: { time: Date.now(), text: "🎮 GAME CHALLENGE", unread: true } } }, { merge: true });
         joinGameRoom(gameId, gameType);
     });
@@ -445,7 +599,7 @@ window.resetRPS = async (gameId) => { await updateDoc(doc(db, "games", gameId), 
 
 
 // =========================================================================
-// THE EXPLORE HUB ENGINE (Lounge, Leaderboard, Doodle, Memes)
+// THE EXPLORE HUB ENGINE (Lounge, Leaderboard, Memes)
 // =========================================================================
 
 const exploreBtn = document.getElementById("exploreBtn");
@@ -455,49 +609,39 @@ const exploreTabs = document.querySelectorAll(".explore-tab");
 const exploreSections = document.querySelectorAll(".explore-section");
 
 let globalChatUnsubscribe = null;
-let doodleUnsubscribe = null;
 
-// Open Explore Hub
 exploreBtn.addEventListener("click", () => {
     exploreArea.style.display = "flex";
     if(window.innerWidth <= 992) sidebar.classList.add("hidden");
-    
-    // Default load Lounge
-    document.querySelector('.explore-tab[data-target="exploreLounge"]').click();
+    document.querySelector('.explore-tab[data-target="exploreMemes"]').click();
 });
 
-// Close Explore Hub
 closeExploreBtn.addEventListener("click", () => {
     exploreArea.style.display = "none";
     if(globalChatUnsubscribe) globalChatUnsubscribe();
-    if(doodleUnsubscribe) doodleUnsubscribe();
     if(window.innerWidth <= 992) sidebar.classList.remove("hidden");
 });
 
-// Tab Switcher
 exploreTabs.forEach(tab => {
     tab.addEventListener("click", () => {
         exploreTabs.forEach(t => t.classList.remove("active"));
         exploreSections.forEach(s => s.classList.remove("active"));
         tab.classList.add("active");
-        
         const target = tab.getAttribute("data-target");
         document.getElementById(target).classList.add("active");
 
         if (target === "exploreLounge") initGlobalLounge();
         if (target === "exploreLeaderboard") initLeaderboard();
-        if (target === "exploreDoodle") initDoodleBoard();
         if (target === "exploreMemes") initMemesFeed();
     });
 });
 
-// 1. GLOBAL LOUNGE LOGIC
 const globalChatBox = document.getElementById("globalChatBox");
 const globalMsgInput = document.getElementById("globalMsgInput");
 const sendGlobalBtn = document.getElementById("sendGlobalBtn");
 
 function initGlobalLounge() {
-    if (globalChatUnsubscribe) return; // Already listening
+    if (globalChatUnsubscribe) return; 
     globalChatBox.innerHTML = '<div style="text-align:center; padding: 20px;"><i class="fa-solid fa-spinner fa-spin"></i> Loading Lounge...</div>';
     
     const q = query(collection(db, "global_lounge"), orderBy("time", "asc"), limit(100));
@@ -505,204 +649,123 @@ function initGlobalLounge() {
         globalChatBox.innerHTML = "";
         snapshot.forEach(docSnap => {
             const msg = docSnap.data();
+            const msgId = docSnap.id;
             const isMe = msg.sender === auth.currentUser.uid;
+            
+            if (msg.deletedFor && msg.deletedFor.includes(auth.currentUser.uid)) return;
+
             const timeStr = new Date(msg.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
             
             const div = document.createElement("div");
             div.className = `message-wrapper ${isMe ? 'sent' : 'received'}`;
-            
             const avatarUrl = msg.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(msg.senderName)}&background=10b981&color=fff`;
-            
             let nameTag = !isMe ? `<div style="font-size:11px; color: #10b981; font-weight:600; margin-bottom:4px;">${msg.senderName}</div>` : "";
             
-            div.innerHTML = `
-                ${!isMe ? `<img src="${avatarUrl}" class="msg-avatar">` : ''}
-                <div style="display:flex; flex-direction:column; max-width: 100%;">
-                    <div class="msg-bubble" style="${isMe ? 'background: #10b981;' : ''}">
-                        ${nameTag}
-                        <span style="word-wrap: break-word;">${msg.text}</span>
-                    </div>
-                    <div class="msg-time">${timeStr}</div>
-                </div>
-                ${isMe ? `<img src="${document.getElementById('myAvatar').src}" class="msg-avatar">` : ''}
-            `;
+            let contentHtml = "";
+            if (msg.isDeleted) {
+                contentHtml = `<div class="msg-bubble msg-deleted"><i class="fa-solid fa-ban"></i> This message was deleted</div>`;
+            } else {
+                let replyHtml = msg.replyToText ? `<div class="replied-msg-box" onclick="event.stopPropagation();"><b>${msg.replyToName}</b><div class="preview-text">${msg.replyToText}</div></div>` : "";
+                const encodedText = encodeURIComponent(msg.text || "");
+                const encodedName = encodeURIComponent(isMe ? 'You' : msg.senderName);
+                contentHtml = `<div class="msg-bubble" style="${isMe ? 'background: #10b981;' : ''}" onclick="openMessageModal('${msgId}', '${encodedText}', '${encodedName}', ${isMe}, 'global')">
+                    ${nameTag}
+                    ${replyHtml}
+                    <span style="word-wrap: break-word; white-space: pre-wrap; display: block; max-width: 100%;">${msg.text}</span>
+                    ${msg.isEdited ? '<span style="font-size:10px; opacity:0.5; display:block; margin-top:5px;">(edited)</span>' : ''}
+                </div>`;
+            }
+            
+            div.innerHTML = `${!isMe ? `<img src="${avatarUrl}" class="msg-avatar">` : ''}<div style="display:flex; flex-direction:column; max-width: 100%;">${contentHtml}<div class="msg-time">${timeStr}</div></div>${isMe ? `<img src="${document.getElementById('myAvatar').src}" class="msg-avatar">` : ''}`;
             globalChatBox.appendChild(div);
         });
         globalChatBox.scrollTop = globalChatBox.scrollHeight;
     });
 }
 
-async function sendGlobalMessage() {
-    const text = globalMsgInput.value.trim();
-    if(!text) return;
-    globalMsgInput.value = "";
-    try {
-        await addDoc(collection(db, "global_lounge"), {
-            text: text, sender: auth.currentUser.uid,
-            senderName: document.getElementById("myName").innerText,
-            avatarUrl: document.getElementById("myAvatar").src,
-            time: Date.now()
-        });
-    } catch(e) { showToast("Error", "Message failed to send."); }
+async function sendGlobalMessage() { 
+    const text = globalMsgInput.value.trim(); 
+    if(!text) return; 
+    globalMsgInput.value = ""; 
+    
+    const payload = { 
+        text: text, 
+        sender: auth.currentUser.uid, 
+        senderName: document.getElementById("myName").innerText, 
+        avatarUrl: document.getElementById("myAvatar").src, 
+        time: Date.now(),
+        isEdited: false,
+        isDeleted: false
+    };
+
+    if (replyingToMsg && replyingToMsg.context === 'global') { 
+        payload.replyToId = replyingToMsg.id; 
+        payload.replyToText = replyingToMsg.text; 
+        payload.replyToName = replyingToMsg.name; 
+        document.getElementById("cancelReplyBtn").click(); 
+    }
+
+    try { 
+        await addDoc(collection(db, "global_lounge"), payload); 
+    } catch(e) { 
+        showToast("Error", "Message failed to send."); 
+    } 
 }
-sendGlobalBtn.addEventListener("click", sendGlobalMessage);
-globalMsgInput.addEventListener("keypress", (e) => { if(e.key === "Enter") sendGlobalMessage(); });
 
+sendGlobalBtn.addEventListener("click", sendGlobalMessage); globalMsgInput.addEventListener("keypress", (e) => { if(e.key === "Enter") sendGlobalMessage(); });
 
-// 2. LEADERBOARD LOGIC
 const lbGameSelect = document.getElementById("lbGameSelect");
 const leaderboardList = document.getElementById("leaderboardList");
 
-async function initLeaderboard() {
-    lbGameSelect.addEventListener("change", fetchLeaderboard);
-    fetchLeaderboard();
-}
-
+async function initLeaderboard() { lbGameSelect.addEventListener("change", fetchLeaderboard); fetchLeaderboard(); }
 async function fetchLeaderboard() {
     leaderboardList.innerHTML = '<div style="text-align:center; padding: 20px;"><i class="fa-solid fa-spinner fa-spin"></i> Fetching scores...</div>';
     const game = lbGameSelect.value;
     try {
         const usersSnap = await getDocs(collection(db, "users"));
         let players = [];
-        usersSnap.forEach(doc => {
-            const data = doc.data();
-            if(data.highScores && data.highScores[game]) {
-                players.push({ name: data.fullName || data.username, score: data.highScores[game], uid: doc.id });
-            }
-        });
-        
-        // Sort highest to lowest
-        players.sort((a, b) => b.score - a.score);
-        players = players.slice(0, 50); // Top 50
-        
+        usersSnap.forEach(doc => { const data = doc.data(); if(data.highScores && data.highScores[game]) { players.push({ name: data.fullName || data.username, score: data.highScores[game], uid: doc.id }); } });
+        players.sort((a, b) => b.score - a.score); players = players.slice(0, 50); 
         leaderboardList.innerHTML = "";
         if(players.length === 0) { leaderboardList.innerHTML = "<p style='text-align:center; color:var(--text-muted);'>No scores yet. Be the first to play!</p>"; return; }
-        
         players.forEach((p, index) => {
             let rankClass = index === 0 ? 'top-1' : (index === 1 ? 'top-2' : (index === 2 ? 'top-3' : ''));
             const isMe = p.uid === auth.currentUser.uid ? " (You)" : "";
-            leaderboardList.innerHTML += `
-                <div class="lb-rank-card ${rankClass}">
-                    <div class="lb-rank">#${index + 1}</div>
-                    <div style="font-weight: 500;">${p.name} <span style="font-size:12px; color:var(--primary);">${isMe}</span></div>
-                    <div class="lb-score">${p.score}</div>
-                </div>
-            `;
+            leaderboardList.innerHTML += `<div class="lb-rank-card ${rankClass}"><div class="lb-rank">#${index + 1}</div><div style="font-weight: 500;">${p.name} <span style="font-size:12px; color:var(--primary);">${isMe}</span></div><div class="lb-score">${p.score}</div></div>`;
         });
     } catch(e) { leaderboardList.innerHTML = "<p>Error loading leaderboard.</p>"; }
 }
+let currentMemeSubreddit = 'wholesomememes'; // Default safe memes
 
-// 3. SHARED DOODLE BOARD LOGIC
-const doodleCanvas = document.getElementById("doodleCanvas");
-const doodleCtx = doodleCanvas.getContext("2d");
-const doodleColor = document.getElementById("doodleColor");
-const clearDoodleBtn = document.getElementById("clearDoodleBtn");
-let isDrawing = false;
-let currentStroke = [];
+const memeSafeBtn = document.getElementById("memeSafeBtn");
+const memeDankBtn = document.getElementById("memeDankBtn");
 
-function getCoordinates(e) {
-    const rect = doodleCanvas.getBoundingClientRect();
-    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-    return { x: clientX - rect.left, y: clientY - rect.top };
-}
+if(memeSafeBtn && memeDankBtn) {
+    memeSafeBtn.addEventListener("click", () => {
+        memeSafeBtn.classList.add("active");
+        memeDankBtn.classList.remove("active");
+        currentMemeSubreddit = 'wholesomememes';
+        memesWrapper.innerHTML = '<div style="color:var(--primary); padding: 20px;"><i class="fa-solid fa-spinner fa-spin fa-2x"></i></div>';
+        loadMoreMemes();
+    });
 
-function drawLine(x0, y0, x1, y1, color) {
-    doodleCtx.beginPath();
-    doodleCtx.moveTo(x0, y0);
-    doodleCtx.lineTo(x1, y1);
-    doodleCtx.strokeStyle = color;
-    doodleCtx.lineWidth = 3;
-    doodleCtx.lineCap = 'round';
-    doodleCtx.stroke();
-    doodleCtx.closePath();
-}
-
-function initDoodleBoard() {
-    doodleCtx.fillStyle = "#fff";
-    doodleCtx.fillRect(0, 0, doodleCanvas.width, doodleCanvas.height);
-    
-    // Listen to Firebase for strokes
-    if(doodleUnsubscribe) return;
-    doodleUnsubscribe = onSnapshot(collection(db, "global_doodle"), (snapshot) => {
-        snapshot.docChanges().forEach((change) => {
-            if (change.type === "added") {
-                const data = change.doc.data();
-                if(data.type === 'clear') {
-                    doodleCtx.fillStyle = "#fff"; doodleCtx.fillRect(0, 0, doodleCanvas.width, doodleCanvas.height);
-                } else if(data.stroke && data.stroke.length > 0) {
-                    for(let i=0; i<data.stroke.length-1; i++) {
-                        drawLine(data.stroke[i].x, data.stroke[i].y, data.stroke[i+1].x, data.stroke[i+1].y, data.color);
-                    }
-                }
-            }
-        });
+    memeDankBtn.addEventListener("click", () => {
+        memeDankBtn.classList.add("active");
+        memeSafeBtn.classList.remove("active");
+        currentMemeSubreddit = 'dankmemes'; // 18+ Memes
+        memesWrapper.innerHTML = '<div style="color:var(--primary); padding: 20px;"><i class="fa-solid fa-spinner fa-spin fa-2x"></i></div>';
+        loadMoreMemes();
     });
 }
-
-const startDrawing = (e) => {
-    isDrawing = true;
-    currentStroke = [];
-    const pos = getCoordinates(e);
-    currentStroke.push(pos);
-};
-
-const draw = (e) => {
-    if (!isDrawing) return;
-    e.preventDefault();
-    const pos = getCoordinates(e);
-    const lastPos = currentStroke[currentStroke.length - 1];
-    drawLine(lastPos.x, lastPos.y, pos.x, pos.y, doodleColor.value);
-    currentStroke.push(pos);
-};
-
-const stopDrawing = async () => {
-    if (!isDrawing) return;
-    isDrawing = false;
-    if(currentStroke.length > 1) {
-        // Save stroke to Firebase
-        try {
-            await addDoc(collection(db, "global_doodle"), {
-                stroke: currentStroke, color: doodleColor.value,
-                time: Date.now()
-            });
-        } catch(e) { console.error("Error saving stroke"); }
-    }
-};
-
-doodleCanvas.addEventListener("mousedown", startDrawing);
-doodleCanvas.addEventListener("mousemove", draw);
-doodleCanvas.addEventListener("mouseup", stopDrawing);
-doodleCanvas.addEventListener("mouseout", stopDrawing);
-doodleCanvas.addEventListener("touchstart", startDrawing, {passive: false});
-doodleCanvas.addEventListener("touchmove", draw, {passive: false});
-doodleCanvas.addEventListener("touchend", stopDrawing);
-
-clearDoodleBtn.addEventListener("click", async () => {
-    if(confirm("Clear the board for everyone?")) {
-        // Clear all previous documents to save DB space
-        const snaps = await getDocs(collection(db, "global_doodle"));
-        const batch = writeBatch(db);
-        snaps.docs.forEach(d => batch.delete(d.ref));
-        await batch.commit();
-        
-        // Add a clear command
-        await addDoc(collection(db, "global_doodle"), { type: 'clear', time: Date.now() });
-    }
-});
-
-// 4. TECH MEMES INFINITE FEED
 const memesWrapper = document.getElementById("memesWrapper");
-
 async function initMemesFeed() {
-    if(memesWrapper.children.length > 1) return; // Already loaded
+    if(memesWrapper.children.length > 1) return; 
     memesWrapper.innerHTML = '<div style="color:var(--primary); padding: 20px;"><i class="fa-solid fa-spinner fa-spin fa-2x"></i></div>';
     loadMoreMemes();
 }
 async function loadMoreMemes() {
     try {
-        // Yahan URL mein ProgrammerHumor ki jagah 'Animemes' kar diya hai
-        const response = await fetch('https://meme-api.com/gimme/Animemes+goodanimemes+dankruto/10');
+        const response = await fetch('https://meme-api.com/gimme/Animemes/10');
         const data = await response.json();
         const spinner = memesWrapper.querySelector('.fa-spinner')?.parentElement;
         if(spinner) spinner.remove();
@@ -711,31 +774,229 @@ async function loadMoreMemes() {
             if(!meme.url) return;
             const card = document.createElement('div');
             card.className = "meme-card";
-            
-            // UI mein bhi tag change karke r/Animemes kar diya hai
-            card.innerHTML = `
-                <h4>${meme.title}</h4>
-                <img src="${meme.url}" alt="Meme" loading="lazy">
-                <div style="margin-top: 10px; font-size: 12px; color: var(--text-muted);">
-                    👍 ${meme.ups} | r/Animemes
-                </div>
-            `;
+            card.innerHTML = `<h4>${meme.title}</h4><img src="${meme.url}" alt="Meme" loading="lazy"><div style="margin-top: 10px; font-size: 12px; color: var(--text-muted);">👍 ${meme.ups} | r/Animemes</div>`;
             memesWrapper.appendChild(card);
         });
-
-        // Add a "Load More" button at the end
-        const btn = document.createElement("button");
-        btn.className = "primary-btn glow-btn";
-        btn.style.width = "auto";
-        btn.style.margin = "20px";
-        btn.innerText = "Load More Memes";
-        btn.onclick = () => {
-            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
-            loadMoreMemes();
-        };
+        const btn = document.createElement("button"); btn.className = "primary-btn glow-btn"; btn.style.width = "auto"; btn.style.margin = "20px"; btn.innerText = "Load More Memes";
+        btn.onclick = () => { btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>'; loadMoreMemes(); };
         memesWrapper.appendChild(btn);
+    } catch(e) { memesWrapper.innerHTML = `<div style="color:#ef4444;">Failed to fetch memes. Are you offline?</div>`; }
+}
 
-    } catch(e) {
-        memesWrapper.innerHTML = `<div style="color:#ef4444;">Failed to fetch memes. Are you offline?</div>`;
+
+// =========================================================================
+// 1V1 PRIVATE DOODLE ENGINE (SMART REQUEST & PERSISTENT)
+// =========================================================================
+
+const pDoodleArea = document.getElementById("privateDoodleArea");
+const pDoodleCanvas = document.getElementById("pDoodleCanvas");
+const pDoodleCtx = pDoodleCanvas.getContext("2d");
+const pDoodleColor = document.getElementById("pDoodleColor");
+let isPDrawing = false;
+let currentPStroke = [];
+
+// SMART DOODLE BUTTON LOGIC
+chatDoodleBtn.addEventListener("click", async () => {
+    if(currentChatStatus !== 'accepted') { alert("Connection request not accepted yet."); return; }
+    
+    const chatSnap = await getDoc(doc(db, "chats", currentChatId));
+    if(chatSnap.exists() && chatSnap.data().doodleActive) {
+        pDoodleArea.style.display = "flex";
+        document.getElementById("doodleBadge").style.display = "none";
+        window.dispatchEvent(new Event('resize')); 
+    } else {
+        if (isCurrentChatGroup) { alert("Doodle is for 1v1 only!"); return; }
+        
+        await updateDoc(doc(db, "chats", currentChatId), { doodleReq: auth.currentUser.uid });
+        const timerValue = modalMsgTimerSelect ? parseInt(modalMsgTimerSelect.value) : 60000;
+        const payload = { sender: auth.currentUser.uid, time: Date.now(), isDoodleRequest: true, isDeleted: false };
+        if (timerValue > 0) payload.timerDuration = timerValue;
+        
+        await addDoc(collection(db, "chats", currentChatId, "messages"), payload);
+        await setDoc(doc(db, "users", targetUserUid), { chatMeta: { [auth.currentUser.uid]: { time: Date.now(), text: "🎨 DOODLE REQUEST", unread: true } } }, { merge: true });
+        showToast("Request Sent", "Doodle request sent to friend.");
     }
+});
+
+document.getElementById("hideDoodleBtn").addEventListener("click", () => { 
+    pDoodleArea.style.display = "none"; 
+});
+
+window.acceptDoodle = async () => {
+    await updateDoc(doc(db, "chats", currentChatId), { doodleActive: true, doodleReq: null });
+    pDoodleArea.style.display = "flex";
+    window.dispatchEvent(new Event('resize')); 
+};
+
+document.getElementById("disconnectDoodleBtn").addEventListener("click", async () => {
+    if(confirm("Stop doodling and wipe the board for both of you?")) {
+        await updateDoc(doc(db, "chats", currentChatId), { doodleActive: false });
+        const snaps = await getDocs(collection(db, "chats", currentChatId, "doodle"));
+        const batch = writeBatch(db); 
+        snaps.docs.forEach(d => batch.delete(d.ref)); 
+        await batch.commit();
+        pDoodleArea.style.display = "none";
+    }
+});
+
+function getPCoordinates(e) {
+    const rect = pDoodleCanvas.getBoundingClientRect();
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    return { x: clientX - rect.left, y: clientY - rect.top };
+}
+
+function drawPLine(x0, y0, x1, y1, color) {
+    pDoodleCtx.beginPath(); pDoodleCtx.moveTo(x0, y0); pDoodleCtx.lineTo(x1, y1);
+    pDoodleCtx.strokeStyle = color; pDoodleCtx.lineWidth = 3; pDoodleCtx.lineCap = 'round';
+    pDoodleCtx.stroke(); pDoodleCtx.closePath();
+}
+
+function initPrivateDoodle() {
+    if(pDoodleUnsubscribe) { pDoodleUnsubscribe(); pDoodleUnsubscribe = null; }
+    pDoodleCtx.fillStyle = "#fff"; 
+    pDoodleCtx.fillRect(0, 0, pDoodleCanvas.width, pDoodleCanvas.height);
+    
+    pDoodleUnsubscribe = onSnapshot(collection(db, "chats", currentChatId, "doodle"), (snapshot) => {
+        snapshot.docChanges().forEach((change) => {
+            if (change.type === "added") {
+                const data = change.doc.data();
+                if(data.type === 'clear') {
+                    pDoodleCtx.fillStyle = "#fff"; 
+                    pDoodleCtx.fillRect(0, 0, pDoodleCanvas.width, pDoodleCanvas.height);
+                } else if(data.stroke && data.stroke.length > 0) {
+                    for(let i=0; i<data.stroke.length-1; i++) {
+                        drawPLine(data.stroke[i].x, data.stroke[i].y, data.stroke[i+1].x, data.stroke[i+1].y, data.color);
+                    }
+                    if(pDoodleArea.style.display === "none" && data.sender !== auth.currentUser.uid) {
+                        document.getElementById("doodleBadge").style.display = "block";
+                    }
+                }
+            }
+        });
+    });
+}
+
+const startPDrawing = (e) => { isPDrawing = true; currentPStroke = []; currentPStroke.push(getPCoordinates(e)); };
+const drawP = (e) => { 
+    if (!isPDrawing) return; e.preventDefault(); 
+    const pos = getPCoordinates(e); const lastPos = currentPStroke[currentPStroke.length - 1]; 
+    drawPLine(lastPos.x, lastPos.y, pos.x, pos.y, pDoodleColor.value); currentPStroke.push(pos); 
+};
+const stopPDrawing = async () => { 
+    if (!isPDrawing) return; isPDrawing = false; 
+    if(currentPStroke.length > 1) { 
+        try { await addDoc(collection(db, "chats", currentChatId, "doodle"), { stroke: currentPStroke, color: pDoodleColor.value, time: Date.now(), sender: auth.currentUser.uid }); } catch(e) {} 
+    } 
+};
+
+pDoodleCanvas.addEventListener("mousedown", startPDrawing); pDoodleCanvas.addEventListener("mousemove", drawP); 
+pDoodleCanvas.addEventListener("mouseup", stopPDrawing); pDoodleCanvas.addEventListener("mouseout", stopPDrawing);
+pDoodleCanvas.addEventListener("touchstart", startPDrawing, {passive: false}); pDoodleCanvas.addEventListener("touchmove", drawP, {passive: false}); pDoodleCanvas.addEventListener("touchend", stopPDrawing);
+
+document.getElementById("clearPDoodleBtn").addEventListener("click", async () => {
+    if(confirm("Clear board?")) {
+        const snaps = await getDocs(collection(db, "chats", currentChatId, "doodle"));
+        const batch = writeBatch(db); snaps.docs.forEach(d => batch.delete(d.ref)); await batch.commit();
+        await addDoc(collection(db, "chats", currentChatId, "doodle"), { type: 'clear', time: Date.now() });
+    }
+});
+
+if (chatSettingsBtn) {
+    chatSettingsBtn.addEventListener("click", () => {
+        document.getElementById("chatSettingsModal").style.display = "flex";
+    });
+}
+
+// 2. Disappearing Message Timer Sync
+if (modalMsgTimerSelect) {
+    modalMsgTimerSelect.addEventListener("change", async (e) => {
+        if (currentChatId && !isCurrentChatGroup) {
+            await updateDoc(doc(db, "chats", currentChatId), {
+                messageTimer: e.target.value
+            });
+            showToast("Timer Updated", "Disappearing message timer changed for this chat.");
+        }
+    });
+}
+
+// 3. Change Wallpaper
+if (changeWallpaperBtn && wallpaperInput) {
+    changeWallpaperBtn.addEventListener("click", () => {
+        wallpaperInput.click();
+    });
+
+    wallpaperInput.addEventListener("change", async (e) => {
+        const file = e.target.files[0];
+        if (!file || !currentChatId || isCurrentChatGroup) {
+            if (isCurrentChatGroup) alert("Wallpapers are for 1v1 chats currently.");
+            return;
+        }
+        
+        const originalText = changeWallpaperBtn.innerHTML;
+        changeWallpaperBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Uploading...';
+        changeWallpaperBtn.disabled = true;
+        
+        try {
+            const formData = new FormData();
+            formData.append("file", file);
+            formData.append("upload_preset", UPLOAD_PRESET);
+            const response = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`, { method: "POST", body: formData });
+            const data = await response.json();
+            
+            // Save to my profile specifically for this target user
+            await setDoc(doc(db, "users", auth.currentUser.uid), {
+                chatMeta: { [targetUserUid]: { wallpaperUrl: data.secure_url } }
+            }, { merge: true });
+
+            document.getElementById("chatBox").style.backgroundImage = `linear-gradient(rgba(10,10,15,0.8), rgba(10,10,15,0.8)), url('${data.secure_url}')`;
+            showToast("Wallpaper Updated", "Chat background changed successfully.");
+        } catch (err) {
+            alert("Failed to upload wallpaper: " + err.message);
+        } finally {
+            changeWallpaperBtn.innerHTML = originalText;
+            changeWallpaperBtn.disabled = false;
+            wallpaperInput.value = "";
+        }
+    });
+}
+
+// 4. Remove Wallpaper
+if (removeWallpaperBtn) {
+    removeWallpaperBtn.addEventListener("click", async () => {
+        if (!currentChatId || !targetUserUid || isCurrentChatGroup) return;
+        try {
+            await setDoc(doc(db, "users", auth.currentUser.uid), {
+                chatMeta: { [targetUserUid]: { wallpaperUrl: null } }
+            }, { merge: true });
+            document.getElementById("chatBox").style.backgroundImage = "none";
+            showToast("Wallpaper Removed", "Restored default background.");
+        } catch (err) {}
+    });
+}
+
+// 5. Clear Chat for Me
+if (clearChatMeBtn) {
+    clearChatMeBtn.addEventListener("click", async () => {
+        if (!currentChatId) return;
+        if (confirm("Are you sure you want to clear this chat for yourself? Messages will be hidden for you but remain for the other person.")) {
+            clearChatMeBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Clearing...';
+            try {
+                const msgsSnap = await getDocs(query(collection(db, "chats", currentChatId, "messages")));
+                const batch = writeBatch(db);
+                msgsSnap.docs.forEach(docSnap => {
+                    batch.update(docSnap.ref, {
+                        deletedFor: arrayUnion(auth.currentUser.uid)
+                    });
+                });
+                await batch.commit();
+                document.getElementById("chatSettingsModal").style.display = "none";
+                showToast("Chat Cleared", "Messages have been hidden from your screen.");
+            } catch (e) {
+                alert("Error clearing chat.");
+            } finally {
+                clearChatMeBtn.innerHTML = '<i class="fa-solid fa-eraser"></i> Clear Chat for Me';
+            }
+        }
+    });
 }
