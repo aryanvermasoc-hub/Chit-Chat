@@ -198,7 +198,7 @@ if (backToUsersBtn) { backToUsersBtn.addEventListener("click", () => { if (windo
 function listenToChatStatus(targetName) {
     if (chatDocUnsubscribe) chatDocUnsubscribe();
     const overlay = document.getElementById("chatStateOverlay"); 
-    const inputWrapper = document.querySelector(".chat-input-wrapper");
+    const inputWrapper = document.querySelector("#activeChatState .chat-input-wrapper");
     
     if (isCurrentChatGroup) { 
         currentChatStatus = 'accepted'; 
@@ -442,7 +442,61 @@ document.getElementById("cancelReplyBtn").addEventListener("click", () => {
     document.getElementById("activeChatState").insertBefore(previewContainer, document.querySelector("#activeChatState .chat-input-wrapper")); 
 });
 
+// --- CONNECTION REQUEST SYSTEM ---
 
+window.sendChatRequest = async () => {
+    if (!currentChatId || !targetUserUid) return;
+    try {
+        // Create the chat document with 'pending' status
+        await setDoc(doc(db, "chats", currentChatId), {
+            status: 'pending',
+            initiator: auth.currentUser.uid,
+            createdAt: Date.now()
+        });
+        
+        // Notify the target user so they get a ping/toast
+        await setDoc(doc(db, "users", targetUserUid), {
+            chatMeta: { 
+                [auth.currentUser.uid]: { 
+                    time: Date.now(), 
+                    text: "👋 Connection Request", 
+                    unread: true 
+                } 
+            }
+        }, { merge: true });
+        
+        showToast("Request Sent", "Waiting for approval.");
+    } catch (error) {
+        showToast("Error", "Failed to send request.");
+        console.error(error);
+    }
+};
+
+window.acceptChatRequest = async () => {
+    if (!currentChatId) return;
+    try {
+        await updateDoc(doc(db, "chats", currentChatId), {
+            status: 'accepted'
+        });
+        showToast("Connected", "You can now chat!");
+    } catch (error) {
+        showToast("Error", "Failed to accept request.");
+    }
+};
+
+window.declineChatRequest = async () => {
+    if (!currentChatId) return;
+    try {
+        await deleteDoc(doc(db, "chats", currentChatId));
+        showToast("Declined", "Request removed.");
+        // Optional: Send them back to the users list
+        if (window.innerWidth <= 992) {
+            document.getElementById("backToUsersBtn").click();
+        }
+    } catch (error) {
+        showToast("Error", "Failed to decline request.");
+    }
+};
 function listenToTyping() { if (chatMetaUnsubscribe) chatMetaUnsubscribe(); if (isCurrentChatGroup) return; chatMetaUnsubscribe = onSnapshot(doc(db, "chats", currentChatId), (docSnap) => { if (docSnap.exists() && docSnap.data()[`typing_${targetUserUid}`]) { document.getElementById("chatTargetStatus").innerText = "typing..."; } else { const targetUser = allUsers.find(u => u.id === targetUserUid); if (targetUser && targetUser.isOnline) { document.getElementById("chatTargetStatus").innerText = "Online"; } else if (targetUser) { document.getElementById("chatTargetStatus").innerText = `Last seen: ${timeAgo(targetUser.lastSeen)}`; } } }); }
 msgInput.addEventListener("input", async () => { if(!currentChatId || isCurrentChatGroup) return; await setDoc(doc(db, "chats", currentChatId), { [`typing_${auth.currentUser.uid}`]: true }, { merge: true }); clearTimeout(typingTimeout); typingTimeout = setTimeout(async () => { await setDoc(doc(db, "chats", currentChatId), { [`typing_${auth.currentUser.uid}`]: false }, { merge: true }); }, 1500); });
 
