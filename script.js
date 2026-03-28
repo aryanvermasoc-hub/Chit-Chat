@@ -462,9 +462,10 @@ exploreBtn.addEventListener("click", () => {
     exploreArea.style.display = "flex";
     if(window.innerWidth <= 992) sidebar.classList.add("hidden");
     
-    // Default load Memes
-    document.querySelector('.explore-tab[data-target="exploreMemes"]').click();
+    // Default load Lounge
+    document.querySelector('.explore-tab[data-target="exploreLounge"]').click();
 });
+
 // Close Explore Hub
 closeExploreBtn.addEventListener("click", () => {
     exploreArea.style.display = "none";
@@ -698,10 +699,10 @@ async function initMemesFeed() {
     memesWrapper.innerHTML = '<div style="color:var(--primary); padding: 20px;"><i class="fa-solid fa-spinner fa-spin fa-2x"></i></div>';
     loadMoreMemes();
 }
-
 async function loadMoreMemes() {
     try {
-        const response = await fetch('https://meme-api.com/gimme/ProgrammerHumor/10');
+        // Yahan URL mein ProgrammerHumor ki jagah 'Animemes' kar diya hai
+        const response = await fetch('https://meme-api.com/gimme/Animemes+goodanimemes+dankruto/10');
         const data = await response.json();
         const spinner = memesWrapper.querySelector('.fa-spinner')?.parentElement;
         if(spinner) spinner.remove();
@@ -710,11 +711,13 @@ async function loadMoreMemes() {
             if(!meme.url) return;
             const card = document.createElement('div');
             card.className = "meme-card";
+            
+            // UI mein bhi tag change karke r/Animemes kar diya hai
             card.innerHTML = `
                 <h4>${meme.title}</h4>
                 <img src="${meme.url}" alt="Meme" loading="lazy">
                 <div style="margin-top: 10px; font-size: 12px; color: var(--text-muted);">
-                    👍 ${meme.ups} | r/ProgrammerHumor
+                    👍 ${meme.ups} | r/Animemes
                 </div>
             `;
             memesWrapper.appendChild(card);
