@@ -27,7 +27,7 @@ let currentChatStatus = null;
 let targetUserUid = null;
 let messagesUnsubscribe = null;
 let chatMetaUnsubscribe = null;
-let chatDocUnsubscribe = null; // New state for Request System
+let chatDocUnsubscribe = null; 
 let typingTimeout = null;
 let isSignupMode = false;
 let replyingToMsg = null;
@@ -72,7 +72,6 @@ const msgInput = document.getElementById("msg");
 const sendBtn = document.getElementById("sendBtn");
 const backToUsersBtn = document.getElementById("backToUsersBtn");
 
-// UI Toggle Logic
 const chatToggleBtn = document.getElementById("chatToggleBtn");
 const homeGamesBtn = document.getElementById("homeGamesBtn");
 const newsFeedContainer = document.getElementById("newsFeedContainer");
@@ -80,7 +79,6 @@ const chatListContainer = document.getElementById("chatListContainer");
 const gamesNavContainer = document.getElementById("gamesNavContainer");
 const openUsersListBtn = document.getElementById("openUsersListBtn");
 
-// Screen State Management
 function switchSidebarView(view) {
     newsFeedContainer.style.display = "none";
     chatListContainer.style.display = "none";
@@ -244,7 +242,6 @@ onAuthStateChanged(auth, async (user) => {
   }
 });
 
-// NEWS FEED
 async function loadNewsFeed() {
   const container = document.getElementById("newsFeedContainer");
   container.innerHTML = '<div style="text-align:center; padding: 40px; color: var(--primary);"><i class="fa-solid fa-spinner fa-spin" style="font-size: 24px;"></i><p style="margin-top:10px;">Loading Latest Tech News...</p></div>';
@@ -262,7 +259,6 @@ async function loadNewsFeed() {
   }
 }
 
-// PROFILE LISTENER
 function startMyProfileListener(uid) {
   if(myProfileUnsubscribe) myProfileUnsubscribe();
   myProfileUnsubscribe = onSnapshot(doc(db, "users", uid), (docSnap) => {
@@ -305,7 +301,6 @@ function startMyProfileListener(uid) {
     }
   });
 }
-
 // --- 8. SIDEBAR & SORTING ---
 function loadSidebarData() {
   onSnapshot(collection(db, "users"), (snapshot) => {
@@ -318,15 +313,38 @@ function loadSidebarData() {
   });
 }
 
+let currentSidebarTab = 'users';
+
+document.getElementById("showUsersTab").addEventListener("click", () => {
+    currentSidebarTab = 'users';
+    document.getElementById("showUsersTab").classList.add("active");
+    document.getElementById("showGroupsTab").classList.remove("active");
+    document.getElementById("usersList").style.display = "block";
+    document.getElementById("groupsList").style.display = "none";
+});
+
+document.getElementById("showGroupsTab").addEventListener("click", () => {
+    currentSidebarTab = 'groups';
+    document.getElementById("showGroupsTab").classList.add("active");
+    document.getElementById("showUsersTab").classList.remove("active");
+    document.getElementById("groupsList").style.display = "block";
+    document.getElementById("usersList").style.display = "none";
+});
+
 function renderSidebar() {
-  usersList.innerHTML = "";
+  const usersListEl = document.getElementById("usersList");
+  const groupsListEl = document.getElementById("groupsList");
+  
+  usersListEl.innerHTML = "";
+  groupsListEl.innerHTML = "";
+
   allGroups.forEach(group => {
     if (!group.members.includes(auth.currentUser.uid)) return; 
     const groupCard = document.createElement("div");
     groupCard.className = "user-item";
     groupCard.innerHTML = `<div class="avatar-wrapper"><div class="avatar" style="background:var(--primary); display:flex; justify-content:center; align-items:center; color:white; font-weight:bold; font-size:18px;">${group.name.charAt(0)}</div></div><div class="user-meta"><span class="name">${group.name}</span><span class="handle">${group.members.length} members</span></div>`;
     groupCard.onclick = () => openGroupChat(group.id, group.name, group.members.length);
-    usersList.appendChild(groupCard);
+    groupsListEl.appendChild(groupCard);
   });
 
   let sortedUsers = [...allUsers].filter(u => u.id !== auth.currentUser.uid);
@@ -359,7 +377,7 @@ function renderSidebar() {
       if(meta?.unread) updateDoc(doc(db, "users", auth.currentUser.uid), { [`chatMeta.${user.id}.unread`]: false });
       openChat(user.id, displayName, avatarUrl, user.isOnline, user.lastSeen);
     }
-    usersList.appendChild(userCard);
+    usersListEl.appendChild(userCard);
   });
 }
 
@@ -405,8 +423,6 @@ window.addEventListener("popstate", (e) => {
   }
 });
 
-// --- NEW: CHAT REQUEST SYSTEM ---
-// --- NEW: ADVANCED CHAT REQUEST SYSTEM ---
 function listenToChatStatus(targetName) {
     if (chatDocUnsubscribe) chatDocUnsubscribe();
     
@@ -425,15 +441,20 @@ function listenToChatStatus(targetName) {
             const data = snap.data();
             currentChatStatus = data.status;
 
+            if (data.messageTimer !== undefined) {
+                const timerSelect = document.getElementById("msgTimerSelect");
+                if (timerSelect && timerSelect.value != data.messageTimer) {
+                    timerSelect.value = data.messageTimer;
+                }
+            }
+
             if (data.status === 'pending') {
                 if(overlay) overlay.style.display = "flex";
                 if(inputWrapper) inputWrapper.style.display = "none";
 
                 if (data.initiator === auth.currentUser.uid) {
-                    // Maine request bheji hai
                     overlay.innerHTML = `<p style="font-size: 14px; margin: 0; color: var(--text-muted);"><i class="fa-solid fa-clock"></i> Request sent to <b>${targetName}</b>. Waiting for approval...</p>`;
                 } else {
-                    // Mujhe request aayi hai
                     overlay.innerHTML = `
                         <p style="font-size: 14px; margin-bottom: 15px;"><strong style="color:var(--primary);">${targetName}</strong> wants to connect with you.</p>
                         <div style="display:flex; gap: 15px; justify-content: center;">
@@ -443,12 +464,10 @@ function listenToChatStatus(targetName) {
                     `;
                 }
             } else if (data.status === 'accepted') {
-                // Request accept ho gayi hai
                 if(overlay) overlay.style.display = "none";
                 if(inputWrapper) inputWrapper.style.display = "flex";
             }
         } else {
-            // Chat abhi tak start nahi hui hai
             currentChatStatus = 'none';
             if(overlay) overlay.style.display = "flex";
             if(inputWrapper) inputWrapper.style.display = "none";
@@ -464,14 +483,12 @@ window.sendChatRequest = async () => {
     const overlay = document.getElementById("chatStateOverlay");
     overlay.innerHTML = `<p style="font-size: 14px; margin: 0; color: var(--text-muted);"><i class="fa-solid fa-spinner fa-spin"></i> Sending Request...</p>`;
 
-    // 1. Chat document banao
     await setDoc(doc(db, "chats", currentChatId), {
         status: 'pending',
         initiator: auth.currentUser.uid,
         createdAt: Date.now()
     });
 
-    // 2. Samne wale ke sidebar mein dikhane ke liye update karo
     try {
         await setDoc(doc(db, "users", auth.currentUser.uid), {
             chatMeta: { [targetUserUid]: { time: Date.now(), text: `Request Sent`, unread: false } }
@@ -489,37 +506,17 @@ window.acceptChatRequest = async () => {
 
 window.declineChatRequest = async () => {
     if(confirm("Are you sure you want to decline and delete this request?")) {
-        document.getElementById("backToUsersBtn").click(); // Screen close karo
-        await deleteDoc(doc(db, "chats", currentChatId)); // Chat delete karo
-        
-        // Sidebar se meta hatao
+        document.getElementById("backToUsersBtn").click(); 
+        await deleteDoc(doc(db, "chats", currentChatId)); 
         try {
              const myUserDoc = await getDoc(doc(db, "users", auth.currentUser.uid));
              let currentMeta = myUserDoc.data().chatMeta || {};
              delete currentMeta[targetUserUid]; 
              await updateDoc(doc(db, "users", auth.currentUser.uid), { chatMeta: currentMeta });
-        } catch(e) {}
-    }
-};
-window.declineChatRequest = async () => {
-    if(confirm("Are you sure you want to decline and delete this request?")) {
-        document.getElementById("backToUsersBtn").click();
-        
-        // Chat delete karna
-        await deleteDoc(doc(db, "chats", currentChatId));
-        
-        // Sidebar se turant hatane ke liye chatMeta delete karna
-        try {
-             // Firebase v10 syntax ke bina manual overwrite karke hata rahe hain
-             const myUserDoc = await getDoc(doc(db, "users", auth.currentUser.uid));
-             let currentMeta = myUserDoc.data().chatMeta || {};
-             delete currentMeta[targetUserUid]; // Sender ko list se hata diya
-             await updateDoc(doc(db, "users", auth.currentUser.uid), { chatMeta: currentMeta });
         } catch(e) { console.error("Error clearing chat meta", e); }
     }
 };
 
-// --- 9. CHAT ENGINE ---
 function openChat(targetUid, targetName, targetAvatar, isTargetOnline, targetLastSeen) {
   isCurrentChatGroup = false;
   const myUid = auth.currentUser.uid;
@@ -542,7 +539,7 @@ function openChat(targetUid, targetName, targetAvatar, isTargetOnline, targetLas
   
   loadMessages(); 
   listenToTyping();
-  listenToChatStatus(targetName); // Listen for Chat Requests
+  listenToChatStatus(targetName); 
 }
 
 function openGroupChat(groupId, groupName, memberCount) {
@@ -567,11 +564,16 @@ function openGroupChat(groupId, groupName, memberCount) {
 
 function loadMessages() {
   if (messagesUnsubscribe) messagesUnsubscribe(); 
-  const q = query(collection(db, "chats", currentChatId, "messages"), orderBy("time", "asc"));
+  const activeChatId = currentChatId; // FIX: Lock ID
+  
+  const q = query(collection(db, "chats", activeChatId, "messages"), orderBy("time", "asc"));
   
   messagesUnsubscribe = onSnapshot(q, (snapshot) => {
     chatBox.innerHTML = "";
-    let lastMyMsg = null; // NEW: Track my last message for Seen indicator
+    let lastMyMsg = null; 
+
+    if(window.msgTimeouts) window.msgTimeouts.forEach(clearTimeout);
+    window.msgTimeouts = [];
     
     snapshot.forEach(docSnap => {
       const msg = docSnap.data();
@@ -580,13 +582,27 @@ function loadMessages() {
       
       if (isMe) lastMyMsg = msg;
       
-      // AUTO-DELETE TRACKER: Mark message as seen by the other user
       if (!isMe && !msg.seenAt) {
-          updateDoc(doc(db, "chats", currentChatId, "messages", msgId), {
-              seenAt: Date.now()
-          }).catch(e => console.error(e));
+          const updateData = { seenAt: Date.now() };
+          if (msg.timerDuration) {
+              updateData.expiresAt = Date.now() + msg.timerDuration;
+          }
+          updateDoc(doc(db, "chats", activeChatId, "messages", msgId), updateData).catch(e => console.error(e));
       }
 
+      if (msg.expiresAt) {
+          const timeLeft = msg.expiresAt - Date.now();
+          if (timeLeft <= 0) {
+              deleteDoc(doc(db, "chats", activeChatId, "messages", msgId)).catch(e=>console.log("Delete error:", e));
+              return; 
+          } else {
+              const timerId = setTimeout(() => {
+                  deleteDoc(doc(db, "chats", activeChatId, "messages", msgId)).catch(e=>console.log("Timer delete error:", e));
+              }, timeLeft);
+              window.msgTimeouts.push(timerId);
+          }
+      }
+      
       if (msg.deletedFor && msg.deletedFor.includes(auth.currentUser.uid)) return;
 
       const timeStr = new Date(msg.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -598,7 +614,6 @@ function loadMessages() {
       if (msg.isGameChallenge) {
           const gameNames = { "tictactoe": "Tic Tac Toe", "rps": "Rock Paper Scissors", "jetfighter": "Jet Fighter", "carracing": "Car Racing" };
           const gameTitle = gameNames[msg.gameType] || "a Game";
-          
           if (isMe) {
               contentHtml = `<div class="challenge-bubble" onclick="event.stopPropagation();"><h4>🎮 Challenge Sent</h4><p>Waiting for opponent to accept ${gameTitle}...</p></div>`;
           } else {
@@ -613,10 +628,10 @@ function loadMessages() {
       } else if (msg.isDeleted) {
         contentHtml = `<div class="msg-bubble msg-deleted"><i class="fa-solid fa-ban"></i> This message was deleted</div>`;
       } else {
-        let decryptedText = decryptMessage(msg.text, currentChatId);
+        let decryptedText = decryptMessage(msg.text, activeChatId);
         if (!decryptedText && !msg.imageUrl) return;
 
-        let replyHtml = msg.replyToText ? `<div class="replied-msg-box" onclick="event.stopPropagation();"><b>${msg.replyToName}</b><div class="preview-text">${decryptMessage(msg.replyToText, currentChatId)}</div></div>` : "";
+        let replyHtml = msg.replyToText ? `<div class="replied-msg-box" onclick="event.stopPropagation();"><b>${msg.replyToName}</b><div class="preview-text">${decryptMessage(msg.replyToText, activeChatId)}</div></div>` : "";
         let imgHtml = msg.imageUrl ? `<img src="${msg.imageUrl}" style="max-width:100%; border-radius:12px; margin-bottom:8px; cursor:pointer;" onclick="event.stopPropagation(); window.open('${msg.imageUrl}')" />` : "";
         let groupSenderHtml = (isCurrentChatGroup && !isMe) ? `<div style="font-size:11px; color:var(--primary); font-weight:600; margin-bottom:4px;">${msg.senderName}</div>` : "";
         
@@ -646,7 +661,6 @@ function loadMessages() {
       chatBox.appendChild(div);
     });
 
-    // NEW: INSTAGRAM STYLE SEEN INDICATOR
     if (lastMyMsg && lastMyMsg.seenAt) {
         const seenDiv = document.createElement("div");
         seenDiv.style.textAlign = "right";
@@ -661,7 +675,6 @@ function loadMessages() {
     chatBox.scrollTop = chatBox.scrollHeight;
   });
 }
-
 window.openMessageModal = (msgId, encodedText, encodedName, isMe) => {
     activeMsgId = msgId;
     activeMsgText = decodeURIComponent(encodedText);
@@ -748,9 +761,12 @@ msgInput.addEventListener("input", async () => {
 async function sendMessage() {
   const text = msgInput.value.trim();
   if (!text) return;
+  
+  const timerSelect = document.getElementById("msgTimerSelect");
+  const timerValue = timerSelect ? parseInt(timerSelect.value) : 60000;
+  
   msgInput.value = ""; msgInput.focus(); 
   
-  // Extra security check: Bina accept hue message nahi jayega
   if (!isCurrentChatGroup && currentChatStatus !== 'accepted') return;
 
   const encryptedText = encryptMessage(text, currentChatId);
@@ -763,8 +779,26 @@ async function sendMessage() {
     } catch(err) { console.error("Error updating chat meta:", err); }
   }
 
-  const payload = { text: encryptedText, sender: auth.currentUser.uid, senderName: document.getElementById("myName").innerText, time: Date.now(), isEdited: false, isDeleted: false, isGameChallenge: false };
-  if (replyingToMsg) { payload.replyToId = replyingToMsg.id; payload.replyToText = encryptMessage(replyingToMsg.text, currentChatId); payload.replyToName = replyingToMsg.name; document.getElementById("cancelReplyBtn").click(); }
+  const payload = { 
+      text: encryptedText, 
+      sender: auth.currentUser.uid, 
+      senderName: document.getElementById("myName").innerText, 
+      time: Date.now(), 
+      isEdited: false, 
+      isDeleted: false, 
+      isGameChallenge: false 
+  };
+  
+  if (timerValue > 0) {
+      payload.timerDuration = timerValue;
+  }
+
+  if (replyingToMsg) { 
+      payload.replyToId = replyingToMsg.id; 
+      payload.replyToText = encryptMessage(replyingToMsg.text, currentChatId); 
+      payload.replyToName = replyingToMsg.name; 
+      document.getElementById("cancelReplyBtn").click(); 
+  }
   
   try {
     await addDoc(collection(db, "chats", currentChatId, "messages"), payload);
@@ -776,6 +810,17 @@ async function sendMessage() {
 sendBtn.addEventListener("click", sendMessage);
 msgInput.addEventListener("keypress", (e) => { if (e.key === "Enter") sendMessage(); });
 searchInput.addEventListener("input", (e) => { const term = e.target.value.toLowerCase(); document.querySelectorAll(".user-item").forEach(item => { item.style.display = item.innerText.toLowerCase().includes(term) ? "flex" : "none"; }); });
+
+const msgTimerSelect = document.getElementById("msgTimerSelect");
+if (msgTimerSelect) {
+    msgTimerSelect.addEventListener("change", async (e) => {
+        if (!currentChatId || isCurrentChatGroup) return; 
+        const newTimerValue = parseInt(e.target.value);
+        await setDoc(doc(db, "chats", currentChatId), { 
+            messageTimer: newTimerValue 
+        }, { merge: true });
+    });
+}
 
 // --- 10. REAL-TIME GAMES LOGIC (MULTIPLAYER) ---
 const launchGameMenuBtn = document.getElementById("launchGameMenuBtn");
@@ -879,9 +924,7 @@ function joinGameRoom(gameId, gameType) {
         if (data.type === 'carracing') renderActionGame(data, gameId, 'carracing');
     });
 }
-
 // --- 11. SINGLE PLAYER GAMES (VS COMPUTER / HIGH SCORE) ---
-
 window.startSinglePlayer = (gameType) => {
     singlePlayerMode = true;
     currentGameId = null;
@@ -1287,7 +1330,6 @@ window.makeMoveTTT = async (index, currentVal, isMyTurn, mySymbol) => {
     const snap = await getDoc(docRef);
     const data = snap.data();
     
-    // BUG FIX: Prevent further moves if game is already won
     if(data.winner) return;
 
     let newBoard = [...data.board];
@@ -1394,7 +1436,6 @@ fileInput.addEventListener("change", async (e) => {
     const data = await response.json();
     if (!response.ok) throw new Error(data.error.message || "Upload failed");
     
-    // Saving imagePublicId for backend auto-deletion
     await addDoc(collection(db, "chats", currentChatId, "messages"), { 
       text: "", 
       imageUrl: data.secure_url, 
@@ -1480,11 +1521,9 @@ profileAvatarInput.addEventListener("change", async (e) => {
   finally { editAvatarBtn.innerHTML = '<i class="fa-solid fa-camera"></i>'; editAvatarBtn.disabled = false; profileAvatarInput.value = ""; }
 });
 
-// User Profile Click
 document.querySelector(".current-user").addEventListener("click", () => { if(auth.currentUser) openProfile(auth.currentUser.uid); });
 document.querySelector(".chat-target-info").addEventListener("click", () => { if(targetUserUid && !isCurrentChatGroup) openProfile(targetUserUid); });
 
-// App Info Modal Logic
 const appInfoBtn = document.getElementById("appInfoBtn");
 const infoModal = document.getElementById("infoModal");
 const closeModalBtn = document.getElementById("closeModalBtn");
@@ -1494,9 +1533,7 @@ if (appInfoBtn && infoModal && closeModalBtn) {
   infoModal.addEventListener("click", (e) => { if (e.target === infoModal) infoModal.style.display = "none"; });
 }
 
-// --- NEW: GROUP MANAGEMENT (Add Member & Update Avatar) ---
 document.querySelector(".chat-header").addEventListener("click", (e) => {
-    // Agar mobile back button ya game menu click hua hai toh modal open mat karo
     if (e.target.closest('.mobile-back-btn') || e.target.closest('#launchGameMenuBtn')) return;
     
     if (isCurrentChatGroup && currentChatId) {
@@ -1505,6 +1542,31 @@ document.querySelector(".chat-header").addEventListener("click", (e) => {
             document.getElementById("groupSettingsName").innerText = group.name;
             document.getElementById("groupMemberCount").innerText = group.members.length;
             document.getElementById("groupSettingsAvatar").src = group.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(group.name)}&background=8b5cf6&color=fff`;
+            
+            const membersListDiv = document.getElementById("groupMembersList");
+            membersListDiv.innerHTML = "<h4 style='font-size:12px; color:var(--text-muted); margin-bottom:8px;'>Group Members:</h4>";
+            
+            group.members.forEach(memberId => {
+                const userObj = allUsers.find(u => u.id === memberId);
+                const name = userObj ? (userObj.fullName || userObj.username) : "Unknown User";
+                const isMe = memberId === auth.currentUser.uid ? " (You)" : "";
+                membersListDiv.innerHTML += `<div style="font-size: 13px; padding: 4px 0; border-bottom: 1px solid rgba(255,255,255,0.05);">${name}${isMe}</div>`;
+            });
+
+            const deleteBtn = document.getElementById("deleteGroupBtn");
+            if (group.createdBy === auth.currentUser.uid) {
+                deleteBtn.style.display = "flex";
+                deleteBtn.onclick = async () => {
+                    if (confirm(`Are you sure you want to delete ${group.name}? This action cannot be undone.`)) {
+                        await deleteDoc(doc(db, "groups", currentChatId));
+                        document.getElementById("groupSettingsModal").style.display = "none";
+                        document.getElementById("backToUsersBtn").click(); 
+                    }
+                };
+            } else {
+                deleteBtn.style.display = "none";
+            }
+
             document.getElementById("groupSettingsModal").style.display = "flex";
         }
     }
