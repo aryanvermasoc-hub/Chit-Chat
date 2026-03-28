@@ -153,7 +153,14 @@ body { background: var(--bg-base); color: var(--text-main); display: flex; justi
 .explore-tab:hover { color: white; background: rgba(255,255,255,0.05); }
 .explore-tab.active { color: var(--primary); border-bottom: 3px solid var(--primary); background: rgba(139, 92, 246, 0.1); }
 .explore-content-wrapper { flex: 1; overflow-y: auto; position: relative; }
-.explore-section { display: none; padding: 20px; flex-direction: column; height: 100%; }
+.explore-section { 
+    display: none; 
+    padding: 20px; 
+    flex-direction: column; 
+    flex: 1; /* Takes available space */
+    overflow-y: auto; /* THIS FIXES THE SCROLLING */
+    height: 100%; 
+}
 .explore-section.active { display: flex; }
 
 /* Leaderboard */
