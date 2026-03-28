@@ -1000,3 +1000,50 @@ if (clearChatMeBtn) {
         }
     });
 }
+// =========================================================================
+// HARDWARE / NAVIGATION BACK BUTTON SUPPORT
+// =========================================================================
+window.addEventListener("popstate", (e) => {
+    // 1. Agar koi Modal (Settings, Profile, Game Menu) khula hai, toh pehle usko close karein
+    const modals = ["profileModal", "chatSettingsModal", "groupSettingsModal", "msgOptionsModal", "gameSelectionModal", "infoModal"];
+    let modalClosed = false;
+    modals.forEach(id => {
+        const modal = document.getElementById(id);
+        if (modal && modal.style.display === "flex") {
+            modal.style.display = "none";
+            modalClosed = true;
+        }
+    });
+    if (modalClosed) {
+        history.pushState(null, ""); // History restore karo taaki app exit na ho
+        return;
+    }
+
+    // 2. Agar Private Doodle open hai, toh usko hide karein
+    if (document.getElementById("privateDoodleArea") && document.getElementById("privateDoodleArea").style.display === "flex") {
+        document.getElementById("hideDoodleBtn").click();
+        history.pushState(null, ""); 
+        return;
+    }
+
+    // 3. Agar Game chal raha hai, toh game close karein
+    if (document.getElementById("activeGameArea") && document.getElementById("activeGameArea").style.display === "flex") {
+        document.getElementById("closeGameBtn").click();
+        history.pushState(null, ""); 
+        return;
+    }
+
+    // 4. Agar Explore (Memes/Lounge) khula hai, toh usko close karein
+    if (document.getElementById("exploreArea") && document.getElementById("exploreArea").style.display === "flex") {
+        document.getElementById("closeExploreBtn").click();
+        history.pushState(null, ""); 
+        return;
+    }
+
+    // 5. Agar Mobile view mein Chat khuli hai, toh wapas Users List (Sidebar) par jayein
+    if (window.innerWidth <= 992 && document.getElementById("activeChatState") && document.getElementById("activeChatState").style.display === "flex") {
+        document.getElementById("backToUsersBtn").click();
+        history.pushState(null, ""); 
+        return;
+    }
+});
