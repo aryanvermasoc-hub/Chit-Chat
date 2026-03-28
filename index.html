@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Chit-Chat | Premium Messaging & Games</title>
-  <link rel="stylesheet" href="style.css?v=21">
+  <link rel="stylesheet" href="style.css?v=23">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
@@ -108,7 +108,7 @@
         <button id="homeGamesBtn" class="nav-btn" style="color: var(--primary);"><i class="fa-solid fa-gamepad"></i><span>Games</span></button>
         <button id="openUsersListBtn" class="nav-btn"><i class="fa-solid fa-user-group"></i><span>People</span></button>
         <button id="exploreBtn" class="nav-btn">
-            <div class="custom-reels-logo" style="background: linear-gradient(45deg, #10b981, #3b82f6); -webkit-background-clip: text;"><i class="fa-solid fa-compass"></i></div>
+            <div class="custom-reels-logo" style="background: linear-gradient(45deg, #10b981, #3b82f6); -webkit-background-clip: text; background-clip: text;"><i class="fa-solid fa-compass"></i></div>
             <span class="reels-brand-name">Explore</span>
         </button>
         <button id="appInfoBtn" class="nav-btn"><i class="fa-solid fa-circle-info"></i><span>Info</span></button>
@@ -123,15 +123,23 @@
             <button id="closeExploreBtn" class="icon-btn"><i class="fa-solid fa-chevron-left"></i></button>
             <h3 style="margin-left: 10px;">Community Hub</h3>
         </div>
+        
         <div class="explore-tabs">
-            <button class="explore-tab active" data-target="exploreLounge"><i class="fa-solid fa-earth-americas"></i> Lounge</button>
+            <button class="explore-tab active" data-target="exploreMemes"><i class="fa-solid fa-face-laugh-squint"></i> Memes</button>
+            <button class="explore-tab" data-target="exploreLounge"><i class="fa-solid fa-earth-americas"></i> Lounge</button>
             <button class="explore-tab" data-target="exploreLeaderboard"><i class="fa-solid fa-trophy"></i> Top 50</button>
             <button class="explore-tab" data-target="exploreDoodle"><i class="fa-solid fa-palette"></i> Doodle</button>
-            <button class="explore-tab" data-target="exploreMemes"><i class="fa-solid fa-face-laugh-squint"></i> Memes</button>
         </div>
         
         <div class="explore-content-wrapper">
-            <div id="exploreLounge" class="explore-section active">
+            
+            <div id="exploreMemes" class="explore-section active">
+                <div id="memesWrapper" style="display: flex; flex-direction: column; gap: 20px; align-items: center; padding-bottom: 20px;">
+                    <div style="color:var(--primary); padding: 20px;"><i class="fa-solid fa-spinner fa-spin fa-2x"></i></div>
+                </div>
+            </div>
+
+            <div id="exploreLounge" class="explore-section">
                 <div class="messages-container" id="globalChatBox" style="padding-bottom: 80px;"></div>
                 <div class="chat-input-wrapper glass-panel" style="position: absolute; bottom: 0; left: 0; width: 100%; z-index: 10;">
                     <div class="input-pill"><input type="text" id="globalMsgInput" placeholder="Say hi to everyone..."></div>
@@ -151,8 +159,7 @@
                             <option value="jetfighter">✈️ Jet Fighter</option>
                         </select>
                     </div>
-                    <div id="leaderboardList" style="display: flex; flex-direction: column; gap: 10px;">
-                        </div>
+                    <div id="leaderboardList" style="display: flex; flex-direction: column; gap: 10px;"></div>
                 </div>
             </div>
 
@@ -166,12 +173,6 @@
                     <button id="clearDoodleBtn" class="primary-btn" style="background: rgba(239, 68, 68, 0.2); color: #ef4444; border: 1px solid #ef4444; width: auto;"><i class="fa-solid fa-trash"></i> Clear Board</button>
                 </div>
                 <canvas id="doodleCanvas" width="400" height="500" style="background: #fff; border-radius: 12px; cursor: crosshair; touch-action: none; max-width: 100%; box-shadow: 0 5px 20px rgba(0,0,0,0.3);"></canvas>
-            </div>
-
-            <div id="exploreMemes" class="explore-section">
-                <div id="memesWrapper" style="display: flex; flex-direction: column; gap: 20px; align-items: center; padding-bottom: 20px;">
-                    <div style="color:var(--primary); padding: 20px;"><i class="fa-solid fa-spinner fa-spin fa-2x"></i></div>
-                </div>
             </div>
         </div>
       </div>
