@@ -297,3 +297,33 @@ body {
 .empty-icon { font-size: 60px; color: rgba(139, 92, 246, 0.2); margin-bottom: 20px; }
 .empty-state h3 { font-size: 24px; color: var(--text-main); margin-bottom: 10px; }
 .empty-state p { font-size: 14px; max-width: 250px; }
+/* Sidebar Tabs Styling */
+.tab-btn {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    padding: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: all 0.3s ease;
+}
+
+.tab-btn:hover {
+    color: var(--text-main);
+}
+
+.tab-btn.active {
+    color: var(--primary);
+    border-bottom: 2px solid var(--primary);
+}
+
+/* Custom Scrollbar for Group Members List */
+#groupMembersList::-webkit-scrollbar {
+    width: 4px;
+}
+#groupMembersList::-webkit-scrollbar-thumb {
+    background-color: var(--primary);
+    border-radius: 4px;
+}
