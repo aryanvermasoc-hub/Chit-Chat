@@ -268,6 +268,14 @@ function openChat(targetUid, targetName, targetAvatar, isTargetOnline, targetLas
   if(replyingToMsg) document.getElementById("cancelReplyBtn").click();
   document.getElementById("privateDoodleArea").style.display = "none";
 
+  // 👇 FIX: Purane overlay ko turant hide aur clear karo
+  const overlay = document.getElementById("chatStateOverlay");
+  if(overlay) {
+      overlay.style.display = "none";
+      overlay.innerHTML = "";
+  }
+  // 👆 ----------------------------------------------
+
   if (myUserData && myUserData.chatMeta && myUserData.chatMeta[targetUserUid] && myUserData.chatMeta[targetUserUid].wallpaperUrl) { 
       document.getElementById("chatBox").style.backgroundImage = `linear-gradient(rgba(10,10,15,0.8), rgba(10,10,15,0.8)), url('${myUserData.chatMeta[targetUserUid].wallpaperUrl}')`; 
   } else { 
@@ -295,6 +303,9 @@ function openGroupChat(groupId, groupName, memberCount) {
   document.getElementById("launchGameMenuBtn").style.display = "none"; document.getElementById("chatSettingsBtn").style.display = "none"; document.getElementById("chatDoodleBtn").style.display = "none"; document.getElementById("chatBox").innerHTML = ""; document.getElementById("chatBox").style.backgroundImage = "none"; if(replyingToMsg) document.getElementById("cancelReplyBtn").click();
   if(pDoodleUnsubscribe) { pDoodleUnsubscribe(); pDoodleUnsubscribe = null; }
   
+  const overlay = document.getElementById("chatStateOverlay");
+  if(overlay) { overlay.style.display = "none"; overlay.innerHTML = ""; }
+
   const groupData = allGroups.find(g => g.id === groupId); const avatarToUse = groupData && groupData.avatarUrl ? groupData.avatarUrl : `https://ui-avatars.com/api/?name=${encodeURIComponent(groupName)}&background=8b5cf6&color=fff`;
   document.getElementById("chatTargetName").innerText = groupName; document.getElementById("chatTargetAvatar").src = avatarToUse; document.getElementById("chatTargetStatus").innerText = `${memberCount} members (Tap for Info)`;
   emptyChatState.style.display = "none"; activeChatState.style.display = "flex"; if(window.innerWidth <= 992) { sidebar.classList.add("hidden"); history.pushState({ page: "chat" }, ""); }
@@ -618,10 +629,17 @@ function renderLudo(data, gameId) {
 window.rollLudoDice = async (gameId, myRole) => { const diceBtn = document.getElementById("ludoDiceBtn"); diceBtn.classList.add("dice-rolling"); diceBtn.classList.remove("pulse"); diceBtn.disabled = true; setTimeout(async () => { const roll = Math.floor(Math.random() * 6) + 1; await updateDoc(doc(db, "games", gameId), { diceValue: roll }); const docSnap = await getDoc(doc(db, "games", gameId)); const data = docSnap.data(); let canMove = false; data.ludoTokens[myRole].forEach(pos => { if (pos === -1 && roll === 6) canMove = true; if (pos !== -1) { if (myRole === 'p1' && pos + roll <= 57) canMove = true; if (myRole === 'p2') { let absoluteProgress = pos >= 26 ? (pos - 26) : (pos + 26); if (absoluteProgress + roll <= 57) canMove = true; } } }); if (!canMove) { showToast("No Moves!", "Skipping turn..."); const nextTurn = data.player1 === auth.currentUser.uid ? data.player2 : data.player1; await updateDoc(doc(db, "games", gameId), { turn: nextTurn, diceValue: null }); } }, 500); };
 window.moveLudoToken = async (gameId, data, tokenIndex, role) => { let tokens = { ...data.ludoTokens }; let roll = data.diceValue; let currPos = tokens[role][tokenIndex]; let newPos = currPos; if (currPos === -1) { if (roll !== 6) return; newPos = role === 'p1' ? 0 : 26; } else { if (role === 'p1') { newPos = currPos + roll; if (newPos > 51 && currPos <= 51) newPos = 51 + (newPos - 51); if (newPos > 57) return; } else { newPos = currPos + roll; if (currPos <= 24 && newPos >= 25) { newPos = 56 + (newPos - 24); } else if (newPos > 51 && currPos > 24 && currPos <= 51) { newPos = newPos - 52; } if (newPos > 62) return; } } tokens[role][tokenIndex] = newPos; const safeZones = [0, 8, 13, 21, 26, 34, 39, 47]; let hasKilled = false; let oppRole = role === 'p1' ? 'p2' : 'p1'; if (!safeZones.includes(newPos) && newPos <= 51) { tokens[oppRole].forEach((oppPos, idx) => { if (oppPos === newPos) { tokens[oppRole][idx] = -1; hasKilled = true; } }); } let hasWon = false; if (role === 'p1' && tokens.p1.every(p => p === 57)) hasWon = true; if (role === 'p2' && tokens.p2.every(p => p === 62)) hasWon = true; let nextTurn = data.turn; let nextDice = null; if (roll !== 6 && !hasKilled && !hasWon) { nextTurn = data.player1 === auth.currentUser.uid ? data.player2 : data.player1; } await updateDoc(doc(db, "games", gameId), { ludoTokens: tokens, turn: nextTurn, diceValue: nextDice, winner: hasWon ? auth.currentUser.uid : null }); };
 window.resetLudo = async (gameId) => { const docSnap = await getDoc(doc(db, "games", gameId)); await updateDoc(doc(db, "games", gameId), { ludoTokens: { p1: [-1, -1, -1, -1], p2: [-1, -1, -1, -1] }, winner: null, turn: docSnap.data().player1, diceValue: null }); };
+// --- SINGLE PLAYER GAMES (TTT, RPS, ACTION, FLAPPY BIRD) ---
+window.startSinglePlayer = (gameType) => { 
+    singlePlayerMode = true; currentGameId = null; 
+    if (window.innerWidth <= 992) sidebar.classList.add("hidden"); 
+    activeGameArea.style.display = "flex"; 
+    
+    if (gameType === 'tictactoe') { spTttReset(); } 
+    else if (gameType === 'rps') { renderSinglePlayerRPS(); } 
+    else if (gameType === 'jetfighter' || gameType === 'carracing' || gameType === 'flappybird') { renderSinglePlayerAction(gameType); } 
+};
 
-
-// --- SINGLE PLAYER GAMES (TTT, RPS, ACTION) ---
-window.startSinglePlayer = (gameType) => { singlePlayerMode = true; currentGameId = null; if (window.innerWidth <= 992) sidebar.classList.add("hidden"); activeGameArea.style.display = "flex"; if (gameType === 'tictactoe') { spTttReset(); } else if (gameType === 'rps') { renderSinglePlayerRPS(); } else if (gameType === 'jetfighter' || gameType === 'carracing') { renderSinglePlayerAction(gameType); } };
 let spTttBoard = ["","","","","","","","",""]; let spTttActive = true;
 window.renderSinglePlayerTTT = () => { document.getElementById("activeGameTitle").innerText = "Tic Tac Toe (Solo)"; let html = `<div class="game-turn-indicator" style="margin-bottom:10px;">You vs Computer</div><select id="spDifficulty" class="difficulty-select" onchange="changeSpDifficulty(this.value)"><option value="easy" ${currentSpDifficulty==='easy'?'selected':''}>Difficulty: Easy</option><option value="medium" ${currentSpDifficulty==='medium'?'selected':''}>Difficulty: Medium</option><option value="hard" ${currentSpDifficulty==='hard'?'selected':''}>Difficulty: Hard</option></select><div class="ttt-board">`; spTttBoard.forEach((cell, i) => { const cellClass = cell === 'X' ? 'x' : (cell === 'O' ? 'o' : ''); html += `<div class="ttt-cell ${cellClass}" onclick="spTttMove(${i})">${cell}</div>`; }); html += `</div>`; if(!spTttActive) html += `<button class="primary-btn glow-btn" style="max-width:200px; margin-top:20px;" onclick="spTttReset()">Play Again</button>`; gameUIContainer.innerHTML = html; };
 function getBotMoveTTT(board, difficulty) { let empty = board.map((c, i) => c === "" ? i : null).filter(c => c !== null); if (empty.length === 0) return -1; if (difficulty === 'easy') return empty[Math.floor(Math.random() * empty.length)]; const checkWin = (player) => { const lines = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]]; for(let line of lines) { const [a,b,c] = line; if(board[a]===player && board[b]===player && board[c]==="") return c; if(board[a]===player && board[c]===player && board[b]==="") return b; if(board[b]===player && board[c]===player && board[a]==="") return a; } return null; }; let winMove = checkWin("O"); let blockMove = checkWin("X"); if (difficulty === 'hard') { if (winMove !== null) return winMove; if (blockMove !== null) return blockMove; if (board[4] === "") return 4; const corners = [0, 2, 6, 8].filter(c => board[c] === ""); if (corners.length > 0) return corners[Math.floor(Math.random() * corners.length)]; return empty[Math.floor(Math.random() * empty.length)]; } if (Math.random() > 0.4) { if (winMove !== null) return winMove; if (blockMove !== null) return blockMove; } return empty[Math.floor(Math.random() * empty.length)]; }
@@ -635,12 +653,154 @@ window.renderSinglePlayerRPS = () => { document.getElementById("activeGameTitle"
 window.spRpsMove = (choice) => { spRpsHistory.push(choice); const choices = ['rock', 'paper', 'scissors']; let botChoice; if (currentSpDifficulty === 'easy') { botChoice = Math.random() > 0.3 ? choices[Math.floor(Math.random() * 3)] : choice; } else if (currentSpDifficulty === 'medium' || spRpsHistory.length < 3) { botChoice = choices[Math.floor(Math.random() * 3)]; } else { if (Math.random() < 0.2) { botChoice = choices[Math.floor(Math.random() * 3)]; } else { let counts = { rock: 0, paper: 0, scissors: 0 }; spRpsHistory.slice(-5).forEach(m => counts[m]++); let maxMove = Object.keys(counts).reduce((a, b) => counts[a] > counts[b] ? a : b); if (maxMove === 'rock') botChoice = 'paper'; else if (maxMove === 'paper') botChoice = 'scissors'; else botChoice = 'rock'; } } let result = "It's a Tie!"; if ((choice === 'rock' && botChoice === 'scissors') || (choice === 'paper' && botChoice === 'rock') || (choice === 'scissors' && botChoice === 'paper')) { result = "🎉 You Won!"; } else if (choice !== botChoice) { result = "😞 Computer Won!"; } const icons = { rock: "fa-hand-back-fist", paper: "fa-hand", scissors: "fa-hand-scissors" }; let html = `<div class="game-turn-indicator">${result}</div><div class="rps-arena"><div class="rps-player"><span>You</span><div class="rps-choice-display"><i class="fa-solid ${icons[choice]}"></i></div></div><div class="vs-badge">VS</div><div class="rps-player"><span>Computer</span><div class="rps-choice-display"><i class="fa-solid ${icons[botChoice]}" style="color: #10b981;"></i></div></div></div><button class="primary-btn glow-btn" style="max-width:200px; margin-top:20px;" onclick="renderSinglePlayerRPS()">Play Again</button>`; gameUIContainer.innerHTML = html; };
 
 let spGameType = ''; let spHighScore = 0;
-window.renderSinglePlayerAction = async (gameType) => { spGameType = gameType; document.getElementById("activeGameTitle").innerText = gameType === 'carracing' ? "Car Racing (Solo)" : "Jet Fighter (Solo)"; gameUIContainer.innerHTML = `<h3>Loading High Score... <i class="fa-solid fa-spinner fa-spin"></i></h3>`; try { const userDoc = await getDoc(doc(db, "users", auth.currentUser.uid)); const data = userDoc.data(); spHighScore = (data && data.highScores && data.highScores[gameType]) ? data.highScores[gameType] : 0; } catch(e) { spHighScore = 0; } showSpActionMenu(); };
-window.showSpActionMenu = () => { isPlayingActionGame = false; gameUIContainer.innerHTML = `<div class="game-turn-indicator" style="margin-bottom: 5px;">Beat your High Score!</div><div style="font-size: 16px; color: var(--accent); margin-bottom: 15px; font-weight:bold;">High Score: ${spHighScore}</div><div class="action-game-container"><div style="position: relative; width: 100%; max-width: 300px;"><canvas id="actionCanvas" width="300" height="400" class="action-canvas" style="margin: 0;"></canvas><div id="startOverlay" style="position: absolute; top:0; left:0; width:100%; height:100%; display:flex; justify-content:center; align-items:center; background:rgba(0,0,0,0.6); border-radius:12px; z-index:10;"><button class="primary-btn glow-btn" id="btnStartGame" style="width:auto; padding:15px 40px; font-size: 16px;">Play Now</button></div></div><div class="game-btn-row" id="gameControls" style="display:none;"><button class="game-control-btn" id="btnLeft">⬅️</button><button class="game-control-btn" id="btnRight">➡️</button></div></div>`; const canvas = document.getElementById('actionCanvas'); if (canvas) { const ctx = canvas.getContext('2d'); if (spGameType === 'carracing') { ctx.fillStyle = '#8b5cf6'; ctx.fillRect(135, 330, 30, 50); } else { ctx.fillStyle = '#10b981'; ctx.beginPath(); ctx.moveTo(150, 350); ctx.lineTo(165, 380); ctx.lineTo(135, 380); ctx.fill(); } } document.getElementById('btnStartGame').addEventListener('click', () => { isPlayingActionGame = true; document.getElementById('startOverlay').style.display = 'none'; document.getElementById('gameControls').style.display = 'flex'; if (spGameType === 'carracing') startCarRacing(null, true); else startJetFighter(null, true); }); };
+window.renderSinglePlayerAction = async (gameType) => { 
+    spGameType = gameType; 
+    let title = "Jet Fighter (Solo)";
+    if(gameType === 'carracing') title = "Car Racing (Solo)";
+    if(gameType === 'flappybird') title = "Flappy Bird (Solo)";
+    document.getElementById("activeGameTitle").innerText = title; 
+    
+    gameUIContainer.innerHTML = `<h3>Loading High Score... <i class="fa-solid fa-spinner fa-spin"></i></h3>`; 
+    try { 
+        const userDoc = await getDoc(doc(db, "users", auth.currentUser.uid)); 
+        const data = userDoc.data(); 
+        spHighScore = (data && data.highScores && data.highScores[gameType]) ? data.highScores[gameType] : 0; 
+    } catch(e) { spHighScore = 0; } 
+    showSpActionMenu(); 
+};
+
+window.showSpActionMenu = () => { 
+    isPlayingActionGame = false; 
+    gameUIContainer.innerHTML = `<div class="game-turn-indicator" style="margin-bottom: 5px;">Beat your High Score!</div><div style="font-size: 16px; color: var(--accent); margin-bottom: 15px; font-weight:bold;">High Score: ${spHighScore}</div><div class="action-game-container"><div style="position: relative; width: 100%; max-width: 300px;"><canvas id="actionCanvas" width="300" height="400" class="action-canvas" style="margin: 0;"></canvas><div id="startOverlay" style="position: absolute; top:0; left:0; width:100%; height:100%; display:flex; justify-content:center; align-items:center; background:rgba(0,0,0,0.6); border-radius:12px; z-index:10;"><button class="primary-btn glow-btn" id="btnStartGame" style="width:auto; padding:15px 40px; font-size: 16px;">Play Now</button></div></div><div class="game-btn-row" id="gameControls" style="display:none;"><button class="game-control-btn" id="btnLeft">⬅️</button><button class="game-control-btn" id="btnRight">➡️</button></div></div>`; 
+    const canvas = document.getElementById('actionCanvas'); 
+    if (canvas) { 
+        const ctx = canvas.getContext('2d'); 
+        if (spGameType === 'carracing') { 
+            ctx.fillStyle = '#8b5cf6'; ctx.fillRect(135, 330, 30, 50); 
+        } else if (spGameType === 'flappybird') {
+            ctx.fillStyle = '#f59e0b'; ctx.beginPath(); ctx.arc(150, 200, 15, 0, Math.PI * 2); ctx.fill();
+        } else { 
+            ctx.fillStyle = '#10b981'; ctx.beginPath(); ctx.moveTo(150, 350); ctx.lineTo(165, 380); ctx.lineTo(135, 380); ctx.fill(); 
+        } 
+    } 
+    document.getElementById('btnStartGame').addEventListener('click', () => { 
+        isPlayingActionGame = true; 
+        document.getElementById('startOverlay').style.display = 'none'; 
+        document.getElementById('gameControls').style.display = 'flex'; 
+        
+        if (spGameType === 'carracing') startCarRacing(null, true); 
+        else if (spGameType === 'flappybird') startFlappyBird(null, true);
+        else startJetFighter(null, true); 
+    }); 
+};
+
 window.handleSpActionGameOver = async (score) => { let isNewHighScore = false; if (score > spHighScore) { spHighScore = score; isNewHighScore = true; try { await setDoc(doc(db, "users", auth.currentUser.uid), { highScores: { [spGameType]: score } }, { merge: true }); } catch(e) {} } gameUIContainer.innerHTML = `<div class="game-turn-indicator" style="color:${isNewHighScore ? 'var(--primary)' : 'white'}">${isNewHighScore ? '🏆 NEW HIGH SCORE!' : 'GAME OVER'}</div><div style="font-size: 24px; text-align: center; margin: 20px 0;">Your Score: <b style="color:var(--primary)">${score}</b><br>High Score: <b style="color:var(--accent)">${spHighScore}</b></div><button class="primary-btn glow-btn" style="max-width:200px; margin-top:20px;" onclick="showSpActionMenu()">Play Again</button>`; };
 
 function renderActionGame(data, gameId, gameType) { const isPlayer1 = data.player1 === auth.currentUser.uid; const myScore = isPlayer1 ? data.p1Score : data.p2Score; const oppScore = isPlayer1 ? data.p2Score : data.p1Score; if (myScore !== undefined && myScore !== null && oppScore !== undefined && oppScore !== null) { isPlayingActionGame = false; let statusText = "It's a Tie!"; if (myScore > oppScore) statusText = "🎉 You Won!"; else if (myScore < oppScore) statusText = "😞 You Lost!"; gameUIContainer.innerHTML = `<div class="game-turn-indicator">${statusText}</div><div style="font-size: 24px; text-align: center; margin: 20px 0;">Your Score: <b style="color:var(--primary)">${myScore}</b><br>Opponent's Score: <b style="color:var(--accent)">${oppScore}</b></div><button class="primary-btn glow-btn" style="max-width:200px; margin-top:20px;" onclick="resetActionGame('${gameId}')">Play Again</button>`; return; } if (myScore !== undefined && myScore !== null) { isPlayingActionGame = false; gameUIContainer.innerHTML = `<div class="game-turn-indicator">Waiting for opponent to finish...</div><div style="font-size: 20px; text-align: center; margin: 20px 0;">Your Score: <b style="color:var(--primary)">${myScore}</b></div>`; return; } if (isPlayingActionGame) return; gameUIContainer.innerHTML = `<div class="game-turn-indicator" style="margin-bottom: 5px;">High Score Challenge!</div><div class="action-game-container"><div style="position: relative; width: 100%; max-width: 300px;"><canvas id="actionCanvas" width="300" height="400" class="action-canvas" style="margin: 0;"></canvas><div id="startOverlay" style="position: absolute; top:0; left:0; width:100%; height:100%; display:flex; justify-content:center; align-items:center; background:rgba(0,0,0,0.6); border-radius:12px; z-index:10; flex-direction:column; gap:10px;"><span style="color:white; font-size:14px;">Opponent is ready!</span><button class="primary-btn glow-btn" id="btnStartGame" style="width:auto; padding:15px 40px; font-size: 16px;">Play Now</button></div></div><div class="game-btn-row" id="gameControls" style="display:none;"><button class="game-control-btn" id="btnLeft">⬅️</button><button class="game-control-btn" id="btnRight">➡️</button></div></div>`; const canvas = document.getElementById('actionCanvas'); if (canvas) { const ctx = canvas.getContext('2d'); if (gameType === 'carracing') { ctx.fillStyle = '#8b5cf6'; ctx.fillRect(135, 330, 30, 50); } else { ctx.fillStyle = '#10b981'; ctx.beginPath(); ctx.moveTo(150, 350); ctx.lineTo(165, 380); ctx.lineTo(135, 380); ctx.fill(); } } document.getElementById('btnStartGame').addEventListener('click', () => { isPlayingActionGame = true; document.getElementById('startOverlay').style.display = 'none'; document.getElementById('gameControls').style.display = 'flex'; if (gameType === 'carracing') startCarRacing(gameId, isPlayer1); else startJetFighter(gameId, isPlayer1); }); }
 window.resetActionGame = async (gameId) => { await updateDoc(doc(db, "games", gameId), { p1Score: null, p2Score: null }); };
+
+// FLAPPY BIRD ENGINE
+function startFlappyBird(gameId, isPlayer1) { 
+    const canvas = document.getElementById('actionCanvas'); 
+    if (!canvas) return; 
+    const ctx = canvas.getContext('2d'); 
+    
+    // Hide Left/Right controls
+    document.getElementById('gameControls').style.display = 'none';
+
+    let birdY = 200; 
+    let velocity = 0; 
+    const gravity = 0.5; 
+    const jumpStrength = -7; 
+    const birdRadius = 12; 
+    
+    let pipes = []; 
+    let frameCount = 0; 
+    let score = 0; 
+    let isGameOver = false; 
+
+    const jump = (e) => { 
+        if(!isPlayingActionGame) return; 
+        if(e && e.type === 'keydown' && e.key !== ' ' && e.key !== 'ArrowUp') return; 
+        if(e) e.preventDefault(); 
+        velocity = jumpStrength; 
+    }; 
+
+    window.addEventListener('keydown', jump); 
+    canvas.addEventListener('mousedown', jump); 
+    canvas.addEventListener('touchstart', jump, {passive: false});
+
+    function drawBird(x, y) { 
+        ctx.fillStyle = '#f59e0b'; 
+        ctx.beginPath(); ctx.arc(x, y, birdRadius, 0, Math.PI * 2); ctx.fill(); 
+        ctx.fillStyle = 'white'; ctx.beginPath(); ctx.arc(x + 5, y - 4, 4, 0, Math.PI*2); ctx.fill(); 
+        ctx.fillStyle = 'black'; ctx.beginPath(); ctx.arc(x + 6, y - 4, 2, 0, Math.PI*2); ctx.fill(); 
+    } 
+
+    function gameLoop() { 
+        if(isGameOver) return; 
+        ctx.clearRect(0, 0, canvas.width, canvas.height); 
+
+        velocity += gravity; 
+        birdY += velocity; 
+
+        if(frameCount % 100 === 0) { 
+            const gap = 120; 
+            const minPipeHeight = 50; 
+            const maxPipeHeight = canvas.height - gap - minPipeHeight; 
+            const topHeight = Math.floor(Math.random() * (maxPipeHeight - minPipeHeight + 1) + minPipeHeight); 
+            pipes.push({ x: canvas.width, topHeight: topHeight, passed: false }); 
+        } 
+
+        ctx.fillStyle = '#10b981'; 
+        for(let i=0; i<pipes.length; i++) { 
+            let p = pipes[i]; 
+            p.x -= 2.5; 
+            ctx.fillRect(p.x, 0, 40, p.topHeight); 
+            const bottomY = p.topHeight + 120; 
+            ctx.fillRect(p.x, bottomY, 40, canvas.height - bottomY); 
+
+            const birdX = 50; 
+            if (birdX + birdRadius > p.x && birdX - birdRadius < p.x + 40) { 
+                if (birdY - birdRadius < p.topHeight || birdY + birdRadius > bottomY) { 
+                    gameOver(); 
+                } 
+            } 
+            if (p.x + 40 < birdX && !p.passed) { score++; p.passed = true; } 
+        } 
+
+        pipes = pipes.filter(p => p.x + 40 > 0); 
+
+        if(birdY + birdRadius > canvas.height || birdY - birdRadius < 0) { gameOver(); } 
+
+        drawBird(50, birdY); 
+
+        ctx.fillStyle = 'white'; ctx.font = 'bold 20px Inter'; ctx.fillText('Score: ' + score, 10, 30); 
+
+        frameCount++; 
+        currentAnimationId = requestAnimationFrame(gameLoop); 
+    } 
+
+    function gameOver() { 
+        isGameOver = true; 
+        isPlayingActionGame = false; 
+        window.removeEventListener('keydown', jump); 
+        canvas.removeEventListener('mousedown', jump); 
+        canvas.removeEventListener('touchstart', jump); 
+        if(currentAnimationId) cancelAnimationFrame(currentAnimationId); 
+        
+        ctx.fillStyle = 'rgba(0,0,0,0.7)'; ctx.fillRect(0,0,canvas.width,canvas.height); 
+        ctx.fillStyle = 'white'; ctx.font = 'bold 20px Inter'; 
+        ctx.fillText('GAME OVER', 90, 180); ctx.fillText('Score: ' + score, 110, 220); 
+        
+        setTimeout(() => { 
+            if (singlePlayerMode) { handleSpActionGameOver(score); } 
+            else { updateDoc(doc(db, "games", gameId), { [isPlayer1 ? 'p1Score' : 'p2Score']: score }); } 
+        }, 1500); 
+    } 
+
+    gameLoop(); 
+}
 
 function startCarRacing(gameId, isPlayer1) { const canvas = document.getElementById('actionCanvas'); if (!canvas) return; const ctx = canvas.getContext('2d'); let carX = 135; const carWidth = 30; const carHeight = 50; let score = 0; let obstacles = []; let gameSpeed = 3; let isGameOver = false; const handleKeyDown = (e) => { if(!isPlayingActionGame) return; if(e.key === 'ArrowLeft' && carX > 35) carX -= 100; if(e.key === 'ArrowRight' && carX < 235) carX += 100; }; window.addEventListener('keydown', handleKeyDown); function drawCar(x, y, color) { ctx.fillStyle = color; ctx.fillRect(x, y, carWidth, carHeight); ctx.fillStyle = '#333'; ctx.fillRect(x - 5, y + 5, 5, 15); ctx.fillRect(x + carWidth, y + 5, 5, 15); ctx.fillRect(x - 5, y + 30, 5, 15); ctx.fillRect(x + carWidth, y + 30, 5, 15); } function gameLoop() { if(isGameOver) return; ctx.clearRect(0, 0, canvas.width, canvas.height); ctx.strokeStyle = '#555'; ctx.setLineDash([20, 20]); ctx.beginPath(); ctx.moveTo(100, 0); ctx.lineTo(100, 400); ctx.stroke(); ctx.beginPath(); ctx.moveTo(200, 0); ctx.lineTo(200, 400); ctx.stroke(); ctx.setLineDash([]); drawCar(carX, 330, '#8b5cf6'); if(Math.random() < 0.02 + (score/20000)) { const lanes = [35, 135, 235]; const lane = lanes[Math.floor(Math.random() * lanes.length)]; if (!obstacles.some(o => Math.abs(o.y - (-50)) < 150 && o.x === lane)) { obstacles.push({ x: lane, y: -50, width: 30, height: 50 }); } } for(let i=0; i<obstacles.length; i++) { let obs = obstacles[i]; obs.y += gameSpeed; drawCar(obs.x, obs.y, '#ec4899'); if (carX < obs.x + obs.width && carX + carWidth > obs.x && 330 < obs.y + obs.height && 330 + carHeight > obs.y) { gameOver(); } } obstacles = obstacles.filter(o => o.y < 450); score++; if(score % 500 === 0) gameSpeed += 0.5; ctx.fillStyle = 'white'; ctx.font = 'bold 16px Inter'; ctx.fillText('Score: ' + Math.floor(score/10), 10, 25); currentAnimationId = requestAnimationFrame(gameLoop); } function gameOver() { isGameOver = true; isPlayingActionGame = false; window.removeEventListener('keydown', handleKeyDown); if(currentAnimationId) cancelAnimationFrame(currentAnimationId); const finalScore = Math.floor(score/10); ctx.fillStyle = 'rgba(0,0,0,0.7)'; ctx.fillRect(0,0,canvas.width,canvas.height); ctx.fillStyle = 'white'; ctx.font = 'bold 20px Inter'; ctx.fillText('CRASHED!', 100, 180); ctx.fillText('Score: ' + finalScore, 100, 220); setTimeout(() => { if (singlePlayerMode) { handleSpActionGameOver(finalScore); } else { updateDoc(doc(db, "games", gameId), { [isPlayer1 ? 'p1Score' : 'p2Score']: finalScore }); } }, 1500); } const btnLeft = document.getElementById('btnLeft'); const btnRight = document.getElementById('btnRight'); btnLeft.onmousedown = btnLeft.ontouchstart = (e) => { e.preventDefault(); if(carX > 35) carX -= 100; }; btnRight.onmousedown = btnRight.ontouchstart = (e) => { e.preventDefault(); if(carX < 235) carX += 100; }; gameLoop(); }
 function startJetFighter(gameId, isPlayer1) { const canvas = document.getElementById('actionCanvas'); if (!canvas) return; const ctx = canvas.getContext('2d'); let jetX = 135; const jetSize = 30; let bullets = []; let enemies = []; let score = 0; let isGameOver = false; let isMovingLeft = false; let isMovingRight = false; const handleKeyDown = (e) => { if(!isPlayingActionGame) return; if(e.key === 'ArrowLeft') isMovingLeft = true; if(e.key === 'ArrowRight') isMovingRight = true; if(e.key === ' ' || e.key === 'ArrowUp') { e.preventDefault(); bullets.push({ x: jetX + jetSize/2 - 2, y: 350 }); } }; const handleKeyUp = (e) => { if(!isPlayingActionGame) return; if(e.key === 'ArrowLeft') isMovingLeft = false; if(e.key === 'ArrowRight') isMovingRight = false; }; window.addEventListener('keydown', handleKeyDown); window.addEventListener('keyup', handleKeyUp); function drawJet(x, y, color) { ctx.fillStyle = color; ctx.beginPath(); ctx.moveTo(x + jetSize/2, y); ctx.lineTo(x + jetSize, y + jetSize); ctx.lineTo(x, y + jetSize); ctx.fill(); } function gameLoop() { if(isGameOver) return; ctx.clearRect(0, 0, canvas.width, canvas.height); if(isMovingLeft && jetX > 0) jetX -= 5; if(isMovingRight && jetX < canvas.width - jetSize) jetX += 5; ctx.fillStyle = 'white'; for(let i=0; i<3; i++) { ctx.fillRect(Math.random()*canvas.width, Math.random()*canvas.height, 2, 2); } drawJet(jetX, 350, '#10b981'); ctx.fillStyle = '#f59e0b'; for(let i=0; i<bullets.length; i++) { bullets[i].y -= 7; ctx.fillRect(bullets[i].x, bullets[i].y, 4, 10); } bullets = bullets.filter(b => b.y > 0); if(Math.random() < 0.03 + (score/10000)) { enemies.push({ x: Math.random() * (canvas.width - 20), y: -20, size: 20 }); } for(let i=0; i<enemies.length; i++) { let e = enemies[i]; e.y += 2.5; ctx.fillStyle = '#ef4444'; ctx.fillRect(e.x, e.y, e.size, e.size); for(let j=0; j<bullets.length; j++) { let b = bullets[j]; if(b.x > e.x && b.x < e.x + e.size && b.y > e.y && b.y < e.y + e.size) { e.dead = true; b.dead = true; score += 10; } } if (jetX < e.x + e.size && jetX + jetSize > e.x && 350 < e.y + e.size && 350 + jetSize > e.y) { gameOver(); } } enemies = enemies.filter(e => !e.dead && e.y < 450); bullets = bullets.filter(b => !b.dead); ctx.fillStyle = 'white'; ctx.font = 'bold 16px Inter'; ctx.fillText('Score: ' + score, 10, 25); currentAnimationId = requestAnimationFrame(gameLoop); } function gameOver() { isGameOver = true; isPlayingActionGame = false; window.removeEventListener('keydown', handleKeyDown); window.removeEventListener('keyup', handleKeyUp); if(currentAnimationId) cancelAnimationFrame(currentAnimationId); ctx.fillStyle = 'rgba(0,0,0,0.7)'; ctx.fillRect(0,0,canvas.width,canvas.height); ctx.fillStyle = 'white'; ctx.font = 'bold 20px Inter'; ctx.fillText('DESTROYED!', 90, 180); ctx.fillText('Score: ' + score, 105, 220); setTimeout(() => { if (singlePlayerMode) { handleSpActionGameOver(score); } else { updateDoc(doc(db, "games", gameId), { [isPlayer1 ? 'p1Score' : 'p2Score']: score }); } }, 1500); } const btnLeft = document.getElementById('btnLeft'); const btnRight = document.getElementById('btnRight'); btnLeft.onmousedown = btnLeft.ontouchstart = (e) => { e.preventDefault(); isMovingLeft = true; }; btnLeft.onmouseup = btnLeft.ontouchend = btnLeft.onmouseleave = (e) => { e.preventDefault(); isMovingLeft = false; }; btnRight.onmousedown = btnRight.ontouchstart = (e) => { e.preventDefault(); isMovingRight = true; }; btnRight.onmouseup = btnRight.ontouchend = btnRight.onmouseleave = (e) => { e.preventDefault(); isMovingRight = false; }; if(!document.getElementById('btnShoot')) { const btnShoot = document.createElement('button'); btnShoot.id = 'btnShoot'; btnShoot.className = 'game-control-btn'; btnShoot.style.background = 'rgba(236, 72, 153, 0.2)'; btnShoot.style.borderColor = 'var(--accent)'; btnShoot.innerText = '🔥'; document.getElementById('gameControls').appendChild(btnShoot); btnShoot.onmousedown = btnShoot.ontouchstart = (e) => { e.preventDefault(); bullets.push({ x: jetX + jetSize/2 - 2, y: 350 }); }; } gameLoop(); }
@@ -665,11 +825,10 @@ const exploreSections = document.querySelectorAll(".explore-section");
 let globalChatUnsubscribe = null;
 
 exploreBtn.addEventListener("click", () => {
-    history.pushState({ page: "explore" }, ""); // <-- YEH LINE ADD HUI HAI
+    history.pushState({ page: "explore" }, ""); 
     exploreArea.style.display = "flex";
     if(window.innerWidth <= 992) sidebar.classList.add("hidden");
     
-    // Saare tabs reset karo aur Memes ko default open karo
     exploreTabs.forEach(t => t.classList.remove("active"));
     exploreSections.forEach(s => s.classList.remove("active"));
     document.querySelector('.explore-tab[data-target="exploreMemes"]').classList.add("active");
@@ -795,7 +954,7 @@ async function fetchLeaderboard() {
         });
     } catch(e) { leaderboardList.innerHTML = "<p>Error loading leaderboard.</p>"; }
 }
-let currentMemeSubreddit = 'wholesomememes'; // Default safe memes
+let currentMemeSubreddit = 'wholesomememes'; 
 
 const memeSafeBtn = document.getElementById("memeSafeBtn");
 const memeDankBtn = document.getElementById("memeDankBtn");
@@ -812,7 +971,7 @@ if(memeSafeBtn && memeDankBtn) {
     memeDankBtn.addEventListener("click", () => {
         memeDankBtn.classList.add("active");
         memeSafeBtn.classList.remove("active");
-        currentMemeSubreddit = 'dankmemes'; // 18+ Memes
+        currentMemeSubreddit = 'dankmemes'; 
         memesWrapper.innerHTML = '<div style="color:var(--primary); padding: 20px;"><i class="fa-solid fa-spinner fa-spin fa-2x"></i></div>';
         loadMoreMemes();
     });
@@ -824,28 +983,66 @@ async function initMemesFeed() {
     loadMoreMemes();
 }
 async function loadMoreMemes() {
+    const spinner = memesWrapper.querySelector('.fa-spinner')?.parentElement;
+    
     try {
-        const response = await fetch('https://meme-api.com/gimme/Animemes/10');
+        // TIER 1: Pehli koshish (Meme-API Reddit se)
+        const response = await fetch(`https://meme-api.com/gimme/${currentMemeSubreddit}/10`);
+        if (!response.ok) throw new Error("Meme API Down");
+        
         const data = await response.json();
-        const spinner = memesWrapper.querySelector('.fa-spinner')?.parentElement;
         if(spinner) spinner.remove();
 
         data.memes.forEach(meme => {
-            if(!meme.url) return;
+            if(!meme.url || meme.url.includes('.mp4')) return; // Video ignore karein
             const card = document.createElement('div');
             card.className = "meme-card";
-            card.innerHTML = `<h4>${meme.title}</h4><img src="${meme.url}" alt="Meme" loading="lazy"><div style="margin-top: 10px; font-size: 12px; color: var(--text-muted);">👍 ${meme.ups} | r/Animemes</div>`;
+            card.innerHTML = `<h4>${meme.title}</h4><img src="${meme.url}" alt="Meme" loading="lazy"><div style="margin-top: 10px; font-size: 12px; color: var(--text-muted);">👍 ${meme.ups || '1k+'} | r/${currentMemeSubreddit}</div>`;
             memesWrapper.appendChild(card);
         });
-        const btn = document.createElement("button"); btn.className = "primary-btn glow-btn"; btn.style.width = "auto"; btn.style.margin = "20px"; btn.innerText = "Load More Memes";
-        btn.onclick = () => { btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>'; loadMoreMemes(); };
-        memesWrapper.appendChild(btn);
-    } catch(e) { memesWrapper.innerHTML = `<div style="color:#ef4444;">Failed to fetch memes. Are you offline?</div>`; }
+
+    } catch(e) { 
+        console.log("Primary API failed, trying Imgflip Fallback...");
+        
+        // TIER 2: Dusri koshish (Imgflip API - 99.9% Uptime)
+        try {
+            const fallbackRes = await fetch('https://api.imgflip.com/get_memes');
+            const fallbackData = await fallbackRes.json();
+            if(spinner) spinner.remove();
+
+            // Imgflip mein se randomly 10 memes nikalte hain
+            const allMemes = fallbackData.data.memes;
+            const randomMemes = allMemes.sort(() => 0.5 - Math.random()).slice(0, 10);
+
+            randomMemes.forEach(meme => {
+                const card = document.createElement('div');
+                card.className = "meme-card";
+                card.innerHTML = `<h4>${meme.name}</h4><img src="${meme.url}" alt="Meme" loading="lazy"><div style="margin-top: 10px; font-size: 12px; color: var(--text-muted);">🔥 Trending | Imgflip</div>`;
+                memesWrapper.appendChild(card);
+            });
+        } catch(err) {
+            if(spinner) spinner.remove();
+            memesWrapper.innerHTML += `<div style="color:#ef4444; text-align:center; padding: 20px;">Check your internet connection or disable strict Ad-Blockers!</div>`; 
+        }
+    }
+
+    // Niche wala button refresh karein
+    const oldBtn = memesWrapper.querySelector('.primary-btn');
+    if(oldBtn) oldBtn.remove();
+
+    const btn = document.createElement("button"); 
+    btn.className = "primary-btn glow-btn"; 
+    btn.style.width = "auto"; btn.style.margin = "20px"; 
+    btn.innerText = "Load More Memes";
+    btn.onclick = () => { 
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>'; 
+        loadMoreMemes(); 
+    };
+    memesWrapper.appendChild(btn);
 }
-
-
+ 
 // =========================================================================
-// 1V1 PRIVATE DOODLE ENGINE (SMART REQUEST & PERSISTENT)
+// 1V1 PRIVATE DOODLE ENGINE
 // =========================================================================
 
 const pDoodleArea = document.getElementById("privateDoodleArea");
@@ -855,7 +1052,6 @@ const pDoodleColor = document.getElementById("pDoodleColor");
 let isPDrawing = false;
 let currentPStroke = [];
 
-// SMART DOODLE BUTTON LOGIC
 chatDoodleBtn.addEventListener("click", async () => {
     if(currentChatStatus !== 'accepted') { alert("Connection request not accepted yet."); return; }
     
@@ -962,13 +1158,16 @@ document.getElementById("clearPDoodleBtn").addEventListener("click", async () =>
     }
 });
 
+// =========================================================================
+// CHAT SETTINGS & WALLPAPERS
+// =========================================================================
+
 if (chatSettingsBtn) {
     chatSettingsBtn.addEventListener("click", () => {
         document.getElementById("chatSettingsModal").style.display = "flex";
     });
 }
 
-// 2. Disappearing Message Timer Sync
 if (modalMsgTimerSelect) {
     modalMsgTimerSelect.addEventListener("change", async (e) => {
         if (currentChatId && !isCurrentChatGroup) {
@@ -980,7 +1179,6 @@ if (modalMsgTimerSelect) {
     });
 }
 
-// 3. Change Wallpaper
 if (changeWallpaperBtn && wallpaperInput) {
     changeWallpaperBtn.addEventListener("click", () => {
         wallpaperInput.click();
@@ -1004,7 +1202,6 @@ if (changeWallpaperBtn && wallpaperInput) {
             const response = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`, { method: "POST", body: formData });
             const data = await response.json();
             
-            // Save to my profile specifically for this target user
             await setDoc(doc(db, "users", auth.currentUser.uid), {
                 chatMeta: { [targetUserUid]: { wallpaperUrl: data.secure_url } }
             }, { merge: true });
@@ -1021,7 +1218,6 @@ if (changeWallpaperBtn && wallpaperInput) {
     });
 }
 
-// 4. Remove Wallpaper
 if (removeWallpaperBtn) {
     removeWallpaperBtn.addEventListener("click", async () => {
         if (!currentChatId || !targetUserUid || isCurrentChatGroup) return;
@@ -1035,7 +1231,6 @@ if (removeWallpaperBtn) {
     });
 }
 
-// 5. Clear Chat for Me
 if (clearChatMeBtn) {
     clearChatMeBtn.addEventListener("click", async () => {
         if (!currentChatId) return;
@@ -1060,11 +1255,11 @@ if (clearChatMeBtn) {
         }
     });
 }
+
 // =========================================================================
 // HARDWARE / NAVIGATION BACK BUTTON SUPPORT
 // =========================================================================
 window.addEventListener("popstate", (e) => {
-    // 1. Agar koi Modal (Settings, Profile, Game Menu) khula hai, toh pehle usko close karein
     const modals = ["profileModal", "chatSettingsModal", "groupSettingsModal", "msgOptionsModal", "gameSelectionModal", "infoModal"];
     let modalClosed = false;
     modals.forEach(id => {
@@ -1075,32 +1270,28 @@ window.addEventListener("popstate", (e) => {
         }
     });
     if (modalClosed) {
-        history.pushState(null, ""); // History restore karo taaki app exit na ho
+        history.pushState(null, ""); 
         return;
     }
 
-    // 2. Agar Private Doodle open hai, toh usko hide karein
     if (document.getElementById("privateDoodleArea") && document.getElementById("privateDoodleArea").style.display === "flex") {
         document.getElementById("hideDoodleBtn").click();
         history.pushState(null, ""); 
         return;
     }
 
-    // 3. Agar Game chal raha hai, toh game close karein
     if (document.getElementById("activeGameArea") && document.getElementById("activeGameArea").style.display === "flex") {
         document.getElementById("closeGameBtn").click();
         history.pushState(null, ""); 
         return;
     }
 
-    // 4. Agar Explore (Memes/Lounge) khula hai, toh usko close karein
     if (document.getElementById("exploreArea") && document.getElementById("exploreArea").style.display === "flex") {
         document.getElementById("closeExploreBtn").click();
         history.pushState(null, ""); 
         return;
     }
 
-    // 5. Agar Mobile view mein Chat khuli hai, toh wapas Users List (Sidebar) par jayein
     if (window.innerWidth <= 992 && document.getElementById("activeChatState") && document.getElementById("activeChatState").style.display === "flex") {
         document.getElementById("backToUsersBtn").click();
         history.pushState(null, ""); 
