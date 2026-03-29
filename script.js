@@ -837,10 +837,12 @@ exploreBtn.addEventListener("click", () => {
 });
 closeExploreBtn.addEventListener("click", () => {
     exploreArea.style.display = "none";
-    if(globalChatUnsubscribe) globalChatUnsubscribe();
+    if(globalChatUnsubscribe) {
+        globalChatUnsubscribe();
+        globalChatUnsubscribe = null; // <-- This is the magic fix
+    }
     if(window.innerWidth <= 992) sidebar.classList.remove("hidden");
 });
-
 exploreTabs.forEach(tab => {
     tab.addEventListener("click", () => {
         exploreTabs.forEach(t => t.classList.remove("active"));
