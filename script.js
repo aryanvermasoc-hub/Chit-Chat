@@ -1,7 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.0.0/firebase-app.js";
 import { getFirestore, collection, addDoc, onSnapshot, doc, setDoc, query, orderBy, getDoc, getDocs, deleteDoc, updateDoc, arrayUnion, writeBatch, limit } from "https://www.gstatic.com/firebasejs/10.0.0/firebase-firestore.js";
-import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.0.0/firebase-auth.js";
-
+import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut, sendEmailVerification } from "https://www.gstatic.com/firebasejs/10.0.0/firebase-auth.js";
 // --- 1. CONFIGURATION ---
 const firebaseConfig = {
   apiKey: "AIzaSyAc1esUcE7tXVRIXvknsUZCrRJR_PNhMzE",
@@ -31,6 +30,10 @@ let singlePlayerMode = false; let currentAnimationId = null; let currentSpDiffic
 let activeMsgId = null; let activeMsgText = ""; let activeMsgSender = "";
 let activeMsgContext = 'chat'; // TRACKS IF WE ARE IN PERSONAL CHAT OR GLOBAL LOUNGE
 let pDoodleUnsubscribe = null; window.msgTimeouts = [];
+
+// NEW: Global variables to track the OTP process
+let generatedOTP = null; 
+let pendingSignupData = null;
 
 window.changeSpDifficulty = (val) => { currentSpDifficulty = val; };
 
@@ -82,16 +85,137 @@ window.showToast = function(title, message, avatarUrl) {
   container.appendChild(toast); setTimeout(() => { toast.style.animation = "fadeOutToast 0.5s ease forwards"; setTimeout(() => { if(toast.parentElement) toast.remove(); }, 500); }, 4000);
 };
 
-const toggleAuthMode = (signup) => { isSignupMode = signup; if (signup) { tabSignup.classList.add("active"); tabLogin.classList.remove("active"); nameGroup.style.display = "block"; authActionBtn.innerText = "Create Account"; } else { tabLogin.classList.add("active"); tabSignup.classList.remove("active"); nameGroup.style.display = "none"; authActionBtn.innerText = "Enter Chit-Chat"; } };
-tabLogin.addEventListener("click", () => toggleAuthMode(false)); tabSignup.addEventListener("click", () => toggleAuthMode(true));
+const emailGroup = document.getElementById("emailGroup");
+const confirmPasswordGroup = document.getElementById("confirmPasswordGroup");
+
+const toggleAuthMode = (signup) => { 
+  isSignupMode = signup; 
+  if (signup) { 
+    tabSignup.classList.add("active"); 
+    tabLogin.classList.remove("active"); 
+    nameGroup.style.display = "flex"; 
+    if(emailGroup) emailGroup.style.display = "flex"; 
+    if(confirmPasswordGroup) confirmPasswordGroup.style.display = "flex"; 
+    authActionBtn.innerText = "Create Account"; 
+  } else { 
+    tabLogin.classList.add("active"); 
+    tabSignup.classList.remove("active"); 
+    nameGroup.style.display = "none"; 
+    if(emailGroup) emailGroup.style.display = "none"; 
+    if(confirmPasswordGroup) confirmPasswordGroup.style.display = "none"; 
+    authActionBtn.innerText = "Enter Chit-Chat"; 
+  } 
+};
+
+tabLogin.addEventListener("click", () => toggleAuthMode(false));
+tabSignup.addEventListener("click", () => toggleAuthMode(true));
 
 authActionBtn.addEventListener("click", async () => {
-  const username = usernameInput.value.trim().toLowerCase(); const password = passwordInput.value.trim(); const fullName = fullNameInput.value.trim();
-  if (!username || !password || (isSignupMode && !fullName)) { alert("Please fill in all required fields."); return; }
-  if (username.includes(" ")) { alert("Username cannot contain spaces."); return; }
-  const email = getFakeEmail(username); authActionBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Processing...';
-  try { if (isSignupMode) { const cred = await createUserWithEmailAndPassword(auth, email, password); await setDoc(doc(db, "users", cred.user.uid), { username, fullName, createdAt: Date.now(), isOnline: true, lastSeen: Date.now() }); } else { await signInWithEmailAndPassword(auth, email, password); } } 
-  catch (error) { alert(error.message.replace("Firebase: ", "")); authActionBtn.innerText = isSignupMode ? "Create Account" : "Enter Chit-Chat"; }
+  console.log("Button clicked! Mode:", isSignupMode ? "Sign Up" : "Login");
+  
+  const username = usernameInput.value.trim().toLowerCase(); 
+  const password = passwordInput.value.trim(); 
+  const fullName = fullNameInput.value.trim();
+  
+  const realEmail = document.getElementById("emailInput") ? document.getElementById("emailInput").value.trim() : "";
+  const confirmPassword = document.getElementById("confirmPassword") ? document.getElementById("confirmPassword").value.trim() : "";
+
+  if (!username || !password || (isSignupMode && (!fullName || !realEmail || !confirmPassword))) { 
+      alert("Please fill in all required fields."); 
+      return; 
+  }
+  if (isSignupMode && password !== confirmPassword) {
+      alert("Passwords do not match!");
+      return;
+  }
+  if (username.includes(" ")) { 
+      alert("Username cannot contain spaces."); 
+      return; 
+  }
+
+  authActionBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Processing...';
+  
+  try { 
+      if (isSignupMode) { 
+          // 1. Generate a random 6-digit OTP
+          generatedOTP = Math.floor(100000 + Math.random() * 900000).toString();
+          
+          // 2. Store the user's data temporarily
+          pendingSignupData = { realEmail, password, username, fullName };
+
+          console.log("Sending OTP via EmailJS...");
+          
+          // 3. Send via EmailJS with YOUR actual IDs
+          await emailjs.send("service_z5e6d5x", "template_fks6dsp", {
+              to_name: fullName,
+              to_email: realEmail,
+              otp_code: generatedOTP
+          });
+
+          // 4. Show the OTP Modal
+          document.getElementById("otpModal").style.display = "flex";
+          authActionBtn.innerText = "Create Account"; // Reset button text
+          
+      } else { 
+          console.log("Attempting to log in...");
+          const loginEmail = username.includes('@') ? username : `${username}@chitchat.app`;
+          await signInWithEmailAndPassword(auth, loginEmail, password); 
+      } 
+  } catch (error) { 
+      console.error("Auth/Email Error:", error);
+      alert(error.message || "Failed to process request."); 
+      authActionBtn.innerText = isSignupMode ? "Create Account" : "Enter Chit-Chat"; 
+  }
+});
+
+// OTP Verification Listener
+document.getElementById("verifyOtpBtn").addEventListener("click", async () => {
+    const enteredOtp = document.getElementById("otpInput").value.trim();
+    const verifyBtn = document.getElementById("verifyOtpBtn");
+
+    if (enteredOtp !== generatedOTP) {
+        alert("Invalid OTP! Please check your email and try again.");
+        return;
+    }
+
+    // OTP is correct, proceed to create the Firebase user
+    verifyBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Creating...';
+    verifyBtn.disabled = true;
+
+  try {
+        // Use the username system so Login continues to work perfectly
+        const accountEmail = `${pendingSignupData.username}@chitchat.app`;
+        const cred = await createUserWithEmailAndPassword(auth, accountEmail, pendingSignupData.password); 
+        
+        await setDoc(doc(db, "users", cred.user.uid), { 
+            username: pendingSignupData.username, 
+            fullName: pendingSignupData.fullName,
+            realEmail: pendingSignupData.realEmail, // Saving the real email just in case you need it later
+            createdAt: Date.now(), 
+            isOnline: false, 
+            lastSeen: Date.now() 
+        });
+        
+        // Hide modal and clear data
+        document.getElementById("otpModal").style.display = "none";
+        generatedOTP = null;
+        pendingSignupData = null;
+        document.getElementById("otpInput").value = "";
+        verifyBtn.innerText = "Verify & Create Account";
+        verifyBtn.disabled = false;
+
+        alert("Account verified and created! You can now log in.");
+        
+        // Ensure user is signed out so they have to log in manually
+        await signOut(auth);
+        document.getElementById("tabLogin").click(); 
+
+    } catch (error) {
+        console.error("Firebase Creation Error:", error);
+        alert(error.message.replace("Firebase: ", ""));
+        verifyBtn.innerText = "Verify & Create Account";
+        verifyBtn.disabled = false;
+    }
 });
 
 document.getElementById("logoutBtn").addEventListener("click", async () => {
@@ -194,7 +318,6 @@ if(createGroupBtn) {
   });
 }
 if (backToUsersBtn) { backToUsersBtn.addEventListener("click", () => { if (window.innerWidth <= 992) { sidebar.classList.remove("hidden"); activeChatState.style.display = "none"; emptyChatState.style.display = "flex"; } }); }
-// --- 9. CHAT LOGIC, REQUESTS & DISAPPEARING MESSAGES ---
 function listenToChatStatus(targetName) {
     if (chatDocUnsubscribe) chatDocUnsubscribe();
     const overlay = document.getElementById("chatStateOverlay"); 
@@ -221,7 +344,6 @@ function listenToChatStatus(targetName) {
                 if(pDoodleUnsubscribe) { pDoodleUnsubscribe(); pDoodleUnsubscribe = null; }
             }
 
-            // ICON VISIBILITY LOGIC
             if (data.status === 'pending') {
                 document.getElementById("chatDoodleBtn").style.display = "none"; 
                 document.getElementById("launchGameMenuBtn").style.display = "none";
@@ -235,7 +357,6 @@ function listenToChatStatus(targetName) {
                     overlay.innerHTML = `<p style="font-size: 14px; margin-bottom: 15px;"><strong style="color:var(--primary);">${targetName}</strong> wants to connect with you.</p><div style="display:flex; gap: 15px; justify-content: center;"><button onclick="acceptChatRequest()" class="primary-btn glow-btn" style="width:auto; padding: 8px 25px; background:#10b981;">Accept</button><button onclick="declineChatRequest()" class="primary-btn" style="width:auto; padding: 8px 25px; background:rgba(255,255,255,0.1); color:var(--text-muted);">Decline</button></div>`; 
                 }
             } else if (data.status === 'accepted') { 
-                // ONLY SHOW ICONS IF ACCEPTED
                 document.getElementById("chatDoodleBtn").style.display = "block"; 
                 document.getElementById("launchGameMenuBtn").style.display = "block"; 
                 document.getElementById("chatSettingsBtn").style.display = "block"; 
@@ -259,7 +380,6 @@ function openChat(targetUid, targetName, targetAvatar, isTargetOnline, targetLas
   currentChatId = auth.currentUser.uid < targetUid ? `${auth.currentUser.uid}_${targetUid}` : `${targetUid}_${auth.currentUser.uid}`; 
   targetUserUid = targetUid;
   
-  // DEFAULT HIDE ICONS WHEN OPENING CHAT
   document.getElementById("chatSettingsBtn").style.display = "none"; 
   document.getElementById("chatDoodleBtn").style.display = "none"; 
   document.getElementById("launchGameMenuBtn").style.display = "none"; 
@@ -268,13 +388,11 @@ function openChat(targetUid, targetName, targetAvatar, isTargetOnline, targetLas
   if(replyingToMsg) document.getElementById("cancelReplyBtn").click();
   document.getElementById("privateDoodleArea").style.display = "none";
 
-  // 👇 FIX: Purane overlay ko turant hide aur clear karo
   const overlay = document.getElementById("chatStateOverlay");
   if(overlay) {
       overlay.style.display = "none";
       overlay.innerHTML = "";
   }
-  // 👆 ----------------------------------------------
 
   if (myUserData && myUserData.chatMeta && myUserData.chatMeta[targetUserUid] && myUserData.chatMeta[targetUserUid].wallpaperUrl) { 
       document.getElementById("chatBox").style.backgroundImage = `linear-gradient(rgba(10,10,15,0.8), rgba(10,10,15,0.8)), url('${myUserData.chatMeta[targetUserUid].wallpaperUrl}')`; 
@@ -324,14 +442,12 @@ function loadMessages() {
       const msg = docSnap.data(); const msgId = docSnap.id; const isMe = msg.sender === auth.currentUser.uid;
       if (isMe) lastMyMsg = msg; if (msg.isExpired) return;
 
-      // Disappearing Message Activation
       if (!isMe && !msg.seenAt) { 
           const updateData = { seenAt: Date.now() }; 
           if (msg.timerDuration) { updateData.expiresAt = Date.now() + msg.timerDuration; } 
           updateDoc(doc(db, "chats", currentChatId, "messages", msgId), updateData).catch(e=>{}); 
       }
 
-      // Disappearing Wipe Logic (Works on ALL messages, including requests)
       if (msg.expiresAt) {
           const timeLeft = msg.expiresAt - Date.now();
           const wipeMessage = async () => {
@@ -376,7 +492,6 @@ function loadMessages() {
   });
 }
 
-// MSG OPTIONS MODAL & ACTIONS
 window.openMessageModal = (msgId, encodedText, encodedName, isMe, context = 'chat') => { 
     activeMsgId = msgId; 
     activeMsgText = decodeURIComponent(encodedText); 
@@ -453,19 +568,15 @@ document.getElementById("cancelReplyBtn").addEventListener("click", () => {
     document.getElementById("activeChatState").insertBefore(previewContainer, document.querySelector("#activeChatState .chat-input-wrapper")); 
 });
 
-// --- CONNECTION REQUEST SYSTEM ---
-
 window.sendChatRequest = async () => {
     if (!currentChatId || !targetUserUid) return;
     try {
-        // Create the chat document with 'pending' status
         await setDoc(doc(db, "chats", currentChatId), {
             status: 'pending',
             initiator: auth.currentUser.uid,
             createdAt: Date.now()
         });
         
-        // Notify the target user so they get a ping/toast
         await setDoc(doc(db, "users", targetUserUid), {
             chatMeta: { 
                 [auth.currentUser.uid]: { 
@@ -500,7 +611,6 @@ window.declineChatRequest = async () => {
     try {
         await deleteDoc(doc(db, "chats", currentChatId));
         showToast("Declined", "Request removed.");
-        // Optional: Send them back to the users list
         if (window.innerWidth <= 992) {
             document.getElementById("backToUsersBtn").click();
         }
@@ -557,9 +667,7 @@ document.querySelector(".chat-header").addEventListener("click", (e) => {
 });
 window.triggerAddGroupMember = async () => { const group = allGroups.find(g => g.id === currentChatId); if(!group) return; let promptText = "Type the number of the user to add:\n\n"; const selectableUsers = allUsers.filter(u => u.id !== auth.currentUser.uid && !group.members.includes(u.id)); if(selectableUsers.length === 0) { alert("All users are already in the group!"); return; } selectableUsers.forEach((u, index) => { promptText += `${index + 1}. ${u.fullName || u.username}\n`; }); const selection = prompt(promptText); if(selection) { const idx = parseInt(selection.trim()) - 1; if(selectableUsers[idx]) { await updateDoc(doc(db, "groups", currentChatId), { members: arrayUnion(selectableUsers[idx].id) }); showToast("Member Added", `${selectableUsers[idx].fullName || selectableUsers[idx].username} was added.`); document.getElementById("groupSettingsModal").style.display = "none"; } } };
 window.triggerGroupAvatarUpload = () => { const input = document.createElement("input"); input.type = "file"; input.accept = "image/*"; input.onchange = async (e) => { const file = e.target.files[0]; if(!file) return; try { showToast("Uploading...", "Updating group icon"); const formData = new FormData(); formData.append("file", file); formData.append("upload_preset", UPLOAD_PRESET); const response = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`, { method: "POST", body: formData }); const data = await response.json(); await updateDoc(doc(db, "groups", currentChatId), { avatarUrl: data.secure_url }); document.getElementById("groupSettingsAvatar").src = data.secure_url; document.getElementById("chatTargetAvatar").src = data.secure_url; showToast("Success", "Group icon updated!"); } catch(err) { alert("Failed to update group image."); } }; input.click(); };
-// ==========================================
-// 10. REAL-TIME GAMES & DOODLE REQUEST
-// ==========================================
+
 launchGameMenuBtn.addEventListener("click", () => { gameSelectionModal.style.display = "flex"; }); 
 closeGameSelectBtn.addEventListener("click", () => { gameSelectionModal.style.display = "none"; });
 
@@ -575,7 +683,7 @@ document.querySelectorAll(".game-select-btn").forEach(btn => {
             await updateDoc(doc(db, "chats", currentChatId), { doodleReq: auth.currentUser.uid });
             
             const payload = { sender: auth.currentUser.uid, time: Date.now(), isDoodleRequest: true, isDeleted: false };
-            if (timerValue > 0) payload.timerDuration = timerValue; // Disappearing Setup
+            if (timerValue > 0) payload.timerDuration = timerValue; 
             
             await addDoc(collection(db, "chats", currentChatId, "messages"), payload);
             await setDoc(doc(db, "users", targetUserUid), { chatMeta: { [auth.currentUser.uid]: { time: Date.now(), text: "🎨 DOODLE REQUEST", unread: true } } }, { merge: true });
@@ -589,7 +697,7 @@ document.querySelectorAll(".game-select-btn").forEach(btn => {
         await setDoc(doc(db, "games", gameId), initialData);
         
         const gPayload = { sender: auth.currentUser.uid, time: Date.now(), isGameChallenge: true, gameType: gameType, gameId: gameId, isDeleted: false };
-        if (timerValue > 0) gPayload.timerDuration = timerValue; // Disappearing Setup
+        if (timerValue > 0) gPayload.timerDuration = timerValue;
         
         await addDoc(collection(db, "chats", currentChatId, "messages"), gPayload);
         await setDoc(doc(db, "users", targetUserUid), { chatMeta: { [auth.currentUser.uid]: { time: Date.now(), text: "🎮 GAME CHALLENGE", unread: true } } }, { merge: true });
@@ -612,7 +720,6 @@ function joinGameRoom(gameId, gameType) {
     });
 }
 
-// LUDO ARENA ENGINE
 const ludoPath = [ {x:30,y:130}, {x:50,y:130}, {x:70,y:130}, {x:90,y:130}, {x:110,y:130}, {x:130,y:110}, {x:130,y:90}, {x:130,y:70}, {x:130,y:50}, {x:130,y:30}, {x:130,y:10}, {x:150,y:10}, {x:170,y:10}, {x:170,y:30}, {x:170,y:50}, {x:170,y:70}, {x:170,y:90}, {x:170,y:110}, {x:190,y:130}, {x:210,y:130}, {x:230,y:130}, {x:250,y:130}, {x:270,y:130}, {x:290,y:130}, {x:290,y:150}, {x:290,y:170}, {x:270,y:170}, {x:250,y:170}, {x:230,y:170}, {x:210,y:170}, {x:190,y:170}, {x:170,y:190}, {x:170,y:210}, {x:170,y:230}, {x:170,y:250}, {x:170,y:270}, {x:170,y:290}, {x:150,y:290}, {x:130,y:290}, {x:130,y:270}, {x:130,y:250}, {x:130,y:230}, {x:130,y:210}, {x:130,y:190}, {x:110,y:170}, {x:90,y:170}, {x:70,y:170}, {x:50,y:170}, {x:30,y:170}, {x:10,y:170}, {x:10,y:150}, {x:10,y:130}, {x:30,y:150}, {x:50,y:150}, {x:70,y:150}, {x:90,y:150}, {x:110,y:150}, {x:270,y:150}, {x:250,y:150}, {x:230,y:150}, {x:210,y:150}, {x:190,y:150} ];
 const ludoBases = { p1: [{x:40,y:40}, {x:80,y:40}, {x:40,y:80}, {x:80,y:80}], p2: [{x:220,y:220}, {x:260,y:220}, {x:220,y:260}, {x:260,y:260}] };
 
@@ -629,7 +736,7 @@ function renderLudo(data, gameId) {
 window.rollLudoDice = async (gameId, myRole) => { const diceBtn = document.getElementById("ludoDiceBtn"); diceBtn.classList.add("dice-rolling"); diceBtn.classList.remove("pulse"); diceBtn.disabled = true; setTimeout(async () => { const roll = Math.floor(Math.random() * 6) + 1; await updateDoc(doc(db, "games", gameId), { diceValue: roll }); const docSnap = await getDoc(doc(db, "games", gameId)); const data = docSnap.data(); let canMove = false; data.ludoTokens[myRole].forEach(pos => { if (pos === -1 && roll === 6) canMove = true; if (pos !== -1) { if (myRole === 'p1' && pos + roll <= 57) canMove = true; if (myRole === 'p2') { let absoluteProgress = pos >= 26 ? (pos - 26) : (pos + 26); if (absoluteProgress + roll <= 57) canMove = true; } } }); if (!canMove) { showToast("No Moves!", "Skipping turn..."); const nextTurn = data.player1 === auth.currentUser.uid ? data.player2 : data.player1; await updateDoc(doc(db, "games", gameId), { turn: nextTurn, diceValue: null }); } }, 500); };
 window.moveLudoToken = async (gameId, data, tokenIndex, role) => { let tokens = { ...data.ludoTokens }; let roll = data.diceValue; let currPos = tokens[role][tokenIndex]; let newPos = currPos; if (currPos === -1) { if (roll !== 6) return; newPos = role === 'p1' ? 0 : 26; } else { if (role === 'p1') { newPos = currPos + roll; if (newPos > 51 && currPos <= 51) newPos = 51 + (newPos - 51); if (newPos > 57) return; } else { newPos = currPos + roll; if (currPos <= 24 && newPos >= 25) { newPos = 56 + (newPos - 24); } else if (newPos > 51 && currPos > 24 && currPos <= 51) { newPos = newPos - 52; } if (newPos > 62) return; } } tokens[role][tokenIndex] = newPos; const safeZones = [0, 8, 13, 21, 26, 34, 39, 47]; let hasKilled = false; let oppRole = role === 'p1' ? 'p2' : 'p1'; if (!safeZones.includes(newPos) && newPos <= 51) { tokens[oppRole].forEach((oppPos, idx) => { if (oppPos === newPos) { tokens[oppRole][idx] = -1; hasKilled = true; } }); } let hasWon = false; if (role === 'p1' && tokens.p1.every(p => p === 57)) hasWon = true; if (role === 'p2' && tokens.p2.every(p => p === 62)) hasWon = true; let nextTurn = data.turn; let nextDice = null; if (roll !== 6 && !hasKilled && !hasWon) { nextTurn = data.player1 === auth.currentUser.uid ? data.player2 : data.player1; } await updateDoc(doc(db, "games", gameId), { ludoTokens: tokens, turn: nextTurn, diceValue: nextDice, winner: hasWon ? auth.currentUser.uid : null }); };
 window.resetLudo = async (gameId) => { const docSnap = await getDoc(doc(db, "games", gameId)); await updateDoc(doc(db, "games", gameId), { ludoTokens: { p1: [-1, -1, -1, -1], p2: [-1, -1, -1, -1] }, winner: null, turn: docSnap.data().player1, diceValue: null }); };
-// --- SINGLE PLAYER GAMES (TTT, RPS, ACTION, FLAPPY BIRD) ---
+
 window.startSinglePlayer = (gameType) => { 
     singlePlayerMode = true; currentGameId = null; 
     if (window.innerWidth <= 992) sidebar.classList.add("hidden"); 
@@ -699,13 +806,11 @@ window.handleSpActionGameOver = async (score) => { let isNewHighScore = false; i
 function renderActionGame(data, gameId, gameType) { const isPlayer1 = data.player1 === auth.currentUser.uid; const myScore = isPlayer1 ? data.p1Score : data.p2Score; const oppScore = isPlayer1 ? data.p2Score : data.p1Score; if (myScore !== undefined && myScore !== null && oppScore !== undefined && oppScore !== null) { isPlayingActionGame = false; let statusText = "It's a Tie!"; if (myScore > oppScore) statusText = "🎉 You Won!"; else if (myScore < oppScore) statusText = "😞 You Lost!"; gameUIContainer.innerHTML = `<div class="game-turn-indicator">${statusText}</div><div style="font-size: 24px; text-align: center; margin: 20px 0;">Your Score: <b style="color:var(--primary)">${myScore}</b><br>Opponent's Score: <b style="color:var(--accent)">${oppScore}</b></div><button class="primary-btn glow-btn" style="max-width:200px; margin-top:20px;" onclick="resetActionGame('${gameId}')">Play Again</button>`; return; } if (myScore !== undefined && myScore !== null) { isPlayingActionGame = false; gameUIContainer.innerHTML = `<div class="game-turn-indicator">Waiting for opponent to finish...</div><div style="font-size: 20px; text-align: center; margin: 20px 0;">Your Score: <b style="color:var(--primary)">${myScore}</b></div>`; return; } if (isPlayingActionGame) return; gameUIContainer.innerHTML = `<div class="game-turn-indicator" style="margin-bottom: 5px;">High Score Challenge!</div><div class="action-game-container"><div style="position: relative; width: 100%; max-width: 300px;"><canvas id="actionCanvas" width="300" height="400" class="action-canvas" style="margin: 0;"></canvas><div id="startOverlay" style="position: absolute; top:0; left:0; width:100%; height:100%; display:flex; justify-content:center; align-items:center; background:rgba(0,0,0,0.6); border-radius:12px; z-index:10; flex-direction:column; gap:10px;"><span style="color:white; font-size:14px;">Opponent is ready!</span><button class="primary-btn glow-btn" id="btnStartGame" style="width:auto; padding:15px 40px; font-size: 16px;">Play Now</button></div></div><div class="game-btn-row" id="gameControls" style="display:none;"><button class="game-control-btn" id="btnLeft">⬅️</button><button class="game-control-btn" id="btnRight">➡️</button></div></div>`; const canvas = document.getElementById('actionCanvas'); if (canvas) { const ctx = canvas.getContext('2d'); if (gameType === 'carracing') { ctx.fillStyle = '#8b5cf6'; ctx.fillRect(135, 330, 30, 50); } else { ctx.fillStyle = '#10b981'; ctx.beginPath(); ctx.moveTo(150, 350); ctx.lineTo(165, 380); ctx.lineTo(135, 380); ctx.fill(); } } document.getElementById('btnStartGame').addEventListener('click', () => { isPlayingActionGame = true; document.getElementById('startOverlay').style.display = 'none'; document.getElementById('gameControls').style.display = 'flex'; if (gameType === 'carracing') startCarRacing(gameId, isPlayer1); else startJetFighter(gameId, isPlayer1); }); }
 window.resetActionGame = async (gameId) => { await updateDoc(doc(db, "games", gameId), { p1Score: null, p2Score: null }); };
 
-// FLAPPY BIRD ENGINE
 function startFlappyBird(gameId, isPlayer1) { 
     const canvas = document.getElementById('actionCanvas'); 
     if (!canvas) return; 
     const ctx = canvas.getContext('2d'); 
     
-    // Hide Left/Right controls
     document.getElementById('gameControls').style.display = 'none';
 
     let birdY = 200; 
@@ -812,10 +917,6 @@ window.makeMoveRPS = async (choice) => { if(!currentGameId) return; const docRef
 window.resetRPS = async (gameId) => { await updateDoc(doc(db, "games", gameId), { p1Choice: null, p2Choice: null }); };
 
 
-// =========================================================================
-// THE EXPLORE HUB ENGINE (Lounge, Leaderboard, Memes)
-// =========================================================================
-
 const exploreBtn = document.getElementById("exploreBtn");
 const exploreArea = document.getElementById("exploreArea");
 const closeExploreBtn = document.getElementById("closeExploreBtn");
@@ -839,7 +940,7 @@ closeExploreBtn.addEventListener("click", () => {
     exploreArea.style.display = "none";
     if(globalChatUnsubscribe) {
         globalChatUnsubscribe();
-        globalChatUnsubscribe = null; // <-- This is the magic fix
+        globalChatUnsubscribe = null; 
     }
     if(window.innerWidth <= 992) sidebar.classList.remove("hidden");
 });
@@ -988,7 +1089,6 @@ async function loadMoreMemes() {
     const spinner = memesWrapper.querySelector('.fa-spinner')?.parentElement;
     
     try {
-        // TIER 1: Pehli koshish (Meme-API Reddit se)
         const response = await fetch(`https://meme-api.com/gimme/${currentMemeSubreddit}/10`);
         if (!response.ok) throw new Error("Meme API Down");
         
@@ -996,7 +1096,7 @@ async function loadMoreMemes() {
         if(spinner) spinner.remove();
 
         data.memes.forEach(meme => {
-            if(!meme.url || meme.url.includes('.mp4')) return; // Video ignore karein
+            if(!meme.url || meme.url.includes('.mp4')) return; 
             const card = document.createElement('div');
             card.className = "meme-card";
             card.innerHTML = `<h4>${meme.title}</h4><img src="${meme.url}" alt="Meme" loading="lazy"><div style="margin-top: 10px; font-size: 12px; color: var(--text-muted);">👍 ${meme.ups || '1k+'} | r/${currentMemeSubreddit}</div>`;
@@ -1006,13 +1106,11 @@ async function loadMoreMemes() {
     } catch(e) { 
         console.log("Primary API failed, trying Imgflip Fallback...");
         
-        // TIER 2: Dusri koshish (Imgflip API - 99.9% Uptime)
         try {
             const fallbackRes = await fetch('https://api.imgflip.com/get_memes');
             const fallbackData = await fallbackRes.json();
             if(spinner) spinner.remove();
 
-            // Imgflip mein se randomly 10 memes nikalte hain
             const allMemes = fallbackData.data.memes;
             const randomMemes = allMemes.sort(() => 0.5 - Math.random()).slice(0, 10);
 
@@ -1028,7 +1126,6 @@ async function loadMoreMemes() {
         }
     }
 
-    // Niche wala button refresh karein
     const oldBtn = memesWrapper.querySelector('.primary-btn');
     if(oldBtn) oldBtn.remove();
 
@@ -1042,10 +1139,6 @@ async function loadMoreMemes() {
     };
     memesWrapper.appendChild(btn);
 }
- 
-// =========================================================================
-// 1V1 PRIVATE DOODLE ENGINE
-// =========================================================================
 
 const pDoodleArea = document.getElementById("privateDoodleArea");
 const pDoodleCanvas = document.getElementById("pDoodleCanvas");
@@ -1160,10 +1253,6 @@ document.getElementById("clearPDoodleBtn").addEventListener("click", async () =>
     }
 });
 
-// =========================================================================
-// CHAT SETTINGS & WALLPAPERS
-// =========================================================================
-
 if (chatSettingsBtn) {
     chatSettingsBtn.addEventListener("click", () => {
         document.getElementById("chatSettingsModal").style.display = "flex";
@@ -1258,9 +1347,6 @@ if (clearChatMeBtn) {
     });
 }
 
-// =========================================================================
-// HARDWARE / NAVIGATION BACK BUTTON SUPPORT
-// =========================================================================
 window.addEventListener("popstate", (e) => {
     const modals = ["profileModal", "chatSettingsModal", "groupSettingsModal", "msgOptionsModal", "gameSelectionModal", "infoModal"];
     let modalClosed = false;
@@ -1298,5 +1384,96 @@ window.addEventListener("popstate", (e) => {
         document.getElementById("backToUsersBtn").click();
         history.pushState(null, ""); 
         return;
+    }
+});
+// --- LEGACY USER EMAIL UPDATE LOGIC ---
+let updateEmailOTP = null;
+let pendingUpdateEmail = null;
+
+// 1. Check if user needs to update email whenever their profile loads
+onAuthStateChanged(auth, (user) => {
+    if (user) {
+        // We use getDoc directly here to check just once on login
+        getDoc(doc(db, "users", user.uid)).then((docSnap) => {
+            if (docSnap.exists()) {
+                const data = docSnap.data();
+                // If realEmail is missing, show the warning modal after a short delay
+                if (!data.realEmail) {
+                    setTimeout(() => {
+                        document.getElementById("missingEmailModal").style.display = "flex";
+                    }, 2000); // 2 second delay so the app loads fully first
+                }
+            }
+        });
+    }
+});
+
+// 2. Send OTP for updating email
+document.getElementById("sendUpdateOtpBtn").addEventListener("click", async () => {
+    const emailToUpdate = document.getElementById("updateEmailInput").value.trim();
+    const btn = document.getElementById("sendUpdateOtpBtn");
+
+    if (!emailToUpdate || !emailToUpdate.includes("@")) {
+        alert("Please enter a valid email address.");
+        return;
+    }
+
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Sending...';
+    btn.disabled = true;
+
+    updateEmailOTP = Math.floor(100000 + Math.random() * 900000).toString();
+    pendingUpdateEmail = emailToUpdate;
+    const currentName = document.getElementById("myName").innerText || "User";
+
+    try {
+        await emailjs.send("service_z5e6d5x", "template_fks6dsp", {
+            to_name: currentName,
+            to_email: emailToUpdate,
+            otp_code: updateEmailOTP
+        });
+
+        document.getElementById("updateEmailStep1").style.display = "none";
+        document.getElementById("updateEmailStep2").style.display = "block";
+    } catch (error) {
+        alert("Failed to send OTP. Please try again.");
+        btn.innerHTML = 'Send Verification Code';
+        btn.disabled = false;
+    }
+});
+
+// 3. Verify OTP and Save to Database
+document.getElementById("verifyUpdateOtpBtn").addEventListener("click", async () => {
+    const enteredOtp = document.getElementById("updateOtpInput").value.trim();
+    const btn = document.getElementById("verifyUpdateOtpBtn");
+
+    if (enteredOtp !== updateEmailOTP) {
+        alert("Invalid OTP! Please check your email.");
+        return;
+    }
+
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Securing...';
+    btn.disabled = true;
+
+    try {
+        // Update the Firestore document with the new realEmail
+        await updateDoc(doc(db, "users", auth.currentUser.uid), {
+            realEmail: pendingUpdateEmail
+        });
+
+        document.getElementById("missingEmailModal").style.display = "none";
+        showToast("Account Secured", "Your recovery email has been successfully added!");
+        
+        // Reset modal state for future
+        document.getElementById("updateEmailStep1").style.display = "block";
+        document.getElementById("updateEmailStep2").style.display = "none";
+        document.getElementById("updateEmailInput").value = "";
+        document.getElementById("updateOtpInput").value = "";
+        btn.innerHTML = 'Verify & Secure Account';
+        btn.disabled = false;
+
+    } catch (error) {
+        alert("Failed to update account. Please try again.");
+        btn.innerHTML = 'Verify & Secure Account';
+        btn.disabled = false;
     }
 });
