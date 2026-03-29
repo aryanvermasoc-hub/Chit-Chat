@@ -7,6 +7,14 @@
   <link rel="stylesheet" href="style.css?v=25">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
+  <script type="text/javascript">
+      (function() {
+          // 🚨 REPLACE THIS WITH YOUR ACTUAL EMAILJS PUBLIC KEY 🚨
+          emailjs.init("zVF_B0qSjM3rriZca"); 
+      })();
+  </script>
 </head>
 <body>
 
@@ -24,10 +32,13 @@
           <button id="tabLogin" class="active">Login</button>
           <button id="tabSignup">Sign Up</button>
         </div>
-      <form id="authForm" onsubmit="return false;">
+        
+        <form id="authForm" onsubmit="return false;">
           <div class="input-group" id="nameGroup" style="display: none;"><i class="fa-regular fa-user"></i><input type="text" id="fullName" placeholder="Display Name"></div>
+          <div class="input-group" id="emailGroup" style="display: none;"><i class="fa-solid fa-envelope"></i><input type="email" id="emailInput" placeholder="Enter Email Address"></div>
           <div class="input-group"><i class="fa-solid fa-at"></i><input type="text" id="username" placeholder="Username"></div>
           <div class="input-group"><i class="fa-solid fa-lock"></i><input type="password" id="password" placeholder="Password"></div>
+          <div class="input-group" id="confirmPasswordGroup" style="display: none;"><i class="fa-solid fa-lock"></i><input type="password" id="confirmPassword" placeholder="Confirm Password"></div>
           <button id="authActionBtn" class="primary-btn glow-btn">Enter Chit-Chat</button>
         </form>
 
@@ -271,7 +282,52 @@
     </div>
   </div>
 
+  <div id="otpModal" class="modal-overlay" style="display: none; z-index: 100;">
+    <div class="modal-content" style="max-width: 350px; text-align: center; padding: 30px;">
+      <div class="modal-header" style="justify-content: center; border-bottom: none; padding-bottom: 0;">
+        <h3><i class="fa-solid fa-shield-halved" style="color: var(--primary);"></i> Verify Email</h3>
+      </div>
+      <p style="color: var(--text-muted); font-size: 13px; margin: 15px 0;">We sent a 6-digit code to your email. Enter it below to secure your account.</p>
+      
+      <div class="input-group" style="margin-bottom: 20px;">
+        <i class="fa-solid fa-key"></i>
+        <input type="number" id="otpInput" placeholder="Enter 6-digit OTP" style="letter-spacing: 5px; font-weight: bold; text-align: center;">
+      </div>
+      
+      <button id="verifyOtpBtn" class="primary-btn glow-btn">Verify & Create Account</button>
+      <button onclick="document.getElementById('otpModal').style.display='none'" class="icon-btn" style="margin-top: 15px; font-size: 14px;">Cancel</button>
+    </div>
+  </div>
+
   <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+  <div id="missingEmailModal" class="modal-overlay" style="display: none; z-index: 105; background: rgba(0,0,0,0.85);">
+    <div class="modal-content" style="max-width: 400px; text-align: center; padding: 30px; border: 1px solid #ef4444; box-shadow: 0 0 20px rgba(239, 68, 68, 0.2);">
+      <div class="modal-header" style="justify-content: center; border-bottom: none; padding-bottom: 0;">
+        <h3 style="color: #ef4444;"><i class="fa-solid fa-triangle-exclamation"></i> Action Required</h3>
+      </div>
+      <p style="color: var(--text-muted); font-size: 14px; margin: 15px 0; line-height: 1.5;">
+        Your account is missing a recovery email. To ensure you never lose access to your Chit-Chat account, please link an email address now.
+      </p>
+      
+      <div id="updateEmailStep1">
+        <div class="input-group" style="margin-bottom: 15px;">
+          <i class="fa-solid fa-envelope"></i>
+          <input type="email" id="updateEmailInput" placeholder="Enter your email">
+        </div>
+        <button id="sendUpdateOtpBtn" class="primary-btn glow-btn" style="background: #ef4444;">Send Verification Code</button>
+        <button onclick="document.getElementById('missingEmailModal').style.display='none'" class="icon-btn" style="margin-top: 15px; font-size: 13px;">I'll do this later</button>
+      </div>
+
+      <div id="updateEmailStep2" style="display: none;">
+        <p style="color: #10b981; font-size: 13px; margin-bottom: 15px;">OTP sent! Please check your inbox.</p>
+        <div class="input-group" style="margin-bottom: 15px;">
+          <i class="fa-solid fa-key"></i>
+          <input type="number" id="updateOtpInput" placeholder="Enter 6-digit OTP" style="letter-spacing: 5px; font-weight: bold; text-align: center;">
+        </div>
+        <button id="verifyUpdateOtpBtn" class="primary-btn glow-btn" style="background: #10b981;">Verify & Secure Account</button>
+      </div>
+    </div>
+  </div>
   <script type="module" src="script.js"></script>
 </body>
 </html>
