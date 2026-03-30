@@ -288,8 +288,10 @@ function startMyProfileListener(uid) {
               <strong style="color:white; font-size:16px;">${data.incomingCall.callerName}</strong><br>is calling you...
           `;
           document.getElementById("incomingCallModal").style.display = "flex";
-      } else {
+          window.playRingtone();
+     } else {
           document.getElementById("incomingCallModal").style.display = "none";
+          window.stopRingtone();
       }
       if(allUsers.length > 0) renderSidebar();
     }
@@ -1694,6 +1696,7 @@ function monitorActiveCall(chatId) {
 
 async function clearCallData(chatId) {
     window.stopCallTimer();
+    window.stopRingtone();
     if (!chatId) return;
     try {
         const callDocRef = doc(db, "calls", chatId);
@@ -1715,6 +1718,23 @@ async function clearCallData(chatId) {
     }
 }
 
+// --- RINGTONE LOGIC ---
+window.playRingtone = () => {
+    const audio = document.getElementById("ringtoneAudio");
+    if (audio) {
+        audio.currentTime = 0;
+        // Browser autoplay policy se bachne ke liye catch lagaya hai
+        audio.play().catch(e => console.log("Ringtone blocked by browser:", e)); 
+    }
+};
+
+window.stopRingtone = () => {
+    const audio = document.getElementById("ringtoneAudio");
+    if (audio) {
+        audio.pause();
+        audio.currentTime = 0;
+    }
+};
 // 1. Camera/Mic Initialize
 async function initMedia(audioOnly = false) {
     isCurrentCallAudioOnly = audioOnly;
@@ -1810,6 +1830,7 @@ async function initiateCall(audioOnly) {
     
     // Yahan hum call track karna start kar rahe hain
     monitorActiveCall(currentChatId);
+    window.playRingtone();
 }
 
 if(startAudioCallBtn) startAudioCallBtn.addEventListener("click", () => initiateCall(true));
@@ -1825,6 +1846,7 @@ if(answerCallBtn) {
         }
 
         incomingCallModal.style.display = "none";
+        window.stopRingtone()
         await updateDoc(doc(db, "users", auth.currentUser.uid), { incomingCall: null }); 
         
         videoCallArea.style.display = "flex";
