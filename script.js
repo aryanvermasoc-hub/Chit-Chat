@@ -1605,6 +1605,7 @@ const startVideoCallBtn = document.getElementById("startVideoCallBtn");
 
 let callListenerUnsubscribe = null;
 let isCurrentCallAudioOnly = false;
+let audioCtx, gainNode; // Volume boost ke liye
 
 // 1. Camera/Mic Initialize
 async function initMedia(audioOnly = false) {
@@ -1648,12 +1649,20 @@ async function initiateCall(audioOnly) {
 
     peerConnection = new RTCPeerConnection(servers);
     localStream.getTracks().forEach((track) => peerConnection.addTrack(track, localStream));
-peerConnection.ontrack = (event) => { 
-    remoteVideo.srcObject = event.streams[0]; 
-    remoteVideo.muted = false; 
-    remoteVideo.volume = 1.0;
-    remoteVideo.play().catch(e => console.log(e)); 
-};
+peerConnection.ontrack = (event) => {
+        const remoteStream = event.streams[0];
+        remoteVideo.srcObject = remoteStream;
+        if (!audioCtx) {
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            const source = audioCtx.createMediaStreamSource(remoteStream);
+            gainNode = audioCtx.createGain();
+            gainNode.gain.value = 2.5; // 250% Volume Boost
+            source.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+        }
+        remoteVideo.muted = true; // AudioContext handle karega
+        remoteVideo.play().catch(e => console.error(e));
+    };
     const callDoc = doc(collection(db, "calls"), currentChatId);
     const offerCandidates = collection(callDoc, "offerCandidates");
     const answerCandidates = collection(callDoc, "answerCandidates");
@@ -1728,12 +1737,20 @@ if(answerCallBtn) {
 
         peerConnection = new RTCPeerConnection(servers);
         localStream.getTracks().forEach((track) => peerConnection.addTrack(track, localStream));
-peerConnection.ontrack = (event) => { 
-    remoteVideo.srcObject = event.streams[0]; 
-    remoteVideo.muted = false; 
-    remoteVideo.volume = 1.0;  
-    remoteVideo.play().catch(e => console.log(e)); 
-};
+peerConnection.ontrack = (event) => {
+            const remoteStream = event.streams[0];
+            remoteVideo.srcObject = remoteStream;
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                const source = audioCtx.createMediaStreamSource(remoteStream);
+                gainNode = audioCtx.createGain();
+                gainNode.gain.value = 2.5; 
+                source.connect(gainNode);
+                gainNode.connect(audioCtx.destination);
+            }
+            remoteVideo.muted = true;
+            remoteVideo.play().catch(e => console.error(e));
+        };
         const callDoc = doc(db, "calls", currentChatId);
         const answerCandidates = collection(callDoc, "answerCandidates");
         const offerCandidates = collection(callDoc, "offerCandidates");
@@ -1756,20 +1773,36 @@ peerConnection.ontrack = (event) => {
 }
 
 // 5. Reject & Hangup
+// 5. Reject & Hangup (Updated to ensure data deletion)
 if(rejectCallBtn) {
     rejectCallBtn.addEventListener("click", async () => {
         incomingCallModal.style.display = "none";
-        if(currentChatId) await deleteDoc(doc(db, "calls", currentChatId));
+        if(currentChatId) {
+            // Firestore se call document aur uske sub-collections ko saaf karein
+            await deleteDoc(doc(db, "calls", currentChatId)); 
+            showToast("Call Rejected", "Connection data cleared.");
+        }
     });
 }
 
 if(endCallBtn) {
-    endCallBtn.addEventListener("click", () => {
+    endCallBtn.addEventListener("click", async () => {
+        // Media tracks band karein
         if (peerConnection) peerConnection.close();
         if (localStream) localStream.getTracks().forEach(track => track.stop());
-        localStream = null; peerConnection = null;
+        
+        localStream = null; 
+        peerConnection = null;
         videoCallArea.style.display = "none";
-        if (currentChatId) deleteDoc(doc(db, "calls", currentChatId)).catch(e => {});
+
+        // Call ka poora data Firestore se uda dein
+        if (currentChatId) {
+            try {
+                await deleteDoc(doc(db, "calls", currentChatId));
+            } catch (e) {
+                console.error("Data deletion failed:", e);
+            }
+        }
     });
 }
 // --- CALL CONTROLS (MIC, CAM, SPEAKER) ---
@@ -1810,22 +1843,28 @@ if (toggleSpeakerBtn) {
         toggleSpeakerBtn.style.background = isSpeakerOn ? 'rgba(255,255,255,0.6)' : 'rgba(255,255,255,0.2)';
         toggleSpeakerBtn.style.color = isSpeakerOn ? '#000' : '#fff';
 
-        if (typeof remoteVideo.setSinkId !== 'undefined') {
+        if (audioCtx && audioCtx.state === 'suspended') await audioCtx.resume();
+
+        if (remoteVideo.setSinkId) {
             try {
                 const devices = await navigator.mediaDevices.enumerateDevices();
-                const audioOutputs = devices.filter(d => d.kind === 'audiooutput');
-                if (audioOutputs.length > 1) {
-                    // Try to switch to Loudspeaker
-                    const targetDevice = isSpeakerOn ? audioOutputs[audioOutputs.length - 1].deviceId : audioOutputs[0].deviceId;
-                    await remoteVideo.setSinkId(targetDevice);
-                    showToast("Speaker", isSpeakerOn ? "Loudspeaker Active" : "Earpiece Active");
-                } else {
-                    showToast("Notice", "Your mobile OS is controlling the speaker output automatically.");
+                const outputs = devices.filter(d => d.kind === 'audiooutput');
+                if (outputs.length > 1) {
+                    const id = isSpeakerOn ? outputs[outputs.length - 1].deviceId : outputs[0].deviceId;
+                    await remoteVideo.setSinkId(id);
                 }
-            } catch (e) { console.error(e); }
-        } else {
-            // Agar browser direct speaker access na de:
-            showToast("Mobile Browsers limit this.", "Turn on Video call to auto-switch to Loudspeaker.");
+            } catch (e) { console.log(e); }
         }
+
+        if (gainNode) {
+            gainNode.gain.value = isSpeakerOn ? 3.5 : 1.0; // Speaker on toh 3.5x boost
+        }
+        showToast("Audio Mode", isSpeakerOn ? "Loudspeaker (Boosted)" : "Earpiece Mode");
     });
 }
+// Agar tab close ho jaye toh call data delete karein
+window.addEventListener("beforeunload", () => {
+    if (currentChatId && localStream) {
+        deleteDoc(doc(db, "calls", currentChatId));
+    }
+});
