@@ -446,6 +446,8 @@ function loadMessages() {
     chatBox.innerHTML = ""; let lastMyMsg = null; 
     if(window.msgTimeouts) window.msgTimeouts.forEach(clearTimeout); window.msgTimeouts = [];
     const fragment = document.createDocumentFragment();
+    let lastMyMsgId = null;
+    snapshot.forEach(d => { if(d.data().sender === auth.currentUser.uid) lastMyMsgId = d.id; });
     snapshot.forEach(docSnap => {
       const msg = docSnap.data(); const msgId = docSnap.id; const isMe = msg.sender === auth.currentUser.uid;
       if (isMe) lastMyMsg = msg; if (msg.isExpired) return;
@@ -499,20 +501,13 @@ if (!isMe && !msg.seenAt && !isDoodleOpen && !isGameOpen && isChatCurrentlyVisib
       }
       
       let avatarSrc = isCurrentChatGroup && !isMe ? generateAvatar(allUsers.find(u=>u.id===msg.sender), msg.senderName) : document.getElementById('chatTargetAvatar').src;
-      div.innerHTML = `${!isMe ? `<img src="${avatarSrc}" class="msg-avatar">` : ''}<div style="display:flex; flex-direction:column; max-width: 100%;">${contentHtml}<div class="msg-time">${timeStr}</div></div>${isMe ? `<img src="${document.getElementById('myAvatar').src}" class="msg-avatar">` : ''}`;
+      // Removed the trailing avatar code for the sender
+let seenTickHtml = (isMe && msgId === lastMyMsgId && msg.seenAt) ? `<i class="fa-solid fa-check-double" style="color: #3b82f6; margin-left: 5px; font-size: 11px;"></i>` : '';
+      div.innerHTML = `${!isMe ? `<img src="${avatarSrc}" class="msg-avatar">` : ''}<div style="display:flex; flex-direction:column; max-width: 100%;">${contentHtml}<div class="msg-time">${timeStr}${seenTickHtml}</div></div>`;
       fragment.appendChild(div);
     });
 
-    if (lastMyMsg && lastMyMsg.seenAt) { 
-        const seenDiv = document.createElement("div"); 
-        seenDiv.style.textAlign = "right"; 
-        seenDiv.style.fontSize = "11px"; 
-        seenDiv.style.color = "var(--text-muted)"; 
-        seenDiv.style.marginTop = "-15px"; 
-        seenDiv.style.paddingRight = "45px"; 
-        seenDiv.innerHTML = `<i class="fa-solid fa-check-double" style="color: #3b82f6;"></i> Seen`; 
-        fragment.appendChild(seenDiv); // <--- YAHAN CHANGE KIYA
-    }
+  
     chatBox.appendChild(fragment);
     chatBox.scrollTop = chatBox.scrollHeight;
   });
@@ -1049,6 +1044,8 @@ function initGlobalLounge() {
     const q = query(collection(db, "global_lounge"), orderBy("time", "asc"), limit(100));
     globalChatUnsubscribe = onSnapshot(q, (snapshot) => {
         globalChatBox.innerHTML = "";
+        let lastMyMsgId = null;
+snapshot.forEach(d => { if(d.data().sender === auth.currentUser.uid) lastMyMsgId = d.id; });
         snapshot.forEach(docSnap => {
             const msg = docSnap.data();
             const msgId = docSnap.id;
@@ -1692,7 +1689,8 @@ peerConnection.ontrack = (event) => {
     });
 
     const msgText = audioOnly ? "📞 Voice Calling..." : "🎥 Video Calling...";
-    const payload = { text: msgText, sender: auth.currentUser.uid, senderName: document.getElementById("myName").innerText, time: Date.now(), isEdited: false, isDeleted: false };
+    const encryptedCallText = encryptMessage(msgText, currentChatId); 
+    const payload = { text: encryptedCallText, sender: auth.currentUser.uid, senderName: document.getElementById("myName").innerText, time: Date.now(), isEdited: false, isDeleted: false };
     await addDoc(collection(db, "chats", currentChatId, "messages"), payload);
 }
 
@@ -1771,7 +1769,21 @@ peerConnection.ontrack = (event) => {
         });
     });
 }
-
+async function clearCallData(chatId) {
+    if (!chatId) return;
+    try {
+        const callDocRef = doc(db, "calls", chatId);
+        const offerSnap = await getDocs(collection(callDocRef, "offerCandidates"));
+        const answerSnap = await getDocs(collection(callDocRef, "answerCandidates"));
+        const batch = writeBatch(db);
+        offerSnap.docs.forEach(d => batch.delete(d.ref));
+        answerSnap.docs.forEach(d => batch.delete(d.ref));
+        batch.delete(callDocRef);
+        await batch.commit();
+    } catch (e) {
+        console.error("Data deletion failed:", e);
+    }
+}
 // 5. Reject & Hangup
 // 5. Reject & Hangup (Updated to ensure data deletion)
 if(rejectCallBtn) {
@@ -1779,7 +1791,7 @@ if(rejectCallBtn) {
         incomingCallModal.style.display = "none";
         if(currentChatId) {
             // Firestore se call document aur uske sub-collections ko saaf karein
-            await deleteDoc(doc(db, "calls", currentChatId)); 
+            await clearCallData(currentChatId);
             showToast("Call Rejected", "Connection data cleared.");
         }
     });
@@ -1797,11 +1809,7 @@ if(endCallBtn) {
 
         // Call ka poora data Firestore se uda dein
         if (currentChatId) {
-            try {
-                await deleteDoc(doc(db, "calls", currentChatId));
-            } catch (e) {
-                console.error("Data deletion failed:", e);
-            }
+            await clearCallData(currentChatId);
         }
     });
 }
@@ -1865,6 +1873,6 @@ if (toggleSpeakerBtn) {
 // Agar tab close ho jaye toh call data delete karein
 window.addEventListener("beforeunload", () => {
     if (currentChatId && localStream) {
-        deleteDoc(doc(db, "calls", currentChatId));
+        clearCallData(currentChatId);
     }
 });
