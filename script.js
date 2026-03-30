@@ -441,12 +441,14 @@ function loadMessages() {
     snapshot.forEach(docSnap => {
       const msg = docSnap.data(); const msgId = docSnap.id; const isMe = msg.sender === auth.currentUser.uid;
       if (isMe) lastMyMsg = msg; if (msg.isExpired) return;
+// Check karein ki kya doodle area screen par dikh raha hai
+const isDoodleOpen = pDoodleArea && pDoodleArea.style.display === "flex";
 
-      if (!isMe && !msg.seenAt) { 
-          const updateData = { seenAt: Date.now() }; 
-          if (msg.timerDuration) { updateData.expiresAt = Date.now() + msg.timerDuration; } 
-          updateDoc(doc(db, "chats", currentChatId, "messages", msgId), updateData).catch(e=>{}); 
-      }
+if (!isMe && !msg.seenAt && !isDoodleOpen) { 
+    const updateData = { seenAt: Date.now() }; 
+    if (msg.timerDuration) { updateData.expiresAt = Date.now() + msg.timerDuration; } 
+    updateDoc(doc(db, "chats", currentChatId, "messages", msgId), updateData).catch(e=>{}); 
+}
 
       if (msg.expiresAt) {
           const timeLeft = msg.expiresAt - Date.now();
@@ -1144,6 +1146,8 @@ const pDoodleArea = document.getElementById("privateDoodleArea");
 const pDoodleCanvas = document.getElementById("pDoodleCanvas");
 const pDoodleCtx = pDoodleCanvas.getContext("2d");
 const pDoodleColor = document.getElementById("pDoodleColor");
+const pDoodleSize = document.getElementById("pDoodleSize"); // NEW
+const undoPDoodleBtn = document.getElementById("undoPDoodleBtn"); // NEW
 let isPDrawing = false;
 let currentPStroke = [];
 
@@ -1171,8 +1175,11 @@ chatDoodleBtn.addEventListener("click", async () => {
 
 document.getElementById("hideDoodleBtn").addEventListener("click", () => { 
     pDoodleArea.style.display = "none"; 
+    // Board band hote hi messages ko "Seen" mark karne ke liye loadMessages ko trigger karein
+    if (currentChatId) {
+        loadMessages();
+    }
 });
-
 window.acceptDoodle = async () => {
     await updateDoc(doc(db, "chats", currentChatId), { doodleActive: true, doodleReq: null });
     pDoodleArea.style.display = "flex";
@@ -1197,9 +1204,9 @@ function getPCoordinates(e) {
     return { x: clientX - rect.left, y: clientY - rect.top };
 }
 
-function drawPLine(x0, y0, x1, y1, color) {
+function drawPLine(x0, y0, x1, y1, color, size = 3) {
     pDoodleCtx.beginPath(); pDoodleCtx.moveTo(x0, y0); pDoodleCtx.lineTo(x1, y1);
-    pDoodleCtx.strokeStyle = color; pDoodleCtx.lineWidth = 3; pDoodleCtx.lineCap = 'round';
+    pDoodleCtx.strokeStyle = color; pDoodleCtx.lineWidth = size; pDoodleCtx.lineCap = 'round';
     pDoodleCtx.stroke(); pDoodleCtx.closePath();
 }
 
@@ -1208,20 +1215,24 @@ function initPrivateDoodle() {
     pDoodleCtx.fillStyle = "#fff"; 
     pDoodleCtx.fillRect(0, 0, pDoodleCanvas.width, pDoodleCanvas.height);
     
-    pDoodleUnsubscribe = onSnapshot(collection(db, "chats", currentChatId, "doodle"), (snapshot) => {
-        snapshot.docChanges().forEach((change) => {
-            if (change.type === "added") {
-                const data = change.doc.data();
-                if(data.type === 'clear') {
-                    pDoodleCtx.fillStyle = "#fff"; 
-                    pDoodleCtx.fillRect(0, 0, pDoodleCanvas.width, pDoodleCanvas.height);
-                } else if(data.stroke && data.stroke.length > 0) {
-                    for(let i=0; i<data.stroke.length-1; i++) {
-                        drawPLine(data.stroke[i].x, data.stroke[i].y, data.stroke[i+1].x, data.stroke[i+1].y, data.color);
-                    }
-                    if(pDoodleArea.style.display === "none" && data.sender !== auth.currentUser.uid) {
-                        document.getElementById("doodleBadge").style.display = "block";
-                    }
+    // Ordered by time to properly support redrawing on Undo
+    pDoodleUnsubscribe = onSnapshot(query(collection(db, "chats", currentChatId, "doodle"), orderBy("time", "asc")), (snapshot) => {
+        pDoodleCtx.fillStyle = "#fff"; 
+        pDoodleCtx.fillRect(0, 0, pDoodleCanvas.width, pDoodleCanvas.height);
+        
+        snapshot.docs.forEach((docSnap) => {
+            const data = docSnap.data();
+            if(data.type === 'clear') { 
+                pDoodleCtx.fillStyle = "#fff"; 
+                pDoodleCtx.fillRect(0, 0, pDoodleCanvas.width, pDoodleCanvas.height); 
+            } 
+            else if(data.stroke && data.stroke.length > 0) {
+                const size = data.size || 3;
+                for(let i=0; i<data.stroke.length-1; i++) { 
+                    drawPLine(data.stroke[i].x, data.stroke[i].y, data.stroke[i+1].x, data.stroke[i+1].y, data.color, size); 
+                }
+                if(pDoodleArea.style.display === "none" && data.sender !== auth.currentUser.uid) { 
+                    document.getElementById("doodleBadge").style.display = "block"; 
                 }
             }
         });
@@ -1232,12 +1243,15 @@ const startPDrawing = (e) => { isPDrawing = true; currentPStroke = []; currentPS
 const drawP = (e) => { 
     if (!isPDrawing) return; e.preventDefault(); 
     const pos = getPCoordinates(e); const lastPos = currentPStroke[currentPStroke.length - 1]; 
-    drawPLine(lastPos.x, lastPos.y, pos.x, pos.y, pDoodleColor.value); currentPStroke.push(pos); 
+    drawPLine(lastPos.x, lastPos.y, pos.x, pos.y, pDoodleColor.value, pDoodleSize.value); 
+    currentPStroke.push(pos); 
 };
 const stopPDrawing = async () => { 
     if (!isPDrawing) return; isPDrawing = false; 
     if(currentPStroke.length > 1) { 
-        try { await addDoc(collection(db, "chats", currentChatId, "doodle"), { stroke: currentPStroke, color: pDoodleColor.value, time: Date.now(), sender: auth.currentUser.uid }); } catch(e) {} 
+        try { 
+            await addDoc(collection(db, "chats", currentChatId, "doodle"), { stroke: currentPStroke, color: pDoodleColor.value, size: pDoodleSize.value, time: Date.now(), sender: auth.currentUser.uid }); 
+        } catch(e) {} 
     } 
 };
 
@@ -1252,6 +1266,25 @@ document.getElementById("clearPDoodleBtn").addEventListener("click", async () =>
         await addDoc(collection(db, "chats", currentChatId, "doodle"), { type: 'clear', time: Date.now() });
     }
 });
+
+if (undoPDoodleBtn) {
+    undoPDoodleBtn.addEventListener("click", async () => {
+        if (!currentChatId) return;
+        try {
+            const snaps = await getDocs(query(collection(db, "chats", currentChatId, "doodle"), orderBy("time", "desc")));
+            for (let docSnap of snaps.docs) {
+                const data = docSnap.data();
+                // Find and delete the last stroke drawn by the current user
+                if (data.sender === auth.currentUser.uid && data.type !== 'clear') {
+                    await deleteDoc(doc(db, "chats", currentChatId, "doodle", docSnap.id));
+                    break;
+                } else if (data.type === 'clear') {
+                    break; // Can't undo past a clear
+                }
+            }
+        } catch(e) { console.error("Undo failed:", e); }
+    });
+}
 
 if (chatSettingsBtn) {
     chatSettingsBtn.addEventListener("click", () => {
