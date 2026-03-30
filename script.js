@@ -278,7 +278,7 @@ function startMyProfileListener(uid) {
       if (data.incomingCall && data.incomingCall.chatId) {
           window.pendingCallChatId = data.incomingCall.chatId;
           window.incomingCallTypeAudio = data.incomingCall.callType === 'audio';
-          
+          window.pendingCallerName = data.incomingCall.callerName;
           document.querySelector("#incomingCallModal h3").innerText = window.incomingCallTypeAudio ? "Incoming Voice Call" : "Incoming Video Call";
           document.querySelector("#incomingCallModal i.fa-phone-volume").className = window.incomingCallTypeAudio ? "fa-solid fa-phone-volume" : "fa-solid fa-video";
           
@@ -1647,7 +1647,31 @@ const startVideoCallBtn = document.getElementById("startVideoCallBtn");
 let callListenerUnsubscribe = null;
 let isCurrentCallAudioOnly = false;
 let audioCtx, gainNode; 
+// --- CALL TIMER LOGIC ---
+let callTimerInterval = null;
+let callSeconds = 0;
 
+window.startCallTimer = () => {
+    if (callTimerInterval) clearInterval(callTimerInterval);
+    callSeconds = 0;
+    const timerEl = document.getElementById("callTimerDisplay");
+    if (timerEl) timerEl.innerText = "00:00";
+    
+    callTimerInterval = setInterval(() => {
+        callSeconds++;
+        const mins = String(Math.floor(callSeconds / 60)).padStart(2, '0');
+        const secs = String(callSeconds % 60).padStart(2, '0');
+        const timerDisplay = document.getElementById("callTimerDisplay");
+        if (timerDisplay) timerDisplay.innerText = `${mins}:${secs}`;
+    }, 1000);
+};
+
+window.stopCallTimer = () => {
+    if (callTimerInterval) {
+        clearInterval(callTimerInterval);
+        callTimerInterval = null;
+    }
+};
 // --- NAYA SYNC FUNCTION ---
 let activeCallUnsubscribe = null;
 
@@ -1669,6 +1693,7 @@ function monitorActiveCall(chatId) {
 }
 
 async function clearCallData(chatId) {
+    window.stopCallTimer();
     if (!chatId) return;
     try {
         const callDocRef = doc(db, "calls", chatId);
@@ -1718,9 +1743,10 @@ async function initMedia(audioOnly = false) {
 // 2. Caller Logic Setup 
 async function initiateCall(audioOnly) {
     videoCallArea.style.display = "flex";
+    const tName = document.getElementById("chatTargetName").innerText || "User";
     document.querySelector("#videoCallArea .game-header span").innerHTML = audioOnly 
-        ? '<i class="fa-solid fa-phone"></i> Secure Voice Call' 
-        : '<i class="fa-solid fa-video"></i> Secure Video Call';
+        ? `<i class="fa-solid fa-phone"></i> ${tName} <span id="callTimerDisplay" style="margin-left:10px; color:#10b981; font-size:14px; font-weight:normal;">Ringing...</span>` 
+        : `<i class="fa-solid fa-video"></i> ${tName} <span id="callTimerDisplay" style="margin-left:10px; color:#10b981; font-size:14px; font-weight:normal;">Ringing...</span>`;
 
     await initMedia(audioOnly);
 
@@ -1739,7 +1765,8 @@ async function initiateCall(audioOnly) {
             gainNode.connect(audioCtx.destination);
         }
         remoteVideo.muted = true; 
-        remoteVideo.play().catch(e => console.error(e));
+        remoteVideo.play() .catch(e => console.error(e));
+        if (!callTimerInterval) window.startCallTimer();
     };
     
     const callDoc = doc(collection(db, "calls"), currentChatId);
@@ -1801,9 +1828,10 @@ if(answerCallBtn) {
         await updateDoc(doc(db, "users", auth.currentUser.uid), { incomingCall: null }); 
         
         videoCallArea.style.display = "flex";
+        const cName = window.pendingCallerName || "User";
         document.querySelector("#videoCallArea .game-header span").innerHTML = window.incomingCallTypeAudio 
-            ? '<i class="fa-solid fa-phone"></i> Secure Voice Call' 
-            : '<i class="fa-solid fa-video"></i> Secure Video Call';
+            ? `<i class="fa-solid fa-phone"></i> ${cName} <span id="callTimerDisplay" style="margin-left:10px; color:#10b981; font-size:14px; font-weight:normal;">Connecting...</span>` 
+            : `<i class="fa-solid fa-video"></i> ${cName} <span id="callTimerDisplay" style="margin-left:10px; color:#10b981; font-size:14px; font-weight:normal;">Connecting...</span>`;
 
         await initMedia(window.incomingCallTypeAudio); 
 
