@@ -36,7 +36,15 @@ let generatedOTP = null;
 let pendingSignupData = null;
 
 window.changeSpDifficulty = (val) => { currentSpDifficulty = val; };
-
+// --- WEBRTC GLOBAL VARIABLES ---
+let localStream = null;
+let remoteStream = null;
+let peerConnection = null;
+const servers = {
+    iceServers: [
+        { urls: ['stun:stun1.l.google.com:19302', 'stun:stun2.l.google.com:19302'] }
+    ]
+};
 // --- 3. DOM ELEMENTS ---
 const authScreen = document.getElementById("authScreen"); const appScreen = document.getElementById("appScreen");
 const tabLogin = document.getElementById("tabLogin"); const tabSignup = document.getElementById("tabSignup");
@@ -413,8 +421,8 @@ function openChat(targetUid, targetName, targetAvatar, isTargetOnline, targetLas
   emptyChatState.style.display = "none"; 
   activeChatState.style.display = "flex"; 
   if(window.innerWidth <= 992) { sidebar.classList.add("hidden"); history.pushState({ page: "chat" }, ""); }
-  
-  loadMessages(); listenToTyping(); listenToChatStatus(targetName); 
+
+loadMessages(); listenToTyping(); listenToChatStatus(targetName); window.listenForCalls();
 }
 function openGroupChat(groupId, groupName, memberCount) {
   isCurrentChatGroup = true; currentChatId = groupId; targetUserUid = null;
@@ -437,14 +445,18 @@ function loadMessages() {
   messagesUnsubscribe = onSnapshot(q, (snapshot) => {
     chatBox.innerHTML = ""; let lastMyMsg = null; 
     if(window.msgTimeouts) window.msgTimeouts.forEach(clearTimeout); window.msgTimeouts = [];
-    
+    const fragment = document.createDocumentFragment();
     snapshot.forEach(docSnap => {
       const msg = docSnap.data(); const msgId = docSnap.id; const isMe = msg.sender === auth.currentUser.uid;
       if (isMe) lastMyMsg = msg; if (msg.isExpired) return;
 // Check karein ki kya doodle area screen par dikh raha hai
+// Check karein ki kya doodle area ya game area screen par dikh raha hai
 const isDoodleOpen = pDoodleArea && pDoodleArea.style.display === "flex";
+const activeGameArea = document.getElementById("activeGameArea");
+const isGameOpen = activeGameArea && activeGameArea.style.display === "flex";
 
-if (!isMe && !msg.seenAt && !isDoodleOpen) { 
+// Agar message mera nahi hai, seen nahi hua hai, aur na hi main doodle/game mein busy hoon, tab seen mark karein
+if (!isMe && !msg.seenAt && !isDoodleOpen && !isGameOpen) { 
     const updateData = { seenAt: Date.now() }; 
     if (msg.timerDuration) { updateData.expiresAt = Date.now() + msg.timerDuration; } 
     updateDoc(doc(db, "chats", currentChatId, "messages", msgId), updateData).catch(e=>{}); 
@@ -486,10 +498,11 @@ if (!isMe && !msg.seenAt && !isDoodleOpen) {
       
       let avatarSrc = isCurrentChatGroup && !isMe ? generateAvatar(allUsers.find(u=>u.id===msg.sender), msg.senderName) : document.getElementById('chatTargetAvatar').src;
       div.innerHTML = `${!isMe ? `<img src="${avatarSrc}" class="msg-avatar">` : ''}<div style="display:flex; flex-direction:column; max-width: 100%;">${contentHtml}<div class="msg-time">${timeStr}</div></div>${isMe ? `<img src="${document.getElementById('myAvatar').src}" class="msg-avatar">` : ''}`;
-      chatBox.appendChild(div);
+      fragment.appendChild(div);
     });
 
     if (lastMyMsg && lastMyMsg.seenAt) { const seenDiv = document.createElement("div"); seenDiv.style.textAlign = "right"; seenDiv.style.fontSize = "11px"; seenDiv.style.color = "var(--text-muted)"; seenDiv.style.marginTop = "-15px"; seenDiv.style.paddingRight = "45px"; seenDiv.innerHTML = `<i class="fa-solid fa-check-double" style="color: #3b82f6;"></i> Seen`; chatBox.appendChild(seenDiv); }
+    chatBox.appendChild(fragment);
     chatBox.scrollTop = chatBox.scrollHeight;
   });
 }
@@ -644,11 +657,49 @@ const fileInput = document.createElement("input"); fileInput.type = "file"; file
 document.querySelector('.fa-paperclip').parentElement.addEventListener("click", () => fileInput.click());
 fileInput.addEventListener("change", async (e) => {
   const file = e.target.files[0]; if (!file || !currentChatId) return; const originalHtml = sendBtn.innerHTML; sendBtn.innerHTML = "<i class='fa-solid fa-spinner fa-spin'></i>"; sendBtn.disabled = true;
-  try { const formData = new FormData(); formData.append("file", file); formData.append("upload_preset", UPLOAD_PRESET); const response = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`, { method: "POST", body: formData }); const data = await response.json(); const timerValue = modalMsgTimerSelect ? parseInt(modalMsgTimerSelect.value) : 60000; const payload = { text: "", imageUrl: data.secure_url, imagePublicId: data.public_id, sender: auth.currentUser.uid, senderName: document.getElementById("myName").innerText, time: Date.now(), isEdited: false, isDeleted: false }; if (timerValue > 0) payload.timerDuration = timerValue; await addDoc(collection(db, "chats", currentChatId, "messages"), payload); } catch (err) { alert("Upload failed: " + err.message); } finally { sendBtn.innerHTML = originalHtml; sendBtn.disabled = false; fileInput.value = ""; }
+  try { const formData = new FormData(); formData.append("file", file); formData.append("upload_preset", UPLOAD_PRESET); const response = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`, { method: "POST", body: formData }); const data = await response.json(); const timerValue = modalMsgTimerSelect ? parseInt(modalMsgTimerSelect.value) : 60000; const optimizedUrl = data.secure_url.replace('/upload/', '/upload/q_auto,f_auto,w_600/');
+const payload = { text: "", imageUrl: optimizedUrl, imagePublicId: data.public_id, sender: auth.currentUser.uid, senderName: document.getElementById("myName").innerText, time: Date.now(), isEdited: false, isDeleted: false }; if (timerValue > 0) payload.timerDuration = timerValue; await addDoc(collection(db, "chats", currentChatId, "messages"), payload); } catch (err) { alert("Upload failed: " + err.message); } finally { sendBtn.innerHTML = originalHtml; sendBtn.disabled = false; fileInput.value = ""; }
 });
 
 const profileModal = document.getElementById("profileModal"); const closeProfileBtn = document.getElementById("closeProfileBtn"); const profileAvatar = document.getElementById("profileAvatar"); const profileName = document.getElementById("profileName"); const profileHandle = document.getElementById("profileHandle"); const profileBioDisplay = document.getElementById("profileBioDisplay"); const profileBioEdit = document.getElementById("profileBioEdit"); const profileJoinDate = document.getElementById("profileJoinDate"); const editProfileBtn = document.getElementById("editProfileBtn"); const saveProfileBtn = document.getElementById("saveProfileBtn"); const profileAvatarInput = document.getElementById("profileAvatarInput"); const editAvatarBtn = document.getElementById("editAvatarBtn");
-window.openProfile = async (uid) => { profileModal.style.display = "flex"; editProfileBtn.style.display = "none"; saveProfileBtn.style.display = "none"; editAvatarBtn.style.display = "none"; profileBioEdit.style.display = "none"; profileBioDisplay.style.display = "block"; profileBioDisplay.innerText = "Loading..."; const isCurrentUser = auth.currentUser && uid === auth.currentUser.uid; if (isCurrentUser) { editProfileBtn.style.display = "block"; editAvatarBtn.style.display = "block"; } try { const docSnap = await getDoc(doc(db, "users", uid)); if (docSnap.exists()) { const data = docSnap.data(); const dName = data.fullName || data.username; profileName.innerText = dName; profileHandle.innerText = `@${data.username}`; profileAvatar.src = generateAvatar(data, dName); const bioText = data.bio || "Hey there! I am using Chit-Chat."; profileBioDisplay.innerText = bioText; profileBioEdit.value = bioText; profileJoinDate.innerText = `Joined: ${new Date(data.createdAt || Date.now()).toLocaleDateString()}`; } } catch (e) {} };
+window.openProfile = async (uid) => { 
+    profileModal.style.display = "flex"; 
+    editProfileBtn.style.display = "none"; 
+    saveProfileBtn.style.display = "none"; 
+    editAvatarBtn.style.display = "none"; 
+    profileBioEdit.style.display = "none"; 
+    profileBioDisplay.style.display = "block"; 
+    profileBioDisplay.innerText = "Loading..."; 
+    
+    const isCurrentUser = auth.currentUser && uid === auth.currentUser.uid; 
+    
+    // NEW: Show/Hide Call Buttons based on whose profile it is
+    const profileCallActions = document.getElementById("profileCallActions");
+    if (isCurrentUser) { 
+        editProfileBtn.style.display = "block"; 
+        editAvatarBtn.style.display = "block"; 
+        if (profileCallActions) profileCallActions.style.display = "none";
+    } else {
+        if (profileCallActions) profileCallActions.style.display = "flex";
+    }
+
+    try { 
+        const docSnap = await getDoc(doc(db, "users", uid)); 
+        if (docSnap.exists()) { 
+            const data = docSnap.data(); 
+            const dName = data.fullName || data.username; 
+            profileName.innerText = dName; 
+            profileHandle.innerText = `@${data.username}`; 
+            profileAvatar.src = generateAvatar(data, dName); 
+            const bioText = data.bio || "Hey there! I am using Chit-Chat."; 
+            profileBioDisplay.innerText = bioText; 
+            profileBioEdit.value = bioText; 
+            profileJoinDate.innerText = `Joined: ${new Date(data.createdAt || Date.now()).toLocaleDateString()}`; 
+        } 
+    } catch (e) {
+        console.error(e);
+    } 
+};
 closeProfileBtn.addEventListener("click", () => profileModal.style.display = "none"); profileModal.addEventListener("click", (e) => { if(e.target === profileModal) profileModal.style.display = "none"; });
 editProfileBtn.addEventListener("click", () => { profileBioDisplay.style.display = "none"; profileBioEdit.style.display = "block"; editProfileBtn.style.display = "none"; saveProfileBtn.style.display = "block"; profileBioEdit.focus(); });
 saveProfileBtn.addEventListener("click", async () => { const newBio = profileBioEdit.value.trim(); saveProfileBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Saving...'; try { await updateDoc(doc(db, "users", auth.currentUser.uid), { bio: newBio }); profileBioDisplay.innerText = newBio || "Hey there! I am using Chit-Chat."; profileBioEdit.style.display = "none"; profileBioDisplay.style.display = "block"; saveProfileBtn.style.display = "none"; editProfileBtn.style.display = "block"; showToast("Profile Updated", "Your bio has been saved."); } catch(e) {} finally { saveProfileBtn.innerHTML = 'Save Changes'; } });
@@ -708,8 +759,24 @@ document.querySelectorAll(".game-select-btn").forEach(btn => {
 });
 
 window.acceptGameChallenge = async (gameId, gameType) => { await updateDoc(doc(db, "games", gameId), { status: "playing" }); joinGameRoom(gameId, gameType); };
-closeGameBtn.addEventListener("click", () => { if(currentAnimationId) cancelAnimationFrame(currentAnimationId); if (singlePlayerMode) { singlePlayerMode = false; spTttActive = false; if (window.innerWidth <= 992) sidebar.classList.remove("hidden"); } else { if(gameUnsubscribe) gameUnsubscribe(); if(currentGameId) { updateDoc(doc(db, "games", currentGameId), { status: "abandoned" }); } } activeGameArea.style.display = "none"; currentGameId = null; isPlayingActionGame = false; });
-
+closeGameBtn.addEventListener("click", () => { 
+    if(currentAnimationId) cancelAnimationFrame(currentAnimationId); 
+    if (singlePlayerMode) { 
+        singlePlayerMode = false; spTttActive = false; 
+        if (window.innerWidth <= 992) sidebar.classList.remove("hidden"); 
+    } else { 
+        if(gameUnsubscribe) gameUnsubscribe(); 
+        if(currentGameId) { updateDoc(doc(db, "games", currentGameId), { status: "abandoned" }); } 
+    } 
+    activeGameArea.style.display = "none"; 
+    currentGameId = null; 
+    isPlayingActionGame = false; 
+    
+    // Game band hote hi messages ko "Seen" mark karne ke liye trigger karein
+    if (currentChatId) {
+        loadMessages();
+    }
+});
 function joinGameRoom(gameId, gameType) {
     currentGameId = gameId; isPlayingActionGame = false; singlePlayerMode = false; activeGameArea.style.display = "flex";
     let gTitle = "Game"; if (gameType === 'tictactoe') gTitle = "Tic Tac Toe"; if (gameType === 'rps') gTitle = "Rock Paper Scissors"; if (gameType === 'jetfighter') gTitle = "Jet Fighter"; if (gameType === 'carracing') gTitle = "Car Racing"; if (gameType === 'ludo') gTitle = "Ludo Arena"; document.getElementById("activeGameTitle").innerText = gTitle;
@@ -1510,3 +1577,189 @@ document.getElementById("verifyUpdateOtpBtn").addEventListener("click", async ()
         btn.disabled = false;
     }
 });
+// --- VIDEO CALL LOGIC ---
+// --- COMPLETE VIDEO CALL LOGIC ---
+// --- COMPLETE AUDIO/VIDEO CALL LOGIC ---
+const videoCallArea = document.getElementById("videoCallArea");
+const localVideo = document.getElementById("localVideo");
+const remoteVideo = document.getElementById("remoteVideo");
+const endCallBtn = document.getElementById("endCallBtn");
+const incomingCallModal = document.getElementById("incomingCallModal");
+const answerCallBtn = document.getElementById("answerCallBtn");
+const rejectCallBtn = document.getElementById("rejectCallBtn");
+const openCallMenuBtn = document.getElementById("openCallMenuBtn");
+const callSelectionModal = document.getElementById("callSelectionModal");
+const startAudioCallBtn = document.getElementById("startAudioCallBtn");
+const startVideoCallBtn = document.getElementById("startVideoCallBtn");
+
+let callListenerUnsubscribe = null;
+let isCurrentCallAudioOnly = false;
+
+// 1. Camera/Mic Initialize
+async function initMedia(audioOnly = false) {
+    isCurrentCallAudioOnly = audioOnly;
+    try {
+        localStream = await navigator.mediaDevices.getUserMedia({ 
+            video: !audioOnly, 
+            audio: true 
+        });
+        
+        localVideo.srcObject = localStream;
+        remoteStream = new MediaStream();
+        remoteVideo.srcObject = remoteStream;
+
+        if(audioOnly) {
+            localVideo.style.display = "none";
+            remoteVideo.style.opacity = "0"; 
+        } else {
+            localVideo.style.display = "block";
+            remoteVideo.style.opacity = "1";
+        }
+    } catch (error) {
+        showToast("Error", "Media permissions denied!");
+        console.error(error);
+    }
+}
+
+// 2. Caller Logic Setup 
+async function initiateCall(audioOnly) {
+    // callSelectionModal is now deleted, directly show video area
+    videoCallArea.style.display = "flex";
+    document.querySelector("#videoCallArea .game-header span").innerHTML = audioOnly 
+        ? '<i class="fa-solid fa-phone"></i> Secure Voice Call' 
+        : '<i class="fa-solid fa-video"></i> Secure Video Call';
+
+    await initMedia(audioOnly);
+
+    peerConnection = new RTCPeerConnection(servers);
+    localStream.getTracks().forEach((track) => peerConnection.addTrack(track, localStream));
+peerConnection.ontrack = (event) => { 
+    remoteVideo.srcObject = event.streams[0]; 
+    remoteVideo.play().catch(e => console.log(e)); 
+};
+    const callDoc = doc(collection(db, "calls"), currentChatId);
+    const offerCandidates = collection(callDoc, "offerCandidates");
+    const answerCandidates = collection(callDoc, "answerCandidates");
+
+    peerConnection.onicecandidate = (event) => { event.candidate && addDoc(offerCandidates, event.candidate.toJSON()); };
+
+    const offerDescription = await peerConnection.createOffer();
+    await peerConnection.setLocalDescription(offerDescription);
+    
+    await setDoc(callDoc, { 
+        offer: { sdp: offerDescription.sdp, type: offerDescription.type },
+        callType: audioOnly ? 'audio' : 'video' 
+    });
+
+    onSnapshot(callDoc, (snapshot) => {
+        const data = snapshot.data();
+        if (!peerConnection.currentRemoteDescription && data?.answer) {
+            const answerDescription = new RTCSessionDescription(data.answer);
+            peerConnection.setRemoteDescription(answerDescription);
+        }
+    });
+
+    onSnapshot(answerCandidates, (snapshot) => {
+        snapshot.docChanges().forEach((change) => {
+            if (change.type === "added") peerConnection.addIceCandidate(new RTCIceCandidate(change.doc.data()));
+        });
+    });
+
+    const msgText = audioOnly ? "📞 Voice Calling..." : "🎥 Video Calling...";
+    const payload = { text: msgText, sender: auth.currentUser.uid, senderName: document.getElementById("myName").innerText, time: Date.now(), isEdited: false, isDeleted: false };
+    await addDoc(collection(db, "chats", currentChatId, "messages"), payload);
+}
+
+if(startAudioCallBtn) startAudioCallBtn.addEventListener("click", () => initiateCall(true));
+if(startVideoCallBtn) startVideoCallBtn.addEventListener("click", () => initiateCall(false));
+
+// 3. Listen for Incoming Calls
+window.listenForCalls = () => {
+    if (!currentChatId) return;
+    if (callListenerUnsubscribe) callListenerUnsubscribe();
+    
+    callListenerUnsubscribe = onSnapshot(doc(db, "calls", currentChatId), (snapshot) => {
+        if (!snapshot.exists()) {
+            incomingCallModal.style.display = "none";
+            if(videoCallArea.style.display === "flex") { endCallBtn.click(); }
+            return;
+        }
+        
+        const data = snapshot.data();
+        if (data.offer && !localStream && videoCallArea.style.display === "none") {
+            const isAudioCall = data.callType === 'audio';
+            document.querySelector("#incomingCallModal h3").innerText = isAudioCall ? "Incoming Voice Call" : "Incoming Video Call";
+            document.querySelector("#incomingCallModal i.fa-phone-volume").className = isAudioCall ? "fa-solid fa-phone-volume" : "fa-solid fa-video";
+            
+            window.incomingCallTypeAudio = isAudioCall; 
+            incomingCallModal.style.display = "flex";
+        }
+    });
+};
+
+// 4. Receiver Logic (Answer)
+if(answerCallBtn) {
+    answerCallBtn.addEventListener("click", async () => {
+        incomingCallModal.style.display = "none";
+        videoCallArea.style.display = "flex";
+        
+        document.querySelector("#videoCallArea .game-header span").innerHTML = window.incomingCallTypeAudio 
+            ? '<i class="fa-solid fa-phone"></i> Secure Voice Call' 
+            : '<i class="fa-solid fa-video"></i> Secure Video Call';
+
+        await initMedia(window.incomingCallTypeAudio); 
+
+        peerConnection = new RTCPeerConnection(servers);
+        localStream.getTracks().forEach((track) => peerConnection.addTrack(track, localStream));
+peerConnection.ontrack = (event) => { 
+    remoteVideo.srcObject = event.streams[0]; 
+    // Browser force play karega
+    remoteVideo.play().catch(e => console.log(e)); 
+};
+peerConnection.ontrack = (event) => { 
+    remoteVideo.srcObject = event.streams[0]; 
+    
+    // YEH 2 LINES ADD KAREIN 👇
+    remoteVideo.muted = false; 
+    remoteVideo.volume = 1.0;  
+    
+    remoteVideo.play().catch(e => console.log(e)); 
+};
+        const callDoc = doc(db, "calls", currentChatId);
+        const answerCandidates = collection(callDoc, "answerCandidates");
+        const offerCandidates = collection(callDoc, "offerCandidates");
+
+        peerConnection.onicecandidate = (event) => { event.candidate && addDoc(answerCandidates, event.candidate.toJSON()); };
+
+        const callData = (await getDoc(callDoc)).data();
+        await peerConnection.setRemoteDescription(new RTCSessionDescription(callData.offer));
+
+        const answerDescription = await peerConnection.createAnswer();
+        await peerConnection.setLocalDescription(answerDescription);
+        await updateDoc(callDoc, { answer: { type: answerDescription.type, sdp: answerDescription.sdp } });
+
+        onSnapshot(offerCandidates, (snapshot) => {
+            snapshot.docChanges().forEach((change) => {
+                if (change.type === "added") peerConnection.addIceCandidate(new RTCIceCandidate(change.doc.data()));
+            });
+        });
+    });
+}
+
+// 5. Reject & Hangup
+if(rejectCallBtn) {
+    rejectCallBtn.addEventListener("click", async () => {
+        incomingCallModal.style.display = "none";
+        if(currentChatId) await deleteDoc(doc(db, "calls", currentChatId));
+    });
+}
+
+if(endCallBtn) {
+    endCallBtn.addEventListener("click", () => {
+        if (peerConnection) peerConnection.close();
+        if (localStream) localStream.getTracks().forEach(track => track.stop());
+        localStream = null; peerConnection = null;
+        videoCallArea.style.display = "none";
+        if (currentChatId) deleteDoc(doc(db, "calls", currentChatId)).catch(e => {});
+    });
+}
