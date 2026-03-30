@@ -325,7 +325,25 @@ if(createGroupBtn) {
     if (members.length > 1) { addDoc(collection(db, "groups"), { name: groupName, members: members, createdAt: Date.now(), createdBy: auth.currentUser.uid }); showToast("Group Created", `${groupName} was created successfully.`); } else { alert("You must add at least one other person."); }
   });
 }
-if (backToUsersBtn) { backToUsersBtn.addEventListener("click", () => { if (window.innerWidth <= 992) { sidebar.classList.remove("hidden"); activeChatState.style.display = "none"; emptyChatState.style.display = "flex"; } }); }
+if (backToUsersBtn) { 
+    backToUsersBtn.addEventListener("click", () => { 
+        if (window.innerWidth <= 992) { 
+            sidebar.classList.remove("hidden"); 
+            activeChatState.style.display = "none"; 
+            emptyChatState.style.display = "flex"; 
+            
+            // NEW: Reset states completely so notifications trigger correctly
+            currentChatId = null; 
+            targetUserUid = null; 
+            isCurrentChatGroup = false;
+            
+            // Stop background listeners for the closed chat
+            if (messagesUnsubscribe) { messagesUnsubscribe(); messagesUnsubscribe = null; }
+            if (chatDocUnsubscribe) { chatDocUnsubscribe(); chatDocUnsubscribe = null; }
+            if (chatMetaUnsubscribe) { chatMetaUnsubscribe(); chatMetaUnsubscribe = null; }
+        } 
+    }); 
+}
 function listenToChatStatus(targetName) {
     if (chatDocUnsubscribe) chatDocUnsubscribe();
     const overlay = document.getElementById("chatStateOverlay"); 
@@ -457,9 +475,11 @@ function loadMessages() {
 const isDoodleOpen = pDoodleArea && pDoodleArea.style.display === "flex";
 const activeGameArea = document.getElementById("activeGameArea");
 const isGameOpen = activeGameArea && activeGameArea.style.display === "flex";
-const isChatCurrentlyVisible = activeChatState.style.display === "flex" && document.visibilityState === 'visible';
 
-// Sirf tabhi seen mark karein jab user actually is chat ko screen par dekh raha ho
+// NEW: Mobile par check karein ki sidebar chat ke upar toh nahi hai
+const isSidebarCoveringChat = window.innerWidth <= 992 && !sidebar.classList.contains("hidden");
+const isChatCurrentlyVisible = activeChatState.style.display === "flex" && document.visibilityState === 'visible' && !isSidebarCoveringChat;
+
 if (!isMe && !msg.seenAt && !isDoodleOpen && !isGameOpen && isChatCurrentlyVisible) { 
     const updateData = { seenAt: Date.now() }; 
     if (msg.timerDuration) { updateData.expiresAt = Date.now() + msg.timerDuration; } 
