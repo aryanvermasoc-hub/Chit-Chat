@@ -345,3 +345,13 @@ body { background: var(--bg-base); color: var(--text-main); display: flex; justi
     color: var(--primary) !important;
     border-bottom: 2px solid var(--primary) !important;
 }
+/* --- PERFORMANCE OPTIMIZATIONS --- */
+.glass-card, .app-layout, .sidebar, .chat-area {
+    will-change: transform, opacity;
+    transform: translateZ(0);
+}
+
+.message-wrapper, .msg-bubble, .user-item {
+    will-change: transform, opacity;
+    contain: content;
+}
