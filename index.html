@@ -191,20 +191,25 @@
 
       <div id="activeChatState" style="display: none; height: 100%; flex-direction: column;">
         <header class="chat-header glass-panel">
-          <div style="display: flex; align-items: center; gap: 10px; overflow: hidden;">
+          <div style="display: flex; align-items: center; gap: 10px; overflow: hidden; flex: 1;">
               <button id="backToUsersBtn" class="mobile-back-btn icon-btn"><i class="fa-solid fa-chevron-left"></i></button>
-              <div class="chat-target-info">
+              <div class="chat-target-info" style="flex: 1; min-width: 0;">
                 <img id="chatTargetAvatar" src="" class="avatar">
-                <div class="user-meta" style="overflow: hidden;"><span id="chatTargetName" class="name">User Name</span><span id="typingIndicator" class="typing-text" style="display:none;">typing...</span><span id="chatTargetStatus" class="chat-meta-subtitle">Offline</span></div>
+                <div class="user-meta" style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                  <span id="chatTargetName" class="name" style="max-width: 100%; font-size: 15px;">User Name</span>
+                  <span id="typingIndicator" class="typing-text" style="display:none;">typing...</span>
+                  <span id="chatTargetStatus" class="chat-meta-subtitle">Offline</span>
+                </div>
               </div>
           </div>
-          <div style="margin-left: auto; display: flex; align-items: center; gap: 5px;">
-            <button id="chatDoodleBtn" class="icon-btn" title="Shared Whiteboard" style="color: #10b981; font-size: 20px; padding: 5px; position:relative; display:none;">
+          
+          <div style="display: flex; align-items: center; gap: 2px; flex-shrink: 0; margin-left: 10px;">
+            <button id="chatDoodleBtn" class="icon-btn" title="Shared Whiteboard" style="color: #10b981; font-size: 18px; padding: 6px; position:relative; display:none;">
                 <i class="fa-solid fa-palette"></i>
                 <span id="doodleBadge" style="display:none; position:absolute; top:2px; right:2px; width:8px; height:8px; background:#ef4444; border-radius:50%; box-shadow: 0 0 5px #ef4444;"></span>
             </button>
-            <button id="chatSettingsBtn" class="icon-btn" title="Chat Settings" style="color: var(--text-muted); font-size: 20px; padding: 5px;"><i class="fa-solid fa-gear"></i></button>
-            <button id="launchGameMenuBtn" class="icon-btn" title="Challenge to Game" style="color: var(--accent); font-size: 22px; padding: 5px;"><i class="fa-solid fa-gamepad"></i></button>
+            <button id="launchGameMenuBtn" class="icon-btn" title="Challenge to Game" style="color: var(--accent); font-size: 18px; padding: 6px;"><i class="fa-solid fa-gamepad"></i></button>
+            <button id="chatSettingsBtn" class="icon-btn" title="Chat Settings" style="color: var(--text-muted); font-size: 18px; padding: 6px;"><i class="fa-solid fa-ellipsis-vertical"></i></button>
           </div>
         </header>
         
@@ -225,11 +230,34 @@
       </div>
     </main>
   </div>
-
+<div id="videoCallArea" class="game-overlay-container" style="display: none; background: #000; z-index: 200;">
+    <div class="game-header" style="background: rgba(0,0,0,0.8);">
+        <span style="font-weight: bold; color: #fff;"><i class="fa-solid fa-video"></i> Secure Video Call</span>
+    </div>
+    <div style="flex:1; position: relative; display: flex; justify-content: center; align-items: center;">
+        <video id="remoteVideo" autoplay playsinline style="width: 100%; height: 100%; object-fit: cover;"></video>
+        <video id="localVideo" autoplay playsinline muted style="width: 120px; height: 160px; position: absolute; bottom: 20px; right: 20px; border-radius: 12px; border: 2px solid var(--primary); object-fit: cover; box-shadow: 0 5px 15px rgba(0,0,0,0.5);"></video>
+    </div>
+    <div style="padding: 20px; display: flex; justify-content: center; gap: 20px; background: rgba(0,0,0,0.8);">
+        <button id="toggleMicBtn" class="primary-btn circle-btn" style="background: rgba(255,255,255,0.2); width: 50px; height: 50px;"><i class="fa-solid fa-microphone"></i></button>
+        <button id="toggleCamBtn" class="primary-btn circle-btn" style="background: rgba(255,255,255,0.2); width: 50px; height: 50px;"><i class="fa-solid fa-camera"></i></button>
+        <button id="endCallBtn" class="primary-btn circle-btn" style="background: #ef4444; width: 50px; height: 50px; box-shadow: 0 0 15px rgba(239,68,68,0.5);"><i class="fa-solid fa-phone-slash"></i></button>
+    </div>
+</div>
+<div id="incomingCallModal" class="modal-overlay" style="display: none; z-index: 250;">
+    <div class="modal-content" style="background: rgba(20,20,30,0.95); border: 2px solid var(--primary); text-align: center; max-width: 300px;">
+        <div style="font-size: 40px; color: var(--primary); margin-bottom: 15px; animation: dicePulse 1s infinite alternate;"><i class="fa-solid fa-phone-volume"></i></div>
+        <h3 style="margin-bottom: 10px;">Incoming Video Call</h3>
+        <p style="color: var(--text-muted); margin-bottom: 25px;">Friend is calling you...</p>
+        <div style="display: flex; justify-content: center; gap: 20px;">
+            <button id="answerCallBtn" class="primary-btn circle-btn" style="background: #10b981; width: 60px; height: 60px; box-shadow: 0 0 15px rgba(16,185,129,0.5);"><i class="fa-solid fa-phone"></i></button>
+            <button id="rejectCallBtn" class="primary-btn circle-btn" style="background: #ef4444; width: 60px; height: 60px; box-shadow: 0 0 15px rgba(239,68,68,0.5);"><i class="fa-solid fa-phone-slash"></i></button>
+        </div>
+    </div>
+</div>
   <div id="msgOptionsModal" class="modal-overlay" style="display: none;">
     <div class="modal-content" style="padding: 25px;"><div class="modal-header"><h3>Message Options</h3><button onclick="closeMsgOptions()" class="icon-btn"><i class="fa-solid fa-xmark"></i></button></div><div id="msgOptionsList" style="display: flex; flex-direction: column; gap: 12px; margin-top: 15px;"></div></div>
   </div>
-
   <div id="chatSettingsModal" class="modal-overlay" style="display: none;">
     <div class="modal-content">
       <div class="modal-header"><h3>Chat Settings</h3><button onclick="document.getElementById('chatSettingsModal').style.display='none'" class="icon-btn"><i class="fa-solid fa-xmark"></i></button></div>
@@ -265,7 +293,21 @@
   <div id="profileModal" class="modal-overlay" style="display: none;">
     <div class="modal-content profile-content">
       <button id="closeProfileBtn" class="icon-btn close-modal-corner"><i class="fa-solid fa-xmark"></i></button>
-      <div class="profile-header"><div style="position: relative; display: inline-block;"><img id="profileAvatar" src="" class="profile-avatar-large"><input type="file" id="profileAvatarInput" style="display: none;" accept="image/*"><button id="editAvatarBtn" style="display:none; position:absolute; bottom:10px; right:0; background:var(--primary); color:white; border-radius:50%; width:35px; height:35px; border:none; cursor:pointer;"><i class="fa-solid fa-camera"></i></button></div><h2 id="profileName">Name</h2><p id="profileHandle" class="text-muted">@user</p></div>
+      <div class="profile-header">
+        <div style="position: relative; display: inline-block;">
+            <img id="profileAvatar" src="" class="profile-avatar-large">
+            <input type="file" id="profileAvatarInput" style="display: none;" accept="image/*">
+            <button id="editAvatarBtn" style="display:none; position:absolute; bottom:10px; right:0; background:var(--primary); color:white; border-radius:50%; width:35px; height:35px; border:none; cursor:pointer;"><i class="fa-solid fa-camera"></i></button>
+        </div>
+        <h2 id="profileName">Name</h2>
+        <p id="profileHandle" class="text-muted">@user</p>
+      </div>
+
+      <div id="profileCallActions" style="display: flex; gap: 10px; margin-top: 5px; margin-bottom: 20px; justify-content: center;">
+          <button id="startAudioCallBtn" onclick="document.getElementById('profileModal').style.display='none'" class="primary-btn glow-btn" style="background: rgba(16, 185, 129, 0.15); border: 1px solid #10b981; color: #10b981; padding: 10px; flex: 1;"><i class="fa-solid fa-phone"></i> Voice Call</button>
+          <button id="startVideoCallBtn" onclick="document.getElementById('profileModal').style.display='none'" class="primary-btn glow-btn" style="background: rgba(59, 130, 246, 0.15); border: 1px solid #3b82f6; color: #3b82f6; padding: 10px; flex: 1;"><i class="fa-solid fa-video"></i> Video Call</button>
+      </div>
+
       <div class="bio-section"><p id="profileBioDisplay">Hey there! I am using Chit-Chat.</p><textarea id="profileBioEdit" style="display:none;"></textarea></div>
       <div style="color:var(--text-muted); font-size:12px; margin-top:10px;"><i class="fa-solid fa-calendar-days"></i> <span id="profileJoinDate">Joined: ...</span></div>
       <div class="profile-actions"><button id="editProfileBtn" class="primary-btn" style="display:none;">Edit Profile</button><button id="saveProfileBtn" class="primary-btn" style="display:none;">Save Changes</button></div>
