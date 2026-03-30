@@ -451,12 +451,14 @@ function loadMessages() {
       if (isMe) lastMyMsg = msg; if (msg.isExpired) return;
 // Check karein ki kya doodle area screen par dikh raha hai
 // Check karein ki kya doodle area ya game area screen par dikh raha hai
+// Check karein ki kya doodle, game, ya chat screen par literally visible hai
 const isDoodleOpen = pDoodleArea && pDoodleArea.style.display === "flex";
 const activeGameArea = document.getElementById("activeGameArea");
 const isGameOpen = activeGameArea && activeGameArea.style.display === "flex";
+const isChatCurrentlyVisible = activeChatState.style.display === "flex" && document.visibilityState === 'visible';
 
-// Agar message mera nahi hai, seen nahi hua hai, aur na hi main doodle/game mein busy hoon, tab seen mark karein
-if (!isMe && !msg.seenAt && !isDoodleOpen && !isGameOpen) { 
+// Sirf tabhi seen mark karein jab user actually is chat ko screen par dekh raha ho
+if (!isMe && !msg.seenAt && !isDoodleOpen && !isGameOpen && isChatCurrentlyVisible) { 
     const updateData = { seenAt: Date.now() }; 
     if (msg.timerDuration) { updateData.expiresAt = Date.now() + msg.timerDuration; } 
     updateDoc(doc(db, "chats", currentChatId, "messages", msgId), updateData).catch(e=>{}); 
@@ -501,7 +503,16 @@ if (!isMe && !msg.seenAt && !isDoodleOpen && !isGameOpen) {
       fragment.appendChild(div);
     });
 
-    if (lastMyMsg && lastMyMsg.seenAt) { const seenDiv = document.createElement("div"); seenDiv.style.textAlign = "right"; seenDiv.style.fontSize = "11px"; seenDiv.style.color = "var(--text-muted)"; seenDiv.style.marginTop = "-15px"; seenDiv.style.paddingRight = "45px"; seenDiv.innerHTML = `<i class="fa-solid fa-check-double" style="color: #3b82f6;"></i> Seen`; chatBox.appendChild(seenDiv); }
+    if (lastMyMsg && lastMyMsg.seenAt) { 
+        const seenDiv = document.createElement("div"); 
+        seenDiv.style.textAlign = "right"; 
+        seenDiv.style.fontSize = "11px"; 
+        seenDiv.style.color = "var(--text-muted)"; 
+        seenDiv.style.marginTop = "-15px"; 
+        seenDiv.style.paddingRight = "45px"; 
+        seenDiv.innerHTML = `<i class="fa-solid fa-check-double" style="color: #3b82f6;"></i> Seen`; 
+        fragment.appendChild(seenDiv); // <--- YAHAN CHANGE KIYA
+    }
     chatBox.appendChild(fragment);
     chatBox.scrollTop = chatBox.scrollHeight;
   });
@@ -1600,10 +1611,14 @@ async function initMedia(audioOnly = false) {
     isCurrentCallAudioOnly = audioOnly;
     try {
         localStream = await navigator.mediaDevices.getUserMedia({ 
-            video: !audioOnly, 
-            audio: true 
-        });
-        
+    video: !audioOnly, 
+    audio: {
+        echoCancellation: true, // Earphones hain toh isko false kar sakte hain
+        noiseSuppression: false, // Delay kam karne ke liye false
+        autoGainControl: false,  // Delay kam karne ke liye false
+        sampleRate: 48000        // High quality audio
+    } 
+});
         localVideo.srcObject = localStream;
         remoteStream = new MediaStream();
         remoteVideo.srcObject = remoteStream;
@@ -1761,5 +1776,62 @@ if(endCallBtn) {
         localStream = null; peerConnection = null;
         videoCallArea.style.display = "none";
         if (currentChatId) deleteDoc(doc(db, "calls", currentChatId)).catch(e => {});
+    });
+}
+// --- CALL CONTROLS (MIC, CAM, SPEAKER) ---
+const toggleMicBtn = document.getElementById("toggleMicBtn");
+const toggleCamBtn = document.getElementById("toggleCamBtn");
+const toggleSpeakerBtn = document.getElementById("toggleSpeakerBtn");
+
+if (toggleMicBtn) {
+    toggleMicBtn.addEventListener("click", () => {
+        if (localStream) {
+            const audioTrack = localStream.getAudioTracks()[0];
+            if (audioTrack) {
+                audioTrack.enabled = !audioTrack.enabled;
+                toggleMicBtn.innerHTML = audioTrack.enabled ? '<i class="fa-solid fa-microphone"></i>' : '<i class="fa-solid fa-microphone-slash"></i>';
+                toggleMicBtn.style.background = audioTrack.enabled ? 'rgba(255,255,255,0.2)' : 'rgba(239,68,68,0.5)';
+            }
+        }
+    });
+}
+
+if (toggleCamBtn) {
+    toggleCamBtn.addEventListener("click", () => {
+        if (localStream) {
+            const videoTrack = localStream.getVideoTracks()[0];
+            if (videoTrack) {
+                videoTrack.enabled = !videoTrack.enabled;
+                toggleCamBtn.innerHTML = videoTrack.enabled ? '<i class="fa-solid fa-camera"></i>' : '<i class="fa-solid fa-camera-slash"></i>';
+                toggleCamBtn.style.background = videoTrack.enabled ? 'rgba(255,255,255,0.2)' : 'rgba(239,68,68,0.5)';
+            }
+        }
+    });
+}
+
+let isSpeakerOn = false;
+if (toggleSpeakerBtn) {
+    toggleSpeakerBtn.addEventListener("click", async () => {
+        isSpeakerOn = !isSpeakerOn;
+        toggleSpeakerBtn.style.background = isSpeakerOn ? 'rgba(255,255,255,0.6)' : 'rgba(255,255,255,0.2)';
+        toggleSpeakerBtn.style.color = isSpeakerOn ? '#000' : '#fff';
+
+        if (typeof remoteVideo.setSinkId !== 'undefined') {
+            try {
+                const devices = await navigator.mediaDevices.enumerateDevices();
+                const audioOutputs = devices.filter(d => d.kind === 'audiooutput');
+                if (audioOutputs.length > 1) {
+                    // Try to switch to Loudspeaker
+                    const targetDevice = isSpeakerOn ? audioOutputs[audioOutputs.length - 1].deviceId : audioOutputs[0].deviceId;
+                    await remoteVideo.setSinkId(targetDevice);
+                    showToast("Speaker", isSpeakerOn ? "Loudspeaker Active" : "Earpiece Active");
+                } else {
+                    showToast("Notice", "Your mobile OS is controlling the speaker output automatically.");
+                }
+            } catch (e) { console.error(e); }
+        } else {
+            // Agar browser direct speaker access na de:
+            showToast("Mobile Browsers limit this.", "Turn on Video call to auto-switch to Loudspeaker.");
+        }
     });
 }
