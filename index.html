@@ -167,9 +167,16 @@
             <span style="font-weight: bold; color: #10b981;"><i class="fa-solid fa-palette"></i> Shared Whiteboard</span>
             <button id="disconnectDoodleBtn" class="icon-btn" style="color:#ef4444; border: 1px solid rgba(239,68,68,0.3); border-radius: 8px; padding: 5px 10px;" title="Stop & Erase Doodle"><i class="fa-solid fa-power-off"></i> Disconnect</button>
         </div>
-        <div style="padding:15px; display:flex; gap:15px; justify-content:center; background: rgba(0,0,0,0.4); border-bottom: 1px solid var(--glass-border);">
-            <input type="color" id="pDoodleColor" value="#8b5cf6" style="cursor: pointer; width: 45px; height: 45px; border: none; border-radius: 10px; background: transparent;">
-            <button id="clearPDoodleBtn" class="primary-btn" style="background: rgba(239, 68, 68, 0.2); color: #ef4444; border: 1px solid #ef4444; width: auto;"><i class="fa-solid fa-trash"></i> Wipe Board</button>
+        <div style="padding:10px 15px; display:flex; gap:10px; justify-content:center; align-items: center; background: rgba(0,0,0,0.4); border-bottom: 1px solid var(--glass-border); flex-wrap: wrap;">
+            <input type="color" id="pDoodleColor" value="#8b5cf6" style="cursor: pointer; width: 40px; height: 40px; border: none; border-radius: 8px; background: transparent; padding: 0;">
+            
+            <div style="display: flex; flex-direction: column; align-items: center; gap: 3px;">
+                <label for="pDoodleSize" style="font-size: 10px; color: var(--text-muted); font-weight: bold;">Size</label>
+                <input type="range" id="pDoodleSize" min="1" max="20" value="3" style="width: 80px; accent-color: var(--primary);">
+            </div>
+            
+            <button id="undoPDoodleBtn" class="primary-btn" style="background: rgba(59, 130, 246, 0.2); color: #3b82f6; border: 1px solid #3b82f6; width: auto; padding: 8px 12px;"><i class="fa-solid fa-rotate-left"></i> Undo</button>
+            <button id="clearPDoodleBtn" class="primary-btn" style="background: rgba(239, 68, 68, 0.2); color: #ef4444; border: 1px solid #ef4444; width: auto; padding: 8px 12px;"><i class="fa-solid fa-trash"></i> Wipe</button>
         </div>
         <div style="flex:1; display:flex; justify-content:center; align-items:center; padding: 20px;">
             <canvas id="pDoodleCanvas" width="350" height="450" style="background: #fff; border-radius: 12px; cursor: crosshair; touch-action: none; max-width: 100%; max-height: 100%; box-shadow: 0 10px 30px rgba(0,0,0,0.5);"></canvas>
