@@ -1763,6 +1763,7 @@ async function initMedia(audioOnly = false) {
 // 2. Caller Logic Setup 
 async function initiateCall(audioOnly) {
     videoCallArea.style.display = "flex";
+    window.playRingtone();
     const tName = document.getElementById("chatTargetName").innerText || "User";
     document.querySelector("#videoCallArea .game-header span").innerHTML = audioOnly 
         ? `<i class="fa-solid fa-phone"></i> ${tName} <span id="callTimerDisplay" style="margin-left:10px; color:#10b981; font-size:14px; font-weight:normal;">Ringing...</span>` 
@@ -1830,7 +1831,7 @@ async function initiateCall(audioOnly) {
     
     // Yahan hum call track karna start kar rahe hain
     monitorActiveCall(currentChatId);
-    window.playRingtone();
+    
 }
 
 if(startAudioCallBtn) startAudioCallBtn.addEventListener("click", () => initiateCall(true));
@@ -1991,3 +1992,16 @@ window.addEventListener("beforeunload", () => {
         clearCallData(currentChatId);
     }
 });
+// --- BROWSER AUTOPLAY UNLOCKER ---
+document.body.addEventListener('click', function unlockAudio() {
+    const audio = document.getElementById("ringtoneAudio");
+    if(audio) {
+        audio.volume = 0; // Mute temporarily for unlocking
+        audio.play().then(() => {
+            audio.pause();
+            audio.currentTime = 0;
+            audio.volume = 1; // Restore volume
+        }).catch(e => console.log("Unlock failed", e));
+    }
+    document.body.removeEventListener('click', unlockAudio);
+}, { once: true });
