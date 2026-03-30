@@ -759,7 +759,7 @@ document.querySelector(".chat-header").addEventListener("click", (e) => {
             if (group.createdBy === auth.currentUser.uid) { deleteBtn.style.display = "flex"; deleteBtn.onclick = async () => { if (confirm(`Are you sure you want to delete ${group.name}?`)) { deleteBtn.innerHTML = "<i class='fa-solid fa-spinner fa-spin'></i> Deleting..."; const msgsSnap = await getDocs(query(collection(db, "chats", currentChatId, "messages"))); const batch = writeBatch(db); msgsSnap.docs.forEach(doc => batch.delete(doc.ref)); await batch.commit(); 
                 // Clear global call ringing state for both users
         await updateDoc(doc(db, "users", auth.currentUser.uid), { incomingCall: null }).catch(e=>{});
-        const ids = chatId.split('_');
+        const ids = currentChatId.split('_');
         const otherId = ids[0] === auth.currentUser.uid ? ids[1] : ids[0];
         await updateDoc(doc(db, "users", otherId), { incomingCall: null }).catch(e=>{});
         await deleteDoc(doc(db, "groups", currentChatId)); document.getElementById("groupSettingsModal").style.display = "none"; document.getElementById("backToUsersBtn").click(); showToast("Group Deleted", "Group permanently wiped."); } }; } else { deleteBtn.style.display = "none"; }
@@ -1631,6 +1631,7 @@ document.getElementById("verifyUpdateOtpBtn").addEventListener("click", async ()
 // --- VIDEO CALL LOGIC ---
 // --- COMPLETE VIDEO CALL LOGIC ---
 // --- COMPLETE AUDIO/VIDEO CALL LOGIC ---
+// --- COMPLETE AUDIO/VIDEO CALL LOGIC ---
 const videoCallArea = document.getElementById("videoCallArea");
 const localVideo = document.getElementById("localVideo");
 const remoteVideo = document.getElementById("remoteVideo");
@@ -1645,21 +1646,58 @@ const startVideoCallBtn = document.getElementById("startVideoCallBtn");
 
 let callListenerUnsubscribe = null;
 let isCurrentCallAudioOnly = false;
-let audioCtx, gainNode; // Volume boost ke liye
+let audioCtx, gainNode; 
+
+// --- NAYA SYNC FUNCTION ---
+let activeCallUnsubscribe = null;
+
+function monitorActiveCall(chatId) {
+    if (activeCallUnsubscribe) activeCallUnsubscribe();
+    
+    activeCallUnsubscribe = onSnapshot(doc(db, "calls", chatId), (snapshot) => {
+        if (!snapshot.exists()) {
+            if (videoCallArea.style.display === "flex") {
+                if (peerConnection) peerConnection.close();
+                if (localStream) localStream.getTracks().forEach(track => track.stop());
+                localStream = null; peerConnection = null;
+                videoCallArea.style.display = "none";
+                showToast("Call Ended", "Disconnected.");
+            }
+            if (activeCallUnsubscribe) { activeCallUnsubscribe(); activeCallUnsubscribe = null; }
+        }
+    });
+}
+
+async function clearCallData(chatId) {
+    if (!chatId) return;
+    try {
+        const callDocRef = doc(db, "calls", chatId);
+        const offerSnap = await getDocs(collection(callDocRef, "offerCandidates"));
+        const answerSnap = await getDocs(collection(callDocRef, "answerCandidates"));
+        const batch = writeBatch(db);
+        offerSnap.docs.forEach(d => batch.delete(d.ref));
+        answerSnap.docs.forEach(d => batch.delete(d.ref));
+        batch.delete(callDocRef);
+        await batch.commit();
+
+        // Clear global call ringing state for both users
+        await updateDoc(doc(db, "users", auth.currentUser.uid), { incomingCall: null }).catch(e=>{});
+        const ids = chatId.split('_');
+        const otherId = ids[0] === auth.currentUser.uid ? ids[1] : ids[0];
+        await updateDoc(doc(db, "users", otherId), { incomingCall: null }).catch(e=>{});
+    } catch (e) {
+        console.error("Data deletion failed:", e);
+    }
+}
 
 // 1. Camera/Mic Initialize
 async function initMedia(audioOnly = false) {
     isCurrentCallAudioOnly = audioOnly;
     try {
         localStream = await navigator.mediaDevices.getUserMedia({ 
-    video: !audioOnly, 
-    audio: {
-        echoCancellation: true, // Earphones hain toh isko false kar sakte hain
-        noiseSuppression: false, // Delay kam karne ke liye false
-        autoGainControl: false,  // Delay kam karne ke liye false
-        sampleRate: 48000        // High quality audio
-    } 
-});
+            video: !audioOnly, 
+            audio: { echoCancellation: true, noiseSuppression: false, autoGainControl: false, sampleRate: 48000 } 
+        });
         localVideo.srcObject = localStream;
         remoteStream = new MediaStream();
         remoteVideo.srcObject = remoteStream;
@@ -1679,7 +1717,6 @@ async function initMedia(audioOnly = false) {
 
 // 2. Caller Logic Setup 
 async function initiateCall(audioOnly) {
-    // callSelectionModal is now deleted, directly show video area
     videoCallArea.style.display = "flex";
     document.querySelector("#videoCallArea .game-header span").innerHTML = audioOnly 
         ? '<i class="fa-solid fa-phone"></i> Secure Voice Call' 
@@ -1689,7 +1726,8 @@ async function initiateCall(audioOnly) {
 
     peerConnection = new RTCPeerConnection(servers);
     localStream.getTracks().forEach((track) => peerConnection.addTrack(track, localStream));
-peerConnection.ontrack = (event) => {
+    
+    peerConnection.ontrack = (event) => {
         const remoteStream = event.streams[0];
         remoteVideo.srcObject = remoteStream;
         if (!audioCtx) {
@@ -1700,9 +1738,10 @@ peerConnection.ontrack = (event) => {
             source.connect(gainNode);
             gainNode.connect(audioCtx.destination);
         }
-        remoteVideo.muted = true; // AudioContext handle karega
+        remoteVideo.muted = true; 
         remoteVideo.play().catch(e => console.error(e));
     };
+    
     const callDoc = doc(collection(db, "calls"), currentChatId);
     const offerCandidates = collection(callDoc, "offerCandidates");
     const answerCandidates = collection(callDoc, "answerCandidates");
@@ -1730,7 +1769,8 @@ peerConnection.ontrack = (event) => {
             if (change.type === "added") peerConnection.addIceCandidate(new RTCIceCandidate(change.doc.data()));
         });
     });
-// Trigger global incoming call for the receiver instead of sending a text message
+
+    // Trigger global incoming call
     await updateDoc(doc(db, "users", targetUserUid), {
         incomingCall: {
             chatId: currentChatId,
@@ -1740,20 +1780,17 @@ peerConnection.ontrack = (event) => {
             callType: audioOnly ? 'audio' : 'video'
         }
     });
-    const msgText = audioOnly ? "📞 Voice Calling..." : "🎥 Video Calling...";
-    const encryptedCallText = encryptMessage(msgText, currentChatId); 
-    const payload = { text: encryptedCallText, sender: auth.currentUser.uid, senderName: document.getElementById("myName").innerText, time: Date.now(), isEdited: false, isDeleted: false };
-    await addDoc(collection(db, "chats", currentChatId, "messages"), payload);
+    
+    // Yahan hum call track karna start kar rahe hain
+    monitorActiveCall(currentChatId);
 }
 
 if(startAudioCallBtn) startAudioCallBtn.addEventListener("click", () => initiateCall(true));
 if(startVideoCallBtn) startVideoCallBtn.addEventListener("click", () => initiateCall(false));
 
-
 // 4. Receiver Logic (Answer)
 if(answerCallBtn) {
     answerCallBtn.addEventListener("click", async () => {
-        // Set global chat ID if answering from outside the chat
         if (!currentChatId && window.pendingCallChatId) {
             currentChatId = window.pendingCallChatId;
             const ids = currentChatId.split('_');
@@ -1761,10 +1798,9 @@ if(answerCallBtn) {
         }
 
         incomingCallModal.style.display = "none";
-        await updateDoc(doc(db, "users", auth.currentUser.uid), { incomingCall: null }); // Stop ringing
+        await updateDoc(doc(db, "users", auth.currentUser.uid), { incomingCall: null }); 
         
         videoCallArea.style.display = "flex";
-        // ... (baaki ka puraana code yahan se same rahega)
         document.querySelector("#videoCallArea .game-header span").innerHTML = window.incomingCallTypeAudio 
             ? '<i class="fa-solid fa-phone"></i> Secure Voice Call' 
             : '<i class="fa-solid fa-video"></i> Secure Video Call';
@@ -1773,7 +1809,8 @@ if(answerCallBtn) {
 
         peerConnection = new RTCPeerConnection(servers);
         localStream.getTracks().forEach((track) => peerConnection.addTrack(track, localStream));
-peerConnection.ontrack = (event) => {
+        
+        peerConnection.ontrack = (event) => {
             const remoteStream = event.streams[0];
             remoteVideo.srcObject = remoteStream;
             if (!audioCtx) {
@@ -1787,6 +1824,7 @@ peerConnection.ontrack = (event) => {
             remoteVideo.muted = true;
             remoteVideo.play().catch(e => console.error(e));
         };
+        
         const callDoc = doc(db, "calls", currentChatId);
         const answerCandidates = collection(callDoc, "answerCandidates");
         const offerCandidates = collection(callDoc, "offerCandidates");
@@ -1805,24 +1843,12 @@ peerConnection.ontrack = (event) => {
                 if (change.type === "added") peerConnection.addIceCandidate(new RTCIceCandidate(change.doc.data()));
             });
         });
+        
+        // Receiver end par bhi call track karna zaroori hai
+        const callDocId = currentChatId || window.pendingCallChatId;
+        monitorActiveCall(callDocId);
     });
 }
-async function clearCallData(chatId) {
-    if (!chatId) return;
-    try {
-        const callDocRef = doc(db, "calls", chatId);
-        const offerSnap = await getDocs(collection(callDocRef, "offerCandidates"));
-        const answerSnap = await getDocs(collection(callDocRef, "answerCandidates"));
-        const batch = writeBatch(db);
-        offerSnap.docs.forEach(d => batch.delete(d.ref));
-        answerSnap.docs.forEach(d => batch.delete(d.ref));
-        batch.delete(callDocRef);
-        await batch.commit();
-    } catch (e) {
-        console.error("Data deletion failed:", e);
-    }
-}
-// 5. Reject & Hangup
 // 5. Reject & Hangup (Updated to ensure data deletion)
 if(rejectCallBtn) {
     rejectCallBtn.addEventListener("click", async () => {
@@ -1837,7 +1863,8 @@ if(rejectCallBtn) {
 
 if(endCallBtn) {
     endCallBtn.addEventListener("click", async () => {
-        // Media tracks band karein
+        if (activeCallUnsubscribe) { activeCallUnsubscribe(); activeCallUnsubscribe = null; }
+        
         if (peerConnection) peerConnection.close();
         if (localStream) localStream.getTracks().forEach(track => track.stop());
         
@@ -1845,9 +1872,9 @@ if(endCallBtn) {
         peerConnection = null;
         videoCallArea.style.display = "none";
 
-        // Call ka poora data Firestore se uda dein
-        if (currentChatId) {
-            await clearCallData(currentChatId);
+        const chatIdToClear = currentChatId || window.pendingCallChatId;
+        if (chatIdToClear) {
+            await clearCallData(chatIdToClear);
         }
     });
 }
