@@ -274,6 +274,23 @@ function startMyProfileListener(uid) {
       }
       myUserData = data; const displayName = data.fullName || data.username;
       document.getElementById("myName").innerText = displayName; document.getElementById("myUsername").innerText = `@${data.username}`; document.getElementById("myAvatar").src = generateAvatar(data, displayName);
+     // NEW: Global Incoming Call Listener
+      if (data.incomingCall && data.incomingCall.chatId) {
+          window.pendingCallChatId = data.incomingCall.chatId;
+          window.incomingCallTypeAudio = data.incomingCall.callType === 'audio';
+          
+          document.querySelector("#incomingCallModal h3").innerText = window.incomingCallTypeAudio ? "Incoming Voice Call" : "Incoming Video Call";
+          document.querySelector("#incomingCallModal i.fa-phone-volume").className = window.incomingCallTypeAudio ? "fa-solid fa-phone-volume" : "fa-solid fa-video";
+          
+          // Injecting caller Avatar and Name dynamically
+          document.querySelector("#incomingCallModal p").innerHTML = `
+              <img src="${data.incomingCall.callerAvatar}" style="width:70px; height:70px; border-radius:50%; margin-bottom:10px; border:2px solid var(--primary); object-fit:cover;"><br>
+              <strong style="color:white; font-size:16px;">${data.incomingCall.callerName}</strong><br>is calling you...
+          `;
+          document.getElementById("incomingCallModal").style.display = "flex";
+      } else {
+          document.getElementById("incomingCallModal").style.display = "none";
+      }
       if(allUsers.length > 0) renderSidebar();
     }
   });
@@ -440,7 +457,7 @@ function openChat(targetUid, targetName, targetAvatar, isTargetOnline, targetLas
   activeChatState.style.display = "flex"; 
   if(window.innerWidth <= 992) { sidebar.classList.add("hidden"); history.pushState({ page: "chat" }, ""); }
 
-loadMessages(); listenToTyping(); listenToChatStatus(targetName); window.listenForCalls();
+loadMessages(); listenToTyping(); listenToChatStatus(targetName); 
 }
 function openGroupChat(groupId, groupName, memberCount) {
   isCurrentChatGroup = true; currentChatId = groupId; targetUserUid = null;
@@ -739,7 +756,13 @@ document.querySelector(".chat-header").addEventListener("click", (e) => {
             document.getElementById("groupSettingsName").innerText = group.name; document.getElementById("groupMemberCount").innerText = group.members.length; document.getElementById("groupSettingsAvatar").src = group.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(group.name)}&background=8b5cf6&color=fff`;
             const membersListDiv = document.getElementById("groupMembersList"); membersListDiv.innerHTML = "<h4 style='font-size:12px; color:var(--text-muted); margin-bottom:8px;'>Group Members:</h4>"; group.members.forEach(memberId => { const userObj = allUsers.find(u => u.id === memberId); const name = userObj ? (userObj.fullName || userObj.username) : "Unknown User"; const isMe = memberId === auth.currentUser.uid ? " (You)" : ""; membersListDiv.innerHTML += `<div style="font-size: 13px; padding: 4px 0; border-bottom: 1px solid rgba(255,255,255,0.05);">${name}${isMe}</div>`; });
             const deleteBtn = document.getElementById("deleteGroupBtn");
-            if (group.createdBy === auth.currentUser.uid) { deleteBtn.style.display = "flex"; deleteBtn.onclick = async () => { if (confirm(`Are you sure you want to delete ${group.name}?`)) { deleteBtn.innerHTML = "<i class='fa-solid fa-spinner fa-spin'></i> Deleting..."; const msgsSnap = await getDocs(query(collection(db, "chats", currentChatId, "messages"))); const batch = writeBatch(db); msgsSnap.docs.forEach(doc => batch.delete(doc.ref)); await batch.commit(); await deleteDoc(doc(db, "groups", currentChatId)); document.getElementById("groupSettingsModal").style.display = "none"; document.getElementById("backToUsersBtn").click(); showToast("Group Deleted", "Group permanently wiped."); } }; } else { deleteBtn.style.display = "none"; }
+            if (group.createdBy === auth.currentUser.uid) { deleteBtn.style.display = "flex"; deleteBtn.onclick = async () => { if (confirm(`Are you sure you want to delete ${group.name}?`)) { deleteBtn.innerHTML = "<i class='fa-solid fa-spinner fa-spin'></i> Deleting..."; const msgsSnap = await getDocs(query(collection(db, "chats", currentChatId, "messages"))); const batch = writeBatch(db); msgsSnap.docs.forEach(doc => batch.delete(doc.ref)); await batch.commit(); 
+                // Clear global call ringing state for both users
+        await updateDoc(doc(db, "users", auth.currentUser.uid), { incomingCall: null }).catch(e=>{});
+        const ids = chatId.split('_');
+        const otherId = ids[0] === auth.currentUser.uid ? ids[1] : ids[0];
+        await updateDoc(doc(db, "users", otherId), { incomingCall: null }).catch(e=>{});
+        await deleteDoc(doc(db, "groups", currentChatId)); document.getElementById("groupSettingsModal").style.display = "none"; document.getElementById("backToUsersBtn").click(); showToast("Group Deleted", "Group permanently wiped."); } }; } else { deleteBtn.style.display = "none"; }
             document.getElementById("groupSettingsModal").style.display = "flex";
         }
     }
@@ -1707,7 +1730,16 @@ peerConnection.ontrack = (event) => {
             if (change.type === "added") peerConnection.addIceCandidate(new RTCIceCandidate(change.doc.data()));
         });
     });
-
+// Trigger global incoming call for the receiver instead of sending a text message
+    await updateDoc(doc(db, "users", targetUserUid), {
+        incomingCall: {
+            chatId: currentChatId,
+            callerId: auth.currentUser.uid,
+            callerName: document.getElementById("myName").innerText,
+            callerAvatar: document.getElementById("myAvatar").src,
+            callType: audioOnly ? 'audio' : 'video'
+        }
+    });
     const msgText = audioOnly ? "📞 Voice Calling..." : "🎥 Video Calling...";
     const encryptedCallText = encryptMessage(msgText, currentChatId); 
     const payload = { text: encryptedCallText, sender: auth.currentUser.uid, senderName: document.getElementById("myName").innerText, time: Date.now(), isEdited: false, isDeleted: false };
@@ -1717,36 +1749,22 @@ peerConnection.ontrack = (event) => {
 if(startAudioCallBtn) startAudioCallBtn.addEventListener("click", () => initiateCall(true));
 if(startVideoCallBtn) startVideoCallBtn.addEventListener("click", () => initiateCall(false));
 
-// 3. Listen for Incoming Calls
-window.listenForCalls = () => {
-    if (!currentChatId) return;
-    if (callListenerUnsubscribe) callListenerUnsubscribe();
-    
-    callListenerUnsubscribe = onSnapshot(doc(db, "calls", currentChatId), (snapshot) => {
-        if (!snapshot.exists()) {
-            incomingCallModal.style.display = "none";
-            if(videoCallArea.style.display === "flex") { endCallBtn.click(); }
-            return;
-        }
-        
-        const data = snapshot.data();
-        if (data.offer && !localStream && videoCallArea.style.display === "none") {
-            const isAudioCall = data.callType === 'audio';
-            document.querySelector("#incomingCallModal h3").innerText = isAudioCall ? "Incoming Voice Call" : "Incoming Video Call";
-            document.querySelector("#incomingCallModal i.fa-phone-volume").className = isAudioCall ? "fa-solid fa-phone-volume" : "fa-solid fa-video";
-            
-            window.incomingCallTypeAudio = isAudioCall; 
-            incomingCallModal.style.display = "flex";
-        }
-    });
-};
 
 // 4. Receiver Logic (Answer)
 if(answerCallBtn) {
     answerCallBtn.addEventListener("click", async () => {
+        // Set global chat ID if answering from outside the chat
+        if (!currentChatId && window.pendingCallChatId) {
+            currentChatId = window.pendingCallChatId;
+            const ids = currentChatId.split('_');
+            targetUserUid = ids[0] === auth.currentUser.uid ? ids[1] : ids[0];
+        }
+
         incomingCallModal.style.display = "none";
-        videoCallArea.style.display = "flex";
+        await updateDoc(doc(db, "users", auth.currentUser.uid), { incomingCall: null }); // Stop ringing
         
+        videoCallArea.style.display = "flex";
+        // ... (baaki ka puraana code yahan se same rahega)
         document.querySelector("#videoCallArea .game-header span").innerHTML = window.incomingCallTypeAudio 
             ? '<i class="fa-solid fa-phone"></i> Secure Voice Call' 
             : '<i class="fa-solid fa-video"></i> Secure Video Call';
@@ -1809,9 +1827,9 @@ async function clearCallData(chatId) {
 if(rejectCallBtn) {
     rejectCallBtn.addEventListener("click", async () => {
         incomingCallModal.style.display = "none";
-        if(currentChatId) {
-            // Firestore se call document aur uske sub-collections ko saaf karein
-            await clearCallData(currentChatId);
+        const chatIdToClear = currentChatId || window.pendingCallChatId;
+        if(chatIdToClear) {
+            await clearCallData(chatIdToClear);
             showToast("Call Rejected", "Connection data cleared.");
         }
     });
