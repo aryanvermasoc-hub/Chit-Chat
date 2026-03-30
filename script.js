@@ -1650,6 +1650,8 @@ async function initiateCall(audioOnly) {
     localStream.getTracks().forEach((track) => peerConnection.addTrack(track, localStream));
 peerConnection.ontrack = (event) => { 
     remoteVideo.srcObject = event.streams[0]; 
+    remoteVideo.muted = false; 
+    remoteVideo.volume = 1.0;
     remoteVideo.play().catch(e => console.log(e)); 
 };
     const callDoc = doc(collection(db, "calls"), currentChatId);
@@ -1728,16 +1730,8 @@ if(answerCallBtn) {
         localStream.getTracks().forEach((track) => peerConnection.addTrack(track, localStream));
 peerConnection.ontrack = (event) => { 
     remoteVideo.srcObject = event.streams[0]; 
-    // Browser force play karega
-    remoteVideo.play().catch(e => console.log(e)); 
-};
-peerConnection.ontrack = (event) => { 
-    remoteVideo.srcObject = event.streams[0]; 
-    
-    // YEH 2 LINES ADD KAREIN 👇
     remoteVideo.muted = false; 
     remoteVideo.volume = 1.0;  
-    
     remoteVideo.play().catch(e => console.log(e)); 
 };
         const callDoc = doc(db, "calls", currentChatId);
