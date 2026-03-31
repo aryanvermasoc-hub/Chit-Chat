@@ -725,7 +725,14 @@ window.openProfile = async (uid) => {
         editAvatarBtn.style.display = "block"; 
         if (profileCallActions) profileCallActions.style.display = "none";
     } else {
-        if (profileCallActions) profileCallActions.style.display = "flex";
+        // FIX: Only show call buttons if the user is in an active, accepted chat with this person
+        if (profileCallActions) {
+            if (currentChatId && targetUserUid === uid && currentChatStatus === 'accepted' && !isCurrentChatGroup) {
+                profileCallActions.style.display = "flex";
+            } else {
+                profileCallActions.style.display = "none";
+            }
+        }
     }
 
     try { 
@@ -1682,18 +1689,29 @@ function monitorActiveCall(chatId) {
     
     activeCallUnsubscribe = onSnapshot(doc(db, "calls", chatId), (snapshot) => {
         if (!snapshot.exists()) {
-            if (videoCallArea.style.display === "flex") {
-                if (peerConnection) peerConnection.close();
-                if (localStream) localStream.getTracks().forEach(track => track.stop());
-                localStream = null; peerConnection = null;
-                videoCallArea.style.display = "none";
-                showToast("Call Ended", "Disconnected.");
+            // CALL DISCONNECTED BY OTHER SIDE
+            window.stopAllCallAssets(); // Sab kuch band karo
+            
+            if (peerConnection) {
+                peerConnection.close();
+                peerConnection = null;
             }
-            if (activeCallUnsubscribe) { activeCallUnsubscribe(); activeCallUnsubscribe = null; }
+            if (localStream) {
+                localStream.getTracks().forEach(track => track.stop());
+                localStream = null;
+            }
+            
+            videoCallArea.style.display = "none";
+            incomingCallModal.style.display = "none";
+            showToast("Call Ended", "User disconnected");
+            
+            if (activeCallUnsubscribe) {
+                activeCallUnsubscribe();
+                activeCallUnsubscribe = null;
+            }
         }
     });
 }
-
 async function clearCallData(chatId) {
     window.stopCallTimer();
     window.stopRingtone();
@@ -1840,12 +1858,12 @@ if(startVideoCallBtn) startVideoCallBtn.addEventListener("click", () => initiate
 // 4. Receiver Logic (Answer)
 if(answerCallBtn) {
     answerCallBtn.addEventListener("click", async () => {
-        if (!currentChatId && window.pendingCallChatId) {
+        // FIX: Always prioritize the pending call ID. If you were viewing another chat, this prevents connecting to the wrong database room!
+        if (window.pendingCallChatId) {
             currentChatId = window.pendingCallChatId;
             const ids = currentChatId.split('_');
             targetUserUid = ids[0] === auth.currentUser.uid ? ids[1] : ids[0];
         }
-
         incomingCallModal.style.display = "none";
         window.stopRingtone()
         await updateDoc(doc(db, "users", auth.currentUser.uid), { incomingCall: null }); 
@@ -1862,19 +1880,23 @@ if(answerCallBtn) {
         localStream.getTracks().forEach((track) => peerConnection.addTrack(track, localStream));
         
         peerConnection.ontrack = (event) => {
-            const remoteStream = event.streams[0];
-            remoteVideo.srcObject = remoteStream;
-            if (!audioCtx) {
-                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-                const source = audioCtx.createMediaStreamSource(remoteStream);
-                gainNode = audioCtx.createGain();
-                gainNode.gain.value = 2.5; 
-                source.connect(gainNode);
-                gainNode.connect(audioCtx.destination);
-            }
-            remoteVideo.muted = true;
-            remoteVideo.play().catch(e => console.error(e));
-        };
+    console.log("Remote stream received");
+    const [remoteStream] = event.streams;
+    if (remoteVideo) {
+        remoteVideo.srcObject = remoteStream;
+        remoteVideo.play().catch(e => console.error("Video play error:", e));
+    }
+    
+    // Aawaj fix: Direct Audio Context Setup
+    if (!window.audioCtx) {
+        window.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const source = window.audioCtx.createMediaStreamSource(remoteStream);
+        window.gainNode = window.audioCtx.createGain();
+        window.gainNode.gain.value = 1.5; // Default 1.5x boost
+        source.connect(window.gainNode);
+        window.gainNode.connect(window.audioCtx.destination);
+    }
+};
         
         const callDoc = doc(db, "calls", currentChatId);
         const answerCandidates = collection(callDoc, "answerCandidates");
@@ -1904,7 +1926,8 @@ if(answerCallBtn) {
 if(rejectCallBtn) {
     rejectCallBtn.addEventListener("click", async () => {
         incomingCallModal.style.display = "none";
-        const chatIdToClear = currentChatId || window.pendingCallChatId;
+        // FIX: Prioritize pending call ID over current chat ID so you don't accidentally wipe your active chat's data
+        const chatIdToClear = window.pendingCallChatId || currentChatId;
         if(chatIdToClear) {
             await clearCallData(chatIdToClear);
             showToast("Call Rejected", "Connection data cleared.");
@@ -1914,16 +1937,31 @@ if(rejectCallBtn) {
 
 if(endCallBtn) {
     endCallBtn.addEventListener("click", async () => {
+        window.stopAllCallAssets();
         if (activeCallUnsubscribe) { activeCallUnsubscribe(); activeCallUnsubscribe = null; }
         
+        // 1. Shut down WebRTC
         if (peerConnection) peerConnection.close();
         if (localStream) localStream.getTracks().forEach(track => track.stop());
         
+        // 2. THE FIX: Stop everything before the user leaves
+        window.stopRingtone();
+        window.stopCallTimer();
+        if (remoteVideo) remoteVideo.srcObject = null;
+        if (localVideo) localVideo.srcObject = null;
+        
+        if (audioCtx && audioCtx.state !== 'closed') {
+            audioCtx.close().catch(e => console.log(e));
+            audioCtx = null;
+            gainNode = null;
+        }
+
         localStream = null; 
         peerConnection = null;
         videoCallArea.style.display = "none";
 
-        const chatIdToClear = currentChatId || window.pendingCallChatId;
+        // 3. Clear database flags
+        const chatIdToClear = window.pendingCallChatId || currentChatId;
         if (chatIdToClear) {
             await clearCallData(chatIdToClear);
         }
@@ -2005,3 +2043,28 @@ document.body.addEventListener('click', function unlockAudio() {
     }
     document.body.removeEventListener('click', unlockAudio);
 }, { once: true });
+// Universal Cleanup Function
+window.stopAllCallAssets = () => {
+    // 1. Stop Ringtone
+    const ringtone = document.getElementById("ringtoneAudio");
+    if (ringtone) {
+        ringtone.pause();
+        ringtone.currentTime = 0;
+    }
+    // 2. Stop Timer
+    if (callTimerInterval) {
+        clearInterval(callTimerInterval);
+        callTimerInterval = null;
+    }
+    // 3. Reset Timer Display
+    const timerDisplay = document.getElementById("callTimer");
+    if (timerDisplay) timerDisplay.textContent = "00:00";
+    callSeconds = 0;
+
+    // 4. Audio Context Kill (Volume boost fix)
+    if (window.audioCtx && window.audioCtx.state !== 'closed') {
+        window.audioCtx.close();
+        window.audioCtx = null;
+        window.gainNode = null;
+    }
+};
