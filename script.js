@@ -274,25 +274,8 @@ function startMyProfileListener(uid) {
       }
       myUserData = data; const displayName = data.fullName || data.username;
       document.getElementById("myName").innerText = displayName; document.getElementById("myUsername").innerText = `@${data.username}`; document.getElementById("myAvatar").src = generateAvatar(data, displayName);
-     // NEW: Global Incoming Call Listener
-      if (data.incomingCall && data.incomingCall.chatId) {
-          window.pendingCallChatId = data.incomingCall.chatId;
-          window.incomingCallTypeAudio = data.incomingCall.callType === 'audio';
-          window.pendingCallerName = data.incomingCall.callerName;
-          document.querySelector("#incomingCallModal h3").innerText = window.incomingCallTypeAudio ? "Incoming Voice Call" : "Incoming Video Call";
-          document.querySelector("#incomingCallModal i.fa-phone-volume").className = window.incomingCallTypeAudio ? "fa-solid fa-phone-volume" : "fa-solid fa-video";
-          
-          // Injecting caller Avatar and Name dynamically
-          document.querySelector("#incomingCallModal p").innerHTML = `
-              <img src="${data.incomingCall.callerAvatar}" style="width:70px; height:70px; border-radius:50%; margin-bottom:10px; border:2px solid var(--primary); object-fit:cover;"><br>
-              <strong style="color:white; font-size:16px;">${data.incomingCall.callerName}</strong><br>is calling you...
-          `;
-          document.getElementById("incomingCallModal").style.display = "flex";
-          window.playRingtone();
-     } else {
-          document.getElementById("incomingCallModal").style.display = "none";
-          window.stopRingtone();
-      }
+     
+      
       if(allUsers.length > 0) renderSidebar();
     }
   });
@@ -723,16 +706,6 @@ window.openProfile = async (uid) => {
     if (isCurrentUser) { 
         editProfileBtn.style.display = "block"; 
         editAvatarBtn.style.display = "block"; 
-        if (profileCallActions) profileCallActions.style.display = "none";
-    } else {
-        // FIX: Only show call buttons if the user is in an active, accepted chat with this person
-        if (profileCallActions) {
-            if (currentChatId && targetUserUid === uid && currentChatStatus === 'accepted' && !isCurrentChatGroup) {
-                profileCallActions.style.display = "flex";
-            } else {
-                profileCallActions.style.display = "none";
-            }
-        }
     }
 
     try { 
@@ -766,11 +739,7 @@ document.querySelector(".chat-header").addEventListener("click", (e) => {
             const membersListDiv = document.getElementById("groupMembersList"); membersListDiv.innerHTML = "<h4 style='font-size:12px; color:var(--text-muted); margin-bottom:8px;'>Group Members:</h4>"; group.members.forEach(memberId => { const userObj = allUsers.find(u => u.id === memberId); const name = userObj ? (userObj.fullName || userObj.username) : "Unknown User"; const isMe = memberId === auth.currentUser.uid ? " (You)" : ""; membersListDiv.innerHTML += `<div style="font-size: 13px; padding: 4px 0; border-bottom: 1px solid rgba(255,255,255,0.05);">${name}${isMe}</div>`; });
             const deleteBtn = document.getElementById("deleteGroupBtn");
             if (group.createdBy === auth.currentUser.uid) { deleteBtn.style.display = "flex"; deleteBtn.onclick = async () => { if (confirm(`Are you sure you want to delete ${group.name}?`)) { deleteBtn.innerHTML = "<i class='fa-solid fa-spinner fa-spin'></i> Deleting..."; const msgsSnap = await getDocs(query(collection(db, "chats", currentChatId, "messages"))); const batch = writeBatch(db); msgsSnap.docs.forEach(doc => batch.delete(doc.ref)); await batch.commit(); 
-                // Clear global call ringing state for both users
-        await updateDoc(doc(db, "users", auth.currentUser.uid), { incomingCall: null }).catch(e=>{});
-        const ids = currentChatId.split('_');
-        const otherId = ids[0] === auth.currentUser.uid ? ids[1] : ids[0];
-        await updateDoc(doc(db, "users", otherId), { incomingCall: null }).catch(e=>{});
+         
         await deleteDoc(doc(db, "groups", currentChatId)); document.getElementById("groupSettingsModal").style.display = "none"; document.getElementById("backToUsersBtn").click(); showToast("Group Deleted", "Group permanently wiped."); } }; } else { deleteBtn.style.display = "none"; }
             document.getElementById("groupSettingsModal").style.display = "flex";
         }
