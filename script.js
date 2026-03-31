@@ -507,8 +507,297 @@ window.showSpActionMenu = () => { isPlayingActionGame = false; gameUIContainer.i
 window.handleSpActionGameOver = async (score) => { let isNewHighScore = false; if (score > spHighScore) { spHighScore = score; isNewHighScore = true; try { await setDoc(doc(db, "users", auth.currentUser.uid), { highScores: { [spGameType]: score } }, { merge: true }); } catch(e) {} } gameUIContainer.innerHTML = `<div class="game-turn-indicator" style="color:${isNewHighScore ? 'var(--primary)' : 'white'}">${isNewHighScore ? '🏆 NEW HIGH SCORE!' : 'GAME OVER'}</div><div style="font-size: 24px; text-align: center; margin: 20px 0;">Your Score: <b style="color:var(--primary)">${score}</b><br>High Score: <b style="color:var(--accent)">${spHighScore}</b></div><button class="primary-btn glow-btn" style="max-width:200px; margin-top:20px;" onclick="showSpActionMenu()">Play Again</button>`; };
 function renderActionGame(data, gameId, gameType) { const isPlayer1 = data.player1 === auth.currentUser.uid; const myScore = isPlayer1 ? data.p1Score : data.p2Score; const oppScore = isPlayer1 ? data.p2Score : data.p1Score; if (myScore !== undefined && myScore !== null && oppScore !== undefined && oppScore !== null) { isPlayingActionGame = false; let statusText = "It's a Tie!"; if (myScore > oppScore) statusText = "🎉 You Won!"; else if (myScore < oppScore) statusText = "😞 You Lost!"; gameUIContainer.innerHTML = `<div class="game-turn-indicator">${statusText}</div><div style="font-size: 24px; text-align: center; margin: 20px 0;">Your Score: <b style="color:var(--primary)">${myScore}</b><br>Opponent's Score: <b style="color:var(--accent)">${oppScore}</b></div><button class="primary-btn glow-btn" style="max-width:200px; margin-top:20px;" onclick="resetActionGame('${gameId}')">Play Again</button>`; return; } if (myScore !== undefined && myScore !== null) { isPlayingActionGame = false; gameUIContainer.innerHTML = `<div class="game-turn-indicator">Waiting for opponent to finish...</div><div style="font-size: 20px; text-align: center; margin: 20px 0;">Your Score: <b style="color:var(--primary)">${myScore}</b></div>`; return; } if (isPlayingActionGame) return; gameUIContainer.innerHTML = `<div class="game-turn-indicator" style="margin-bottom: 5px;">High Score Challenge!</div><div class="action-game-container"><div style="position: relative; width: 100%; max-width: 300px;"><canvas id="actionCanvas" width="300" height="400" class="action-canvas" style="margin: 0;"></canvas><div id="startOverlay" style="position: absolute; top:0; left:0; width:100%; height:100%; display:flex; justify-content:center; align-items:center; background:rgba(0,0,0,0.6); border-radius:12px; z-index:10; flex-direction:column; gap:10px;"><span style="color:white; font-size:14px;">Opponent is ready!</span><button class="primary-btn glow-btn" id="btnStartGame" style="width:auto; padding:15px 40px; font-size: 16px;">Play Now</button></div></div><div class="game-btn-row" id="gameControls" style="display:none;"><button class="game-control-btn" id="btnLeft">⬅️</button><button class="game-control-btn" id="btnRight">➡️</button></div></div>`; const canvas = document.getElementById('actionCanvas'); if (canvas) { const ctx = canvas.getContext('2d'); if (gameType === 'carracing') { ctx.fillStyle = '#8b5cf6'; ctx.fillRect(135, 330, 30, 50); } else { ctx.fillStyle = '#10b981'; ctx.beginPath(); ctx.moveTo(150, 350); ctx.lineTo(165, 380); ctx.lineTo(135, 380); ctx.fill(); } } document.getElementById('btnStartGame').addEventListener('click', () => { isPlayingActionGame = true; document.getElementById('startOverlay').style.display = 'none'; document.getElementById('gameControls').style.display = 'flex'; if (gameType === 'carracing') startCarRacing(gameId, isPlayer1); else startJetFighter(gameId, isPlayer1); }); }
 window.resetActionGame = async (gameId) => { await updateDoc(doc(db, "games", gameId), { p1Score: null, p2Score: null }); };
-function startFlappyBird(gameId, isPlayer1) { const canvas = document.getElementById('actionCanvas'); if (!canvas) return; const ctx = canvas.getContext('2d'); document.getElementById('gameControls').style.display = 'none'; let birdY = 200; let velocity = 0; const gravity = 0.5; const jumpStrength = -7; const birdRadius = 12; let pipes = []; let frameCount = 0; let score = 0; let isGameOver = false; const jump = (e) => { if(!isPlayingActionGame) return; if(e && e.type === 'keydown' && e.key !== ' ' && e.key !== 'ArrowUp') return; if(e) e.preventDefault(); velocity = jumpStrength; }; window.addEventListener('keydown', jump); canvas.addEventListener('mousedown', jump); canvas.addEventListener('touchstart', jump, {passive: false}); function drawBird(x, y) { ctx.fillStyle = '#f59e0b'; ctx.beginPath(); ctx.arc(x, y, birdRadius, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = 'white'; ctx.beginPath(); ctx.arc(x + 5, y - 4, 4, 0, Math.PI*2); ctx.fill(); ctx.fillStyle = 'black'; ctx.beginPath(); ctx.arc(x + 6, y - 4, 2, 0, Math.PI*2); ctx.fill(); } function gameLoop() { if(isGameOver) return; ctx.clearRect(0, 0, canvas.width, canvas.height); velocity += gravity; birdY += velocity; if(frameCount % 100 === 0) { const gap = 120; const minPipeHeight = 50; const maxPipeHeight = canvas.height - gap - minPipeHeight; const topHeight = Math.floor(Math.random() * (maxPipeHeight - minPipeHeight + 1) + minPipeHeight); pipes.push({ x: canvas.width, topHeight: topHeight, passed: false }); } ctx.fillStyle = '#10b981'; for(let i=0; i<pipes.length; i++) { let p = pipes[i]; p.x -= 2.5; ctx.fillRect(p.x, 0, 40, p.topHeight); const bottomY = p.topHeight + 120; ctx.fillRect(p.x, bottomY, 40, canvas.height - bottomY); const birdX = 50; if (birdX + birdRadius > p.x && birdX - birdRadius < p.x + 40) { if (birdY - birdRadius < p.topHeight || birdY + birdRadius > bottomY) { gameOver(); } } if (p.x + 40 < birdX && !p.passed) { score++; p.passed = true; } } pipes = pipes.filter(p => p.x + 40 > 0); if(birdY + birdRadius > canvas.height || birdY - birdRadius < 0) { gameOver(); } drawBird(50, birdY); ctx.fillStyle = 'white'; ctx.font = 'bold 20px Inter'; ctx.fillText('Score: ' + score, 10, 30); frameCount++; currentAnimationId = requestAnimationFrame(gameLoop); } function gameOver() { isGameOver = true; isPlayingActionGame = false; window.removeEventListener('keydown', jump); canvas.removeEventListener('mousedown', jump); canvas.removeEventListener('touchstart', jump); if(currentAnimationId) cancelAnimationFrame(currentAnimationId); ctx.fillStyle = 'rgba(0,0,0,0.7)'; ctx.fillRect(0,0,canvas.width,canvas.height); ctx.fillStyle = 'white'; ctx.font = 'bold 20px Inter'; ctx.fillText('GAME OVER', 90, 180); ctx.fillText('Score: ' + score, 110, 220); setTimeout(() => { if (singlePlayerMode) { handleSpActionGameOver(score); } else { updateDoc(doc(db, "games", gameId), { [isPlayer1 ? 'p1Score' : 'p2Score']: score }); } }, 1500); } gameLoop(); }
-function startCarRacing(gameId, isPlayer1) { const canvas = document.getElementById('actionCanvas'); if (!canvas) return; const ctx = canvas.getContext('2d'); let carX = 135; const carWidth = 30; const carHeight = 50; let score = 0; let obstacles = []; let gameSpeed = 3; let isGameOver = false; const handleKeyDown = (e) => { if(!isPlayingActionGame) return; if(e.key === 'ArrowLeft' && carX > 35) carX -= 100; if(e.key === 'ArrowRight' && carX < 235) carX += 100; }; window.addEventListener('keydown', handleKeyDown); function drawCar(x, y, color) { ctx.fillStyle = color; ctx.fillRect(x, y, carWidth, carHeight); ctx.fillStyle = '#333'; ctx.fillRect(x - 5, y + 5, 5, 15); ctx.fillRect(x + carWidth, y + 5, 5, 15); ctx.fillRect(x - 5, y + 30, 5, 15); ctx.fillRect(x + carWidth, y + 30, 5, 15); } function gameLoop() { if(isGameOver) return; ctx.clearRect(0, 0, canvas.width, canvas.height); ctx.strokeStyle = '#555'; ctx.setLineDash([20, 20]); ctx.beginPath(); ctx.moveTo(100, 0); ctx.lineTo(100, 400); ctx.stroke(); ctx.beginPath(); ctx.moveTo(200, 0); ctx.lineTo(200, 400); ctx.stroke(); ctx.setLineDash([]); drawCar(carX, 330, '#8b5cf6'); if(Math.random() < 0.02 + (score/20000)) { const lanes = [35, 135, 235]; const lane = lanes[Math.floor(Math.random() * lanes.length)]; if (!obstacles.some(o => Math.abs(o.y - (-50)) < 150 && o.x === lane)) { obstacles.push({ x: lane, y: -50, width: 30, height: 50 }); } } for(let i=0; i<obstacles.length; i++) { let obs = obstacles[i]; obs.y += gameSpeed; drawCar(obs.x, obs.y, '#ec4899'); if (carX < obs.x + obs.width && carX + carWidth > obs.x && 330 < obs.y + obs.height && 330 + carHeight > obs.y) { gameOver(); } } obstacles = obstacles.filter(o => o.y < 450); score++; if(score % 500 === 0) gameSpeed += 0.5; ctx.fillStyle = 'white'; ctx.font = 'bold 16px Inter'; ctx.fillText('Score: ' + Math.floor(score/10), 10, 25); currentAnimationId = requestAnimationFrame(gameLoop); } function gameOver() { isGameOver = true; isPlayingActionGame = false; window.removeEventListener('keydown', handleKeyDown); if(currentAnimationId) cancelAnimationFrame(currentAnimationId); const finalScore = Math.floor(score/10); ctx.fillStyle = 'rgba(0,0,0,0.7)'; ctx.fillRect(0,0,canvas.width,canvas.height); ctx.fillStyle = 'white'; ctx.font = 'bold 20px Inter'; ctx.fillText('CRASHED!', 100, 180); ctx.fillText('Score: ' + finalScore, 100, 220); setTimeout(() => { if (singlePlayerMode) { handleSpActionGameOver(finalScore); } else { updateDoc(doc(db, "games", gameId), { [isPlayer1 ? 'p1Score' : 'p2Score']: finalScore }); } }, 1500); } const btnLeft = document.getElementById('btnLeft'); const btnRight = document.getElementById('btnRight'); btnLeft.onmousedown = btnLeft.ontouchstart = (e) => { e.preventDefault(); if(carX > 35) carX -= 100; }; btnRight.onmousedown = btnRight.ontouchstart = (e) => { e.preventDefault(); if(carX < 235) carX += 100; }; gameLoop(); }
+function startFlappyBird(gameId, isPlayer1) {
+    const canvas = document.getElementById('actionCanvas');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    document.getElementById('gameControls').style.display = 'none';
+
+    let birdY = 200;
+    let velocity = 0;
+    const gravity = 0.5;
+    const jumpStrength = -7;
+    const birdRadius = 12;
+    let pipes = [];
+    let frameCount = 0;
+    let score = 0;
+    let isGameOver = false;
+    let isCountingDown = true; // NEW: Block controls during countdown
+
+    const jump = (e) => {
+        if(!isPlayingActionGame || isCountingDown) return; 
+        if(e && e.type === 'keydown' && e.key !== ' ' && e.key !== 'ArrowUp') return;
+        if(e) e.preventDefault();
+        velocity = jumpStrength;
+    };
+
+    window.addEventListener('keydown', jump);
+    canvas.addEventListener('mousedown', jump);
+    canvas.addEventListener('touchstart', jump, {passive: false});
+
+    function drawBird(x, y) {
+        ctx.fillStyle = '#f59e0b';
+        ctx.beginPath();
+        ctx.arc(x, y, birdRadius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = 'white';
+        ctx.beginPath();
+        ctx.arc(x + 5, y - 4, 4, 0, Math.PI*2);
+        ctx.fill();
+        ctx.fillStyle = 'black';
+        ctx.beginPath();
+        ctx.arc(x + 6, y - 4, 2, 0, Math.PI*2);
+        ctx.fill();
+    }
+
+    function gameLoop() {
+        if(isGameOver) return;
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        velocity += gravity;
+        birdY += velocity;
+
+        if(frameCount % 100 === 0) {
+            const gap = 120;
+            const minPipeHeight = 50;
+            const maxPipeHeight = canvas.height - gap - minPipeHeight;
+            const topHeight = Math.floor(Math.random() * (maxPipeHeight - minPipeHeight + 1) + minPipeHeight);
+            pipes.push({ x: canvas.width, topHeight: topHeight, passed: false });
+        }
+
+        ctx.fillStyle = '#10b981';
+        for(let i=0; i<pipes.length; i++) {
+            let p = pipes[i];
+            p.x -= 2.5;
+            ctx.fillRect(p.x, 0, 40, p.topHeight);
+            const bottomY = p.topHeight + 120;
+            ctx.fillRect(p.x, bottomY, 40, canvas.height - bottomY);
+
+            const birdX = 50;
+            if (birdX + birdRadius > p.x && birdX - birdRadius < p.x + 40) {
+                if (birdY - birdRadius < p.topHeight || birdY + birdRadius > bottomY) {
+                    gameOver();
+                }
+            }
+            if (p.x + 40 < birdX && !p.passed) {
+                score++;
+                p.passed = true;
+            }
+        }
+        pipes = pipes.filter(p => p.x + 40 > 0);
+
+        if(birdY + birdRadius > canvas.height || birdY - birdRadius < 0) {
+            gameOver();
+        }
+
+        drawBird(50, birdY);
+        ctx.fillStyle = 'white';
+        ctx.font = 'bold 20px Inter';
+        ctx.fillText('Score: ' + score, 10, 30);
+        frameCount++;
+        currentAnimationId = requestAnimationFrame(gameLoop);
+    }
+
+    function gameOver() {
+        isGameOver = true;
+        isPlayingActionGame = false;
+        window.removeEventListener('keydown', jump);
+        canvas.removeEventListener('mousedown', jump);
+        canvas.removeEventListener('touchstart', jump);
+        if(currentAnimationId) cancelAnimationFrame(currentAnimationId);
+
+        ctx.fillStyle = 'rgba(0,0,0,0.7)';
+        ctx.fillRect(0,0,canvas.width,canvas.height);
+        ctx.fillStyle = 'white';
+        ctx.font = 'bold 20px Inter';
+        ctx.fillText('GAME OVER', 90, 180);
+        ctx.fillText('Score: ' + score, 110, 220);
+
+        setTimeout(() => {
+            if (singlePlayerMode) {
+                handleSpActionGameOver(score);
+            } else {
+                updateDoc(doc(db, "games", gameId), { [isPlayer1 ? 'p1Score' : 'p2Score']: score });
+            }
+        }, 1500);
+    }
+
+    // NEW: Countdown Timer Engine
+    let countdown = 3;
+    function drawCountdown() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        drawBird(50, 200); // Draw stationary bird
+        ctx.fillStyle = 'rgba(0,0,0,0.5)';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = 'white';
+        ctx.font = 'bold 60px Inter';
+        ctx.textAlign = 'center';
+        ctx.fillText(countdown > 0 ? countdown : 'GO!', canvas.width/2, canvas.height/2 + 20);
+        ctx.textAlign = 'left'; // Reset
+    }
+
+    drawCountdown();
+    const timerInterval = setInterval(() => {
+        countdown--;
+        if (countdown > 0) {
+            drawCountdown();
+        } else if (countdown === 0) {
+            drawCountdown();
+        } else {
+            clearInterval(timerInterval);
+            isCountingDown = false;
+            gameLoop();
+        }
+    }, 1000);
+}
+function startCarRacing(gameId, isPlayer1) {
+    const canvas = document.getElementById('actionCanvas');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+
+    let carX = 135;
+    let targetCarX = 135; // Handles smooth transitions
+    const carWidth = 30;
+    const carHeight = 50;
+    let score = 0;
+    let obstacles = [];
+    let gameSpeed = 3;
+    let isGameOver = false;
+    let lineOffset = 0; // NEW: Moving road lines
+
+    const handleKeyDown = (e) => {
+        if(!isPlayingActionGame) return;
+        if(e.key === 'ArrowLeft' && targetCarX > 35) targetCarX -= 100;
+        if(e.key === 'ArrowRight' && targetCarX < 235) targetCarX += 100;
+    };
+    window.addEventListener('keydown', handleKeyDown);
+
+    function drawCar(x, y, color) {
+        ctx.fillStyle = color;
+        ctx.fillRect(x, y, carWidth, carHeight);
+        
+        // Wheels
+        ctx.fillStyle = '#111';
+        ctx.fillRect(x - 5, y + 5, 5, 15);
+        ctx.fillRect(x + carWidth, y + 5, 5, 15);
+        ctx.fillRect(x - 5, y + 30, 5, 15);
+        ctx.fillRect(x + carWidth, y + 30, 5, 15);
+        
+        // Windshield (Visual upgrade)
+        ctx.fillStyle = 'rgba(255,255,255,0.4)';
+        ctx.fillRect(x + 5, y + 10, 20, 10);
+    }
+
+    function gameLoop() {
+        if(isGameOver) return;
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // Smooth sliding
+        if (carX < targetCarX) { carX += 15; if (carX > targetCarX) carX = targetCarX; }
+        if (carX > targetCarX) { carX -= 15; if (carX < targetCarX) carX = targetCarX; }
+
+        // NEW: Animate road lines for a feeling of speed
+        lineOffset += gameSpeed;
+        if (lineOffset > 40) lineOffset -= 40;
+
+        ctx.strokeStyle = '#555';
+        ctx.lineWidth = 3;
+        ctx.setLineDash([20, 20]);
+        ctx.beginPath();
+        ctx.moveTo(100, lineOffset - 40); ctx.lineTo(100, 400); ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(200, lineOffset - 40); ctx.lineTo(200, 400); ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.lineWidth = 1;
+
+        drawCar(carX, 330, '#8b5cf6'); // Draw Player
+
+        // --- 100% FAIR ROW-BASED SPAWN SYSTEM ---
+        // 1. Find the obstacle closest to the top of the screen
+        let highestY = canvas.height; 
+        obstacles.forEach(o => { if (o.y < highestY) highestY = o.y; });
+
+        // 2. Determine a safe vertical gap (scales with speed)
+        let safeVerticalGap = 130 + (gameSpeed * 10);
+
+        // 3. Only spawn a new "row" of traffic if there is enough space to dodge
+        if (highestY > safeVerticalGap || obstacles.length === 0) {
+            
+            // Randomly decide to spawn 1 or 2 cars (NEVER 3)
+            let spawnCount = Math.random() > 0.5 ? 2 : 1;
+            
+            let lanes = [35, 135, 235];
+            lanes.sort(() => 0.5 - Math.random()); // Shuffle lanes
+            
+            for(let i = 0; i < spawnCount; i++) {
+                // Add a tiny random offset so cars in the same row aren't perfectly aligned
+                let staggerOffset = Math.random() * 30;
+                obstacles.push({ x: lanes[i], y: -50 - staggerOffset, width: 30, height: 50 });
+            }
+        }
+        // ----------------------------------------
+
+        for(let i=0; i<obstacles.length; i++) {
+            let obs = obstacles[i];
+            obs.y += gameSpeed;
+            drawCar(obs.x, obs.y, '#ec4899'); // Draw Enemy
+            
+            // Forgiving Hitbox: We subtract 2 pixels so you don't crash from barely scraping paint
+            let margin = 2;
+            if (carX + margin < obs.x + obs.width && 
+                carX + carWidth - margin > obs.x && 
+                330 + margin < obs.y + obs.height && 
+                330 + carHeight - margin > obs.y) {
+                gameOver();
+            }
+        }
+        obstacles = obstacles.filter(o => o.y < 450); // Clean up cars off screen
+
+        score++;
+        if(score % 500 === 0) gameSpeed += 0.5;
+
+        ctx.fillStyle = 'white';
+        ctx.font = 'bold 16px Inter';
+        ctx.fillText('Score: ' + Math.floor(score/10), 10, 25);
+        currentAnimationId = requestAnimationFrame(gameLoop);
+    }
+
+    function gameOver() {
+        isGameOver = true;
+        isPlayingActionGame = false;
+        window.removeEventListener('keydown', handleKeyDown);
+        if(currentAnimationId) cancelAnimationFrame(currentAnimationId);
+
+        const finalScore = Math.floor(score/10);
+        ctx.fillStyle = 'rgba(0,0,0,0.7)';
+        ctx.fillRect(0,0,canvas.width,canvas.height);
+        ctx.fillStyle = 'white';
+        ctx.font = 'bold 20px Inter';
+        ctx.fillText('CRASHED!', 100, 180);
+        ctx.fillText('Score: ' + finalScore, 100, 220);
+
+        setTimeout(() => {
+            if (singlePlayerMode) {
+                handleSpActionGameOver(finalScore);
+            } else {
+                updateDoc(doc(db, "games", gameId), { [isPlayer1 ? 'p1Score' : 'p2Score']: finalScore });
+            }
+        }, 1500);
+    }
+
+    const btnLeft = document.getElementById('btnLeft');
+    const btnRight = document.getElementById('btnRight');
+    
+    btnLeft.onmousedown = btnLeft.ontouchstart = (e) => {
+        e.preventDefault();
+        if(targetCarX > 35) targetCarX -= 100;
+    };
+    btnRight.onmousedown = btnRight.ontouchstart = (e) => {
+        e.preventDefault();
+        if(targetCarX < 235) targetCarX += 100;
+    };
+
+    gameLoop();
+}
 function startJetFighter(gameId, isPlayer1) { const canvas = document.getElementById('actionCanvas'); if (!canvas) return; const ctx = canvas.getContext('2d'); let jetX = 135; const jetSize = 30; let bullets = []; let enemies = []; let score = 0; let isGameOver = false; let isMovingLeft = false; let isMovingRight = false; const handleKeyDown = (e) => { if(!isPlayingActionGame) return; if(e.key === 'ArrowLeft') isMovingLeft = true; if(e.key === 'ArrowRight') isMovingRight = true; if(e.key === ' ' || e.key === 'ArrowUp') { e.preventDefault(); bullets.push({ x: jetX + jetSize/2 - 2, y: 350 }); } }; const handleKeyUp = (e) => { if(!isPlayingActionGame) return; if(e.key === 'ArrowLeft') isMovingLeft = false; if(e.key === 'ArrowRight') isMovingRight = false; }; window.addEventListener('keydown', handleKeyDown); window.addEventListener('keyup', handleKeyUp); function drawJet(x, y, color) { ctx.fillStyle = color; ctx.beginPath(); ctx.moveTo(x + jetSize/2, y); ctx.lineTo(x + jetSize, y + jetSize); ctx.lineTo(x, y + jetSize); ctx.fill(); } function gameLoop() { if(isGameOver) return; ctx.clearRect(0, 0, canvas.width, canvas.height); if(isMovingLeft && jetX > 0) jetX -= 5; if(isMovingRight && jetX < canvas.width - jetSize) jetX += 5; ctx.fillStyle = 'white'; for(let i=0; i<3; i++) { ctx.fillRect(Math.random()*canvas.width, Math.random()*canvas.height, 2, 2); } drawJet(jetX, 350, '#10b981'); ctx.fillStyle = '#f59e0b'; for(let i=0; i<bullets.length; i++) { bullets[i].y -= 7; ctx.fillRect(bullets[i].x, bullets[i].y, 4, 10); } bullets = bullets.filter(b => b.y > 0); if(Math.random() < 0.03 + (score/10000)) { enemies.push({ x: Math.random() * (canvas.width - 20), y: -20, size: 20 }); } for(let i=0; i<enemies.length; i++) { let e = enemies[i]; e.y += 2.5; ctx.fillStyle = '#ef4444'; ctx.fillRect(e.x, e.y, e.size, e.size); for(let j=0; j<bullets.length; j++) { let b = bullets[j]; if(b.x > e.x && b.x < e.x + e.size && b.y > e.y && b.y < e.y + e.size) { e.dead = true; b.dead = true; score += 10; } } if (jetX < e.x + e.size && jetX + jetSize > e.x && 350 < e.y + e.size && 350 + jetSize > e.y) { gameOver(); } } enemies = enemies.filter(e => !e.dead && e.y < 450); bullets = bullets.filter(b => !b.dead); ctx.fillStyle = 'white'; ctx.font = 'bold 16px Inter'; ctx.fillText('Score: ' + score, 10, 25); currentAnimationId = requestAnimationFrame(gameLoop); } function gameOver() { isGameOver = true; isPlayingActionGame = false; window.removeEventListener('keydown', handleKeyDown); window.removeEventListener('keyup', handleKeyUp); if(currentAnimationId) cancelAnimationFrame(currentAnimationId); ctx.fillStyle = 'rgba(0,0,0,0.7)'; ctx.fillRect(0,0,canvas.width,canvas.height); ctx.fillStyle = 'white'; ctx.font = 'bold 20px Inter'; ctx.fillText('DESTROYED!', 90, 180); ctx.fillText('Score: ' + score, 105, 220); setTimeout(() => { if (singlePlayerMode) { handleSpActionGameOver(score); } else { updateDoc(doc(db, "games", gameId), { [isPlayer1 ? 'p1Score' : 'p2Score']: score }); } }, 1500); } const btnLeft = document.getElementById('btnLeft'); const btnRight = document.getElementById('btnRight'); btnLeft.onmousedown = btnLeft.ontouchstart = (e) => { e.preventDefault(); isMovingLeft = true; }; btnLeft.onmouseup = btnLeft.ontouchend = btnLeft.onmouseleave = (e) => { e.preventDefault(); isMovingLeft = false; }; btnRight.onmousedown = btnRight.ontouchstart = (e) => { e.preventDefault(); isMovingRight = true; }; btnRight.onmouseup = btnRight.ontouchend = btnRight.onmouseleave = (e) => { e.preventDefault(); isMovingRight = false; }; if(!document.getElementById('btnShoot')) { const btnShoot = document.createElement('button'); btnShoot.id = 'btnShoot'; btnShoot.className = 'game-control-btn'; btnShoot.style.background = 'rgba(236, 72, 153, 0.2)'; btnShoot.style.borderColor = 'var(--accent)'; btnShoot.innerText = '🔥'; document.getElementById('gameControls').appendChild(btnShoot); btnShoot.onmousedown = btnShoot.ontouchstart = (e) => { e.preventDefault(); bullets.push({ x: jetX + jetSize/2 - 2, y: 350 }); }; } gameLoop(); }
 function renderTicTacToe(data, gameId) { const isMyTurn = data.turn === auth.currentUser.uid; const mySymbol = data.player1 === auth.currentUser.uid ? "X" : "O"; let turnText = data.winner ? (data.winner === 'draw' ? "It's a Draw!" : (data.winner === auth.currentUser.uid ? "🎉 You Won!" : "😞 You Lost!")) : (isMyTurn ? "Your Turn" : "Opponent's Turn"); let html = `<div class="game-turn-indicator" style="color: ${isMyTurn && !data.winner ? 'var(--primary)' : 'white'}">${turnText}</div><div class="ttt-board">`; data.board.forEach((cell, index) => { const cellClass = cell === 'X' ? 'x' : (cell === 'O' ? 'o' : ''); html += `<div class="ttt-cell ${cellClass}" onclick="makeMoveTTT(${index}, '${data.board[index]}', ${isMyTurn}, '${mySymbol}')">${cell}</div>`; }); html += `</div>`; if(data.winner) html += `<button class="primary-btn glow-btn" style="max-width:200px; margin-top:20px;" onclick="resetTTT('${gameId}')">Play Again</button>`; gameUIContainer.innerHTML = html; }
 window.makeMoveTTT = async (index, currentVal, isMyTurn, mySymbol) => { if(!isMyTurn || currentVal !== "" || !currentGameId) return; const docRef = doc(db, "games", currentGameId); const snap = await getDoc(docRef); const data = snap.data(); if(data.winner) return; let newBoard = [...data.board]; newBoard[index] = mySymbol; const lines = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]]; let newWinner = null; for (let i = 0; i < lines.length; i++) { const [a, b, c] = lines[i]; if (newBoard[a] && newBoard[a] === newBoard[b] && newBoard[a] === newBoard[c]) newWinner = auth.currentUser.uid; } if(!newWinner && !newBoard.includes("")) newWinner = "draw"; const nextTurn = data.player1 === auth.currentUser.uid ? data.player2 : data.player1; await updateDoc(docRef, { board: newBoard, turn: nextTurn, winner: newWinner }); };
