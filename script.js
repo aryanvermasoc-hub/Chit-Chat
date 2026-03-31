@@ -373,7 +373,7 @@ function loadMessages() {
           if (isMe) { contentHtml = `<div class="challenge-bubble" onclick="event.stopPropagation();"><h4>🎨 Doodle Request Sent</h4><p>Waiting for opponent to accept...</p></div>`; }
           else { contentHtml = `<div class="challenge-bubble" onclick="event.stopPropagation();"><h4>🎨 Shared Whiteboard</h4><p>Wants to draw with you!</p><div class="challenge-actions"><button class="btn-accept" onclick="acceptDoodle()">Accept</button></div></div>`; }
       } else if (msg.isGameChallenge) {
-          const gameNames = { "ludo": "Ludo Arena", "tictactoe": "Tic Tac Toe", "rps": "Rock Paper Scissors", "jetfighter": "Jet Fighter", "carracing": "Car Racing" };
+          const gameNames = { "ludo": "Ludo Arena", "tictactoe": "Tic Tac Toe", "rps": "Rock Paper Scissors", "jetfighter": "Jet Fighter", "carracing": "Car Racing", "alienswarm": "Alien Swarm Co-op" };
           if (isMe) { contentHtml = `<div class="challenge-bubble" onclick="event.stopPropagation();"><h4>🎮 Challenge Sent</h4><p>Waiting for opponent to accept ${gameNames[msg.gameType] || 'a Game'}...</p></div>`; } 
           else { contentHtml = `<div class="challenge-bubble" onclick="event.stopPropagation();"><h4>🎮 Game Request</h4><p>Wants to play <b>${gameNames[msg.gameType] || 'a Game'}</b></p><div class="challenge-actions"><button class="btn-accept" onclick="acceptGameChallenge('${msg.gameId}', '${msg.gameType}')">Accept</button></div></div>`; }
       } else if (msg.isDeleted) { contentHtml = `<div class="msg-bubble msg-deleted"><i class="fa-solid fa-ban"></i> This message was deleted</div>`; } 
@@ -475,6 +475,8 @@ function joinGameRoom(gameId, gameType) {
         if(data.status === "abandoned") { gameUIContainer.innerHTML = `<h3 style="color:var(--accent);">Opponent left the game.</h3>`; isPlayingActionGame = false; return; }
         if(data.status === "waiting") { gameUIContainer.innerHTML = `<h3>Waiting for opponent... <i class="fa-solid fa-spinner fa-spin"></i></h3>`; isPlayingActionGame = false; return; }
         if (data.type === 'tictactoe') renderTicTacToe(data, gameId); if (data.type === 'rps') renderRPS(data, gameId); if (data.type === 'jetfighter') renderActionGame(data, gameId, 'jetfighter'); if (data.type === 'carracing') renderActionGame(data, gameId, 'carracing'); if (data.type === 'ludo') renderLudo(data, gameId);
+        if (gameType === 'alienswarm') gTitle = "Alien Swarm Co-op";
+if (data.type === 'alienswarm') renderActionGame(data, gameId, 'alienswarm');
     });
 }
 const ludoPath = [ {x:30,y:130}, {x:50,y:130}, {x:70,y:130}, {x:90,y:130}, {x:110,y:130}, {x:130,y:110}, {x:130,y:90}, {x:130,y:70}, {x:130,y:50}, {x:130,y:30}, {x:130,y:10}, {x:150,y:10}, {x:170,y:10}, {x:170,y:30}, {x:170,y:50}, {x:170,y:70}, {x:170,y:90}, {x:170,y:110}, {x:190,y:130}, {x:210,y:130}, {x:230,y:130}, {x:250,y:130}, {x:270,y:130}, {x:290,y:130}, {x:290,y:150}, {x:290,y:170}, {x:270,y:170}, {x:250,y:170}, {x:230,y:170}, {x:210,y:170}, {x:190,y:170}, {x:170,y:190}, {x:170,y:210}, {x:170,y:230}, {x:170,y:250}, {x:170,y:270}, {x:170,y:290}, {x:150,y:290}, {x:130,y:290}, {x:130,y:270}, {x:130,y:250}, {x:130,y:230}, {x:130,y:210}, {x:130,y:190}, {x:110,y:170}, {x:90,y:170}, {x:70,y:170}, {x:50,y:170}, {x:30,y:170}, {x:10,y:170}, {x:10,y:150}, {x:10,y:130}, {x:30,y:150}, {x:50,y:150}, {x:70,y:150}, {x:90,y:150}, {x:110,y:150}, {x:270,y:150}, {x:250,y:150}, {x:230,y:150}, {x:210,y:150}, {x:190,y:150} ]; const ludoBases = { p1: [{x:40,y:40}, {x:80,y:40}, {x:40,y:80}, {x:80,y:80}], p2: [{x:220,y:220}, {x:260,y:220}, {x:220,y:260}, {x:260,y:260}] };
@@ -655,14 +657,14 @@ function startCarRacing(gameId, isPlayer1) {
     const ctx = canvas.getContext('2d');
 
     let carX = 135;
-    let targetCarX = 135; // Handles smooth transitions
+    let targetCarX = 135; 
     const carWidth = 30;
     const carHeight = 50;
     let score = 0;
     let obstacles = [];
     let gameSpeed = 3;
     let isGameOver = false;
-    let lineOffset = 0; // NEW: Moving road lines
+    let lineOffset = 0; // Animates the road
 
     const handleKeyDown = (e) => {
         if(!isPlayingActionGame) return;
@@ -675,14 +677,12 @@ function startCarRacing(gameId, isPlayer1) {
         ctx.fillStyle = color;
         ctx.fillRect(x, y, carWidth, carHeight);
         
-        // Wheels
         ctx.fillStyle = '#111';
         ctx.fillRect(x - 5, y + 5, 5, 15);
         ctx.fillRect(x + carWidth, y + 5, 5, 15);
         ctx.fillRect(x - 5, y + 30, 5, 15);
         ctx.fillRect(x + carWidth, y + 30, 5, 15);
         
-        // Windshield (Visual upgrade)
         ctx.fillStyle = 'rgba(255,255,255,0.4)';
         ctx.fillRect(x + 5, y + 10, 20, 10);
     }
@@ -691,11 +691,9 @@ function startCarRacing(gameId, isPlayer1) {
         if(isGameOver) return;
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-        // Smooth sliding
         if (carX < targetCarX) { carX += 15; if (carX > targetCarX) carX = targetCarX; }
         if (carX > targetCarX) { carX -= 15; if (carX < targetCarX) carX = targetCarX; }
 
-        // NEW: Animate road lines for a feeling of speed
         lineOffset += gameSpeed;
         if (lineOffset > 40) lineOffset -= 40;
 
@@ -709,39 +707,28 @@ function startCarRacing(gameId, isPlayer1) {
         ctx.setLineDash([]);
         ctx.lineWidth = 1;
 
-        drawCar(carX, 330, '#8b5cf6'); // Draw Player
+        drawCar(carX, 330, '#8b5cf6');
 
-        // --- 100% FAIR ROW-BASED SPAWN SYSTEM ---
-        // 1. Find the obstacle closest to the top of the screen
         let highestY = canvas.height; 
         obstacles.forEach(o => { if (o.y < highestY) highestY = o.y; });
-
-        // 2. Determine a safe vertical gap (scales with speed)
         let safeVerticalGap = 130 + (gameSpeed * 10);
 
-        // 3. Only spawn a new "row" of traffic if there is enough space to dodge
         if (highestY > safeVerticalGap || obstacles.length === 0) {
-            
-            // Randomly decide to spawn 1 or 2 cars (NEVER 3)
             let spawnCount = Math.random() > 0.5 ? 2 : 1;
-            
             let lanes = [35, 135, 235];
-            lanes.sort(() => 0.5 - Math.random()); // Shuffle lanes
+            lanes.sort(() => 0.5 - Math.random()); 
             
             for(let i = 0; i < spawnCount; i++) {
-                // Add a tiny random offset so cars in the same row aren't perfectly aligned
                 let staggerOffset = Math.random() * 30;
                 obstacles.push({ x: lanes[i], y: -50 - staggerOffset, width: 30, height: 50 });
             }
         }
-        // ----------------------------------------
 
         for(let i=0; i<obstacles.length; i++) {
             let obs = obstacles[i];
             obs.y += gameSpeed;
-            drawCar(obs.x, obs.y, '#ec4899'); // Draw Enemy
+            drawCar(obs.x, obs.y, '#ec4899'); 
             
-            // Forgiving Hitbox: We subtract 2 pixels so you don't crash from barely scraping paint
             let margin = 2;
             if (carX + margin < obs.x + obs.width && 
                 carX + carWidth - margin > obs.x && 
@@ -750,7 +737,7 @@ function startCarRacing(gameId, isPlayer1) {
                 gameOver();
             }
         }
-        obstacles = obstacles.filter(o => o.y < 450); // Clean up cars off screen
+        obstacles = obstacles.filter(o => o.y < 450); 
 
         score++;
         if(score % 500 === 0) gameSpeed += 0.5;
@@ -800,6 +787,153 @@ function startCarRacing(gameId, isPlayer1) {
 }
 function startJetFighter(gameId, isPlayer1) { const canvas = document.getElementById('actionCanvas'); if (!canvas) return; const ctx = canvas.getContext('2d'); let jetX = 135; const jetSize = 30; let bullets = []; let enemies = []; let score = 0; let isGameOver = false; let isMovingLeft = false; let isMovingRight = false; const handleKeyDown = (e) => { if(!isPlayingActionGame) return; if(e.key === 'ArrowLeft') isMovingLeft = true; if(e.key === 'ArrowRight') isMovingRight = true; if(e.key === ' ' || e.key === 'ArrowUp') { e.preventDefault(); bullets.push({ x: jetX + jetSize/2 - 2, y: 350 }); } }; const handleKeyUp = (e) => { if(!isPlayingActionGame) return; if(e.key === 'ArrowLeft') isMovingLeft = false; if(e.key === 'ArrowRight') isMovingRight = false; }; window.addEventListener('keydown', handleKeyDown); window.addEventListener('keyup', handleKeyUp); function drawJet(x, y, color) { ctx.fillStyle = color; ctx.beginPath(); ctx.moveTo(x + jetSize/2, y); ctx.lineTo(x + jetSize, y + jetSize); ctx.lineTo(x, y + jetSize); ctx.fill(); } function gameLoop() { if(isGameOver) return; ctx.clearRect(0, 0, canvas.width, canvas.height); if(isMovingLeft && jetX > 0) jetX -= 5; if(isMovingRight && jetX < canvas.width - jetSize) jetX += 5; ctx.fillStyle = 'white'; for(let i=0; i<3; i++) { ctx.fillRect(Math.random()*canvas.width, Math.random()*canvas.height, 2, 2); } drawJet(jetX, 350, '#10b981'); ctx.fillStyle = '#f59e0b'; for(let i=0; i<bullets.length; i++) { bullets[i].y -= 7; ctx.fillRect(bullets[i].x, bullets[i].y, 4, 10); } bullets = bullets.filter(b => b.y > 0); if(Math.random() < 0.03 + (score/10000)) { enemies.push({ x: Math.random() * (canvas.width - 20), y: -20, size: 20 }); } for(let i=0; i<enemies.length; i++) { let e = enemies[i]; e.y += 2.5; ctx.fillStyle = '#ef4444'; ctx.fillRect(e.x, e.y, e.size, e.size); for(let j=0; j<bullets.length; j++) { let b = bullets[j]; if(b.x > e.x && b.x < e.x + e.size && b.y > e.y && b.y < e.y + e.size) { e.dead = true; b.dead = true; score += 10; } } if (jetX < e.x + e.size && jetX + jetSize > e.x && 350 < e.y + e.size && 350 + jetSize > e.y) { gameOver(); } } enemies = enemies.filter(e => !e.dead && e.y < 450); bullets = bullets.filter(b => !b.dead); ctx.fillStyle = 'white'; ctx.font = 'bold 16px Inter'; ctx.fillText('Score: ' + score, 10, 25); currentAnimationId = requestAnimationFrame(gameLoop); } function gameOver() { isGameOver = true; isPlayingActionGame = false; window.removeEventListener('keydown', handleKeyDown); window.removeEventListener('keyup', handleKeyUp); if(currentAnimationId) cancelAnimationFrame(currentAnimationId); ctx.fillStyle = 'rgba(0,0,0,0.7)'; ctx.fillRect(0,0,canvas.width,canvas.height); ctx.fillStyle = 'white'; ctx.font = 'bold 20px Inter'; ctx.fillText('DESTROYED!', 90, 180); ctx.fillText('Score: ' + score, 105, 220); setTimeout(() => { if (singlePlayerMode) { handleSpActionGameOver(score); } else { updateDoc(doc(db, "games", gameId), { [isPlayer1 ? 'p1Score' : 'p2Score']: score }); } }, 1500); } const btnLeft = document.getElementById('btnLeft'); const btnRight = document.getElementById('btnRight'); btnLeft.onmousedown = btnLeft.ontouchstart = (e) => { e.preventDefault(); isMovingLeft = true; }; btnLeft.onmouseup = btnLeft.ontouchend = btnLeft.onmouseleave = (e) => { e.preventDefault(); isMovingLeft = false; }; btnRight.onmousedown = btnRight.ontouchstart = (e) => { e.preventDefault(); isMovingRight = true; }; btnRight.onmouseup = btnRight.ontouchend = btnRight.onmouseleave = (e) => { e.preventDefault(); isMovingRight = false; }; if(!document.getElementById('btnShoot')) { const btnShoot = document.createElement('button'); btnShoot.id = 'btnShoot'; btnShoot.className = 'game-control-btn'; btnShoot.style.background = 'rgba(236, 72, 153, 0.2)'; btnShoot.style.borderColor = 'var(--accent)'; btnShoot.innerText = '🔥'; document.getElementById('gameControls').appendChild(btnShoot); btnShoot.onmousedown = btnShoot.ontouchstart = (e) => { e.preventDefault(); bullets.push({ x: jetX + jetSize/2 - 2, y: 350 }); }; } gameLoop(); }
 function renderTicTacToe(data, gameId) { const isMyTurn = data.turn === auth.currentUser.uid; const mySymbol = data.player1 === auth.currentUser.uid ? "X" : "O"; let turnText = data.winner ? (data.winner === 'draw' ? "It's a Draw!" : (data.winner === auth.currentUser.uid ? "🎉 You Won!" : "😞 You Lost!")) : (isMyTurn ? "Your Turn" : "Opponent's Turn"); let html = `<div class="game-turn-indicator" style="color: ${isMyTurn && !data.winner ? 'var(--primary)' : 'white'}">${turnText}</div><div class="ttt-board">`; data.board.forEach((cell, index) => { const cellClass = cell === 'X' ? 'x' : (cell === 'O' ? 'o' : ''); html += `<div class="ttt-cell ${cellClass}" onclick="makeMoveTTT(${index}, '${data.board[index]}', ${isMyTurn}, '${mySymbol}')">${cell}</div>`; }); html += `</div>`; if(data.winner) html += `<button class="primary-btn glow-btn" style="max-width:200px; margin-top:20px;" onclick="resetTTT('${gameId}')">Play Again</button>`; gameUIContainer.innerHTML = html; }
+function startAlienSwarm(gameId, isPlayer1) {
+    const canvas = document.getElementById('actionCanvas');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    
+    // Game State
+    let myX = isPlayer1 ? 50 : 220;
+    let friendX = isPlayer1 ? 220 : 50;
+    let bullets = [];
+    let aliens = [];
+    let score = 0;
+    let isGameOver = false;
+    let isShooting = false;
+    
+    const shipSize = 30;
+    const myColor = isPlayer1 ? '#3b82f6' : '#ef4444'; // P1 Blue, P2 Red
+    const friendColor = isPlayer1 ? '#ef4444' : '#3b82f6';
+
+    // Controls
+    const handleKeyDown = (e) => {
+        if(!isPlayingActionGame) return;
+        if(e.key === 'ArrowLeft' && myX > 0) myX -= 15;
+        if(e.key === 'ArrowRight' && myX < canvas.width - shipSize) myX += 15;
+        if(e.key === ' ' || e.key === 'ArrowUp') isShooting = true;
+    };
+    window.addEventListener('keydown', handleKeyDown);
+
+    function drawShip(x, y, color) {
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.moveTo(x + shipSize/2, y);
+        ctx.lineTo(x + shipSize, y + shipSize);
+        ctx.lineTo(x, y + shipSize);
+        ctx.fill();
+    }
+
+    // MULTIPLAYER SYNC (Runs 10 times a second)
+    const syncInterval = setInterval(async () => {
+        if (isGameOver) { clearInterval(syncInterval); return; }
+        
+        try {
+            if (isPlayer1) {
+                // HOST: Spawns aliens, manages score, uploads total state
+                if (Math.random() < 0.1) {
+                    aliens.push({ x: Math.random() * (canvas.width - 20), y: -20, id: Date.now() });
+                }
+                await updateDoc(doc(db, "games", gameId), { 
+                    p1X: myX, p1Shooting: isShooting, 
+                    aliens: aliens, score: score 
+                });
+            } else {
+                // CLIENT: Only uploads their own position
+                await updateDoc(doc(db, "games", gameId), { 
+                    p2X: myX, p2Shooting: isShooting 
+                });
+            }
+            isShooting = false; // Reset trigger
+        } catch(e) { console.error("Sync error", e); }
+    }, 100);
+
+    // LISTEN TO FRIEND (Real-time updates)
+    const unsub = onSnapshot(doc(db, "games", gameId), (docSnap) => {
+        if (!docSnap.exists() || isGameOver) return;
+        const data = docSnap.data();
+        
+        score = data.score || 0;
+
+        if (isPlayer1) {
+            friendX = data.p2X !== undefined ? data.p2X : friendX;
+            if (data.p2Shooting) bullets.push({ x: friendX + shipSize/2, y: 350, isMine: false });
+            if (isShooting) bullets.push({ x: myX + shipSize/2, y: 350, isMine: true });
+        } else {
+            friendX = data.p1X !== undefined ? data.p1X : friendX;
+            aliens = data.aliens || []; // Client trusts Host for alien positions
+            if (data.p1Shooting) bullets.push({ x: friendX + shipSize/2, y: 350, isMine: false });
+            if (isShooting) bullets.push({ x: myX + shipSize/2, y: 350, isMine: true });
+        }
+    });
+
+    // RENDER LOOP (Runs 60 FPS for smooth visuals)
+    function gameLoop() {
+        if(isGameOver) return;
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // Draw Ships
+        drawShip(myX, 350, myColor);
+        drawShip(friendX, 350, friendColor);
+
+        // Move & Draw Bullets
+        ctx.fillStyle = '#f59e0b';
+        bullets.forEach((b, index) => {
+            b.y -= 10;
+            ctx.fillRect(b.x - 2, b.y, 4, 10);
+        });
+        bullets = bullets.filter(b => b.y > 0);
+
+        // Move & Draw Aliens (Host handles logic, Client just draws)
+        ctx.fillStyle = '#10b981';
+        aliens.forEach((a, aIndex) => {
+            if (isPlayer1) a.y += 2; // Only host moves them down
+            ctx.fillRect(a.x, a.y, 20, 20);
+
+            // Host checks collisions
+            if (isPlayer1) {
+                bullets.forEach((b, bIndex) => {
+                    if(b.x > a.x && b.x < a.x + 20 && b.y > a.y && b.y < a.y + 20) {
+                        aliens.splice(aIndex, 1);
+                        bullets.splice(bIndex, 1);
+                        score += 10;
+                    }
+                });
+                if (a.y > 400 || (a.y > 330 && (Math.abs(a.x - myX) < 20 || Math.abs(a.x - friendX) < 20))) {
+                    gameOver();
+                }
+            }
+        });
+
+        ctx.fillStyle = 'white';
+        ctx.font = 'bold 16px Inter';
+        ctx.fillText('Co-op Score: ' + score, 10, 25);
+        
+        currentAnimationId = requestAnimationFrame(gameLoop);
+    }
+
+    function gameOver() {
+        isGameOver = true;
+        isPlayingActionGame = false;
+        clearInterval(syncInterval);
+        unsub();
+        window.removeEventListener('keydown', handleKeyDown);
+        if(currentAnimationId) cancelAnimationFrame(currentAnimationId);
+
+        ctx.fillStyle = 'rgba(0,0,0,0.8)';
+        ctx.fillRect(0,0,canvas.width,canvas.height);
+        ctx.fillStyle = '#ef4444';
+        ctx.font = 'bold 24px Inter';
+        ctx.fillText('MISSION FAILED', 60, 180);
+        ctx.fillStyle = 'white';
+        ctx.fillText('Final Score: ' + score, 80, 220);
+
+        setTimeout(() => {
+            updateDoc(doc(db, "games", gameId), { p1Score: score, p2Score: score });
+        }, 2000);
+    }
+
+    gameLoop();
+}
 window.makeMoveTTT = async (index, currentVal, isMyTurn, mySymbol) => { if(!isMyTurn || currentVal !== "" || !currentGameId) return; const docRef = doc(db, "games", currentGameId); const snap = await getDoc(docRef); const data = snap.data(); if(data.winner) return; let newBoard = [...data.board]; newBoard[index] = mySymbol; const lines = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]]; let newWinner = null; for (let i = 0; i < lines.length; i++) { const [a, b, c] = lines[i]; if (newBoard[a] && newBoard[a] === newBoard[b] && newBoard[a] === newBoard[c]) newWinner = auth.currentUser.uid; } if(!newWinner && !newBoard.includes("")) newWinner = "draw"; const nextTurn = data.player1 === auth.currentUser.uid ? data.player2 : data.player1; await updateDoc(docRef, { board: newBoard, turn: nextTurn, winner: newWinner }); };
 window.resetTTT = async (gameId) => { const docRef = doc(db, "games", gameId); const snap = await getDoc(docRef); await updateDoc(docRef, { board: ["","","","","","","","",""], winner: null, turn: snap.data().player1 }); };
 function renderRPS(data, gameId) { const isPlayer1 = data.player1 === auth.currentUser.uid; const myChoice = isPlayer1 ? data.p1Choice : data.p2Choice; const oppChoice = isPlayer1 ? data.p2Choice : data.p1Choice; let statusText = "Make your choice!"; let bothSelected = data.p1Choice && data.p2Choice; if (bothSelected) { if (myChoice === oppChoice) statusText = "It's a Tie!"; else if ((myChoice === 'rock' && oppChoice === 'scissors') || (myChoice === 'paper' && oppChoice === 'rock') || (myChoice === 'scissors' && oppChoice === 'paper')) statusText = "🎉 You Won!"; else statusText = "😞 You Lost!"; } else if (myChoice) statusText = "Waiting for opponent..."; const icons = { rock: "fa-hand-back-fist", paper: "fa-hand", scissors: "fa-hand-scissors" }; let html = `<div class="game-turn-indicator">${statusText}</div><div class="rps-arena"><div class="rps-player"><span>You</span><div class="rps-choice-display"><i class="fa-solid ${myChoice ? icons[myChoice] : 'fa-question'}"></i></div></div><div class="vs-badge">VS</div><div class="rps-player"><span>Opponent</span><div class="rps-choice-display"><i class="fa-solid ${bothSelected ? icons[oppChoice] : (oppChoice ? 'fa-check' : 'fa-question')}" style="color: ${oppChoice && !bothSelected ? '#10b981' : 'white'}"></i></div></div></div>`; if (!myChoice && !bothSelected) html += `<div class="rps-controls"><button class="rps-btn" onclick="makeMoveRPS('rock')"><i class="fa-solid fa-hand-back-fist"></i></button><button class="rps-btn" onclick="makeMoveRPS('paper')"><i class="fa-solid fa-hand"></i></button><button class="rps-btn" onclick="makeMoveRPS('scissors')"><i class="fa-solid fa-hand-scissors"></i></button></div>`; if(bothSelected) html += `<button class="primary-btn glow-btn" style="max-width:200px; margin-top:20px;" onclick="resetRPS('${gameId}')">Play Again</button>`; gameUIContainer.innerHTML = html; }
