@@ -846,6 +846,7 @@ function startCyberTanks(gameId, isPlayer1) {
     let friendX = 135;
     let friendY = isPlayer1 ? 30 : 350;
     let isShooting = false;
+    let lastP2Shooting = false; // Tracks previous state to prevent bullet spam
     
     // Host state (P1 controls this)
     let bullets = [];
@@ -858,27 +859,72 @@ function startCyberTanks(gameId, isPlayer1) {
     const tankSize = 20;
 
     const keys = { ArrowLeft: false, ArrowRight: false };
+
+    // Unified Shoot Logic
+    const handleShoot = (e) => {
+        if(e) e.preventDefault();
+        if(!isPlayingActionGame || isGameOver) return;
+        
+        // P1 spawns their own bullet locally instantly
+        if(isPlayer1 && !isShooting) {
+            bullets.push({ x: myX + 8, y: myY - 8, dy: -6, isP1: true });
+        }
+        isShooting = true;
+    };
+
     const handleKeyDown = (e) => {
         if(!isPlayingActionGame) return;
         if(e.key === 'ArrowLeft') { e.preventDefault(); keys.ArrowLeft = true; }
         if(e.key === 'ArrowRight') { e.preventDefault(); keys.ArrowRight = true; }
-        if(e.key === ' ' || e.key === 'ArrowUp') { e.preventDefault(); isShooting = true; }
+        if(e.key === ' ' || e.key === 'ArrowUp') handleShoot(e);
     };
+    
     const handleKeyUp = (e) => {
         if(e.key === 'ArrowLeft') keys.ArrowLeft = false;
         if(e.key === 'ArrowRight') keys.ArrowRight = false;
+        if(e.key === ' ' || e.key === 'ArrowUp') isShooting = false;
     };
+    
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('keyup', handleKeyUp);
+
+    // --- FIX: Mobile Controls ---
+    const btnLeft = document.getElementById('btnLeft');
+    const btnRight = document.getElementById('btnRight');
+    
+    if (btnLeft) {
+        btnLeft.onmousedown = btnLeft.ontouchstart = (e) => { e.preventDefault(); keys.ArrowLeft = true; };
+        btnLeft.onmouseup = btnLeft.ontouchend = btnLeft.onmouseleave = (e) => { e.preventDefault(); keys.ArrowLeft = false; };
+    }
+    if (btnRight) {
+        btnRight.onmousedown = btnRight.ontouchstart = (e) => { e.preventDefault(); keys.ArrowRight = true; };
+        btnRight.onmouseup = btnRight.ontouchend = btnRight.onmouseleave = (e) => { e.preventDefault(); keys.ArrowRight = false; };
+    }
+    
+    // Ensure shoot button exists for tanks
+    if(!document.getElementById('btnShoot')) {
+        const btnShoot = document.createElement('button');
+        btnShoot.id = 'btnShoot';
+        btnShoot.className = 'game-control-btn';
+        btnShoot.style.background = 'rgba(236, 72, 153, 0.2)';
+        btnShoot.style.borderColor = 'var(--accent)';
+        btnShoot.innerText = '🔥';
+        document.getElementById('gameControls').appendChild(btnShoot);
+    }
+    
+    const btnShoot = document.getElementById('btnShoot');
+    if (btnShoot) {
+        btnShoot.onmousedown = btnShoot.ontouchstart = handleShoot;
+        btnShoot.onmouseup = btnShoot.ontouchend = btnShoot.onmouseleave = (e) => { e.preventDefault(); isShooting = false; };
+    }
 
     function drawTank(x, y, color) {
         ctx.fillStyle = color;
         ctx.fillRect(x, y, tankSize, tankSize);
-        // Draw gun barrel based on who is playing
         ctx.fillStyle = 'white';
-        if (color === '#3b82f6') { // P1 aims up
+        if (color === '#3b82f6') { 
             ctx.fillRect(x + 8, y - 8, 4, 10);
-        } else { // P2 aims down
+        } else { 
             ctx.fillRect(x + 8, y + tankSize - 2, 4, 10);
         }
     }
@@ -895,7 +941,6 @@ function startCyberTanks(gameId, isPlayer1) {
             } else {
                 await updateDoc(doc(db, "games", gameId), { p2X: myX, p2Shooting: isShooting });
             }
-            isShooting = false; // reset trigger
         } catch(e) {}
     }, 100);
 
@@ -906,10 +951,11 @@ function startCyberTanks(gameId, isPlayer1) {
         
         if (isPlayer1) {
             friendX = data.p2X !== undefined ? data.p2X : friendX;
-            // Spawns P2's bullets at P2's location moving down
-            if(data.p2Shooting) bullets.push({ x: friendX + 8, y: friendY + tankSize + 2, dy: 6, isP1: false });
-            // Spawns P1's bullets at P1's location moving up
-            if(data.p1Shooting) bullets.push({ x: myX + 8, y: myY - 8, dy: -6, isP1: true });
+            // FIX: Only spawn bullet if state transitions from false -> true 
+            if(data.p2Shooting && !lastP2Shooting) {
+                bullets.push({ x: friendX + 8, y: friendY + tankSize + 2, dy: 6, isP1: false });
+            }
+            lastP2Shooting = !!data.p2Shooting;
         } else {
             friendX = data.p1X !== undefined ? data.p1X : friendX;
             bullets = data.bullets || [];
@@ -923,11 +969,9 @@ function startCyberTanks(gameId, isPlayer1) {
         if(isGameOver) return;
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-        // Move my tank (Horizontal sliding only)
         if(keys.ArrowLeft && myX > 0) myX -= 4;
         if(keys.ArrowRight && myX < canvas.width - tankSize) myX += 4;
 
-        // Draw static obstacles (Cover walls in the middle)
         ctx.fillStyle = '#555';
         ctx.fillRect(50, 190, 60, 20);
         ctx.fillRect(190, 190, 60, 20);
@@ -935,11 +979,12 @@ function startCyberTanks(gameId, isPlayer1) {
         drawTank(myX, myY, myColor);
         drawTank(friendX, friendY, friendColor);
 
-        // Bullets & Collisions (Host calculates everything, Client just watches)
         ctx.fillStyle = '#f59e0b';
         for(let i = bullets.length - 1; i >= 0; i--) {
             let b = bullets[i];
-            if(isPlayer1) b.y += b.dy; 
+            
+            // FIX: Move bullets locally for P2 as well so they don't stutter!
+            b.y += b.dy; 
             ctx.fillRect(b.x, b.y, 4, 8);
 
             if(isPlayer1) {
@@ -965,7 +1010,6 @@ function startCyberTanks(gameId, isPlayer1) {
             }
         }
 
-        // Draw Scores
         ctx.fillStyle = 'white'; ctx.font = 'bold 16px Inter';
         ctx.fillText(`P1: ${p1Score}`, 10, 25);
         ctx.fillText(`P2: ${p2Score}`, canvas.width - 50, 25);
@@ -976,8 +1020,15 @@ function startCyberTanks(gameId, isPlayer1) {
     function gameOver() {
         isGameOver = true; isPlayingActionGame = false;
         clearInterval(syncInterval); unsub();
+        
         window.removeEventListener('keydown', handleKeyDown);
         window.removeEventListener('keyup', handleKeyUp);
+        
+        // Remove Mobile event listeners to prevent cross-game bleeding
+        if (btnLeft) { btnLeft.onmousedown = btnLeft.ontouchstart = null; btnLeft.onmouseup = btnLeft.ontouchend = btnLeft.onmouseleave = null; }
+        if (btnRight) { btnRight.onmousedown = btnRight.ontouchstart = null; btnRight.onmouseup = btnRight.ontouchend = btnRight.onmouseleave = null; }
+        if (btnShoot) { btnShoot.onmousedown = btnShoot.ontouchstart = null; btnShoot.onmouseup = btnShoot.ontouchend = btnShoot.onmouseleave = null; }
+
         if(currentAnimationId) cancelAnimationFrame(currentAnimationId);
 
         ctx.fillStyle = 'rgba(0,0,0,0.8)'; ctx.fillRect(0,0,canvas.width,canvas.height);
