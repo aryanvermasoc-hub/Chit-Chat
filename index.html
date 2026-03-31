@@ -230,32 +230,6 @@
       </div>
     </main>
   </div>
-<div id="videoCallArea" class="game-overlay-container" style="display: none; background: #000; z-index: 200;">
-    <div class="game-header" style="background: rgba(0,0,0,0.8);">
-        <span style="font-weight: bold; color: #fff;"><i class="fa-solid fa-video"></i> Secure Video Call</span>
-    </div>
-    <div style="flex:1; position: relative; display: flex; justify-content: center; align-items: center;">
-        <video id="remoteVideo" autoplay playsinline style="width: 100%; height: 100%; object-fit: cover;"></video>
-        <video id="localVideo" autoplay playsinline muted style="width: 120px; height: 160px; position: absolute; bottom: 20px; right: 20px; border-radius: 12px; border: 2px solid var(--primary); object-fit: cover; box-shadow: 0 5px 15px rgba(0,0,0,0.5);"></video>
-    </div>
-    <div style="padding: 20px; display: flex; justify-content: center; gap: 20px; background: rgba(0,0,0,0.8);">
-        
-    <button id="toggleMicBtn" class="primary-btn circle-btn" style="background: rgba(255,255,255,0.2); width: 50px; height: 50px;"><i class="fa-solid fa-microphone"></i></button>
-    <button id="toggleSpeakerBtn" class="primary-btn circle-btn" style="background: rgba(255,255,255,0.2); width: 50px; height: 50px;" title="Toggle Speaker"><i class="fa-solid fa-volume-high"></i></button>
-    <button id="toggleCamBtn" class="primary-btn circle-btn" style="background: rgba(255,255,255,0.2); width: 50px; height: 50px;"><i class="fa-solid fa-camera"></i></button>
-        <button id="endCallBtn" class="primary-btn circle-btn" style="background: #ef4444; width: 50px; height: 50px; box-shadow: 0 0 15px rgba(239,68,68,0.5);"><i class="fa-solid fa-phone-slash"></i></button>
-    </div>
-</div>
-<div id="incomingCallModal" class="modal-overlay" style="display: none; z-index: 250;">
-    <div class="modal-content" style="background: rgba(20,20,30,0.95); border: 2px solid var(--primary); text-align: center; max-width: 300px;">
-        <div style="font-size: 40px; color: var(--primary); margin-bottom: 15px; animation: dicePulse 1s infinite alternate;"><i class="fa-solid fa-phone-volume"></i></div>
-        <h3 style="margin-bottom: 10px;">Incoming Video Call</h3>
-        <p style="color: var(--text-muted); margin-bottom: 25px;">Friend is calling you...</p>
-        <div style="display: flex; justify-content: center; gap: 20px;">
-            <button id="answerCallBtn" class="primary-btn circle-btn" style="background: #10b981; width: 60px; height: 60px; box-shadow: 0 0 15px rgba(16,185,129,0.5);"><i class="fa-solid fa-phone"></i></button>
-            <button id="rejectCallBtn" class="primary-btn circle-btn" style="background: #ef4444; width: 60px; height: 60px; box-shadow: 0 0 15px rgba(239,68,68,0.5);"><i class="fa-solid fa-phone-slash"></i></button>
-        </div>
-    </div>
 </div>
   <div id="msgOptionsModal" class="modal-overlay" style="display: none;">
     <div class="modal-content" style="padding: 25px;"><div class="modal-header"><h3>Message Options</h3><button onclick="closeMsgOptions()" class="icon-btn"><i class="fa-solid fa-xmark"></i></button></div><div id="msgOptionsList" style="display: flex; flex-direction: column; gap: 12px; margin-top: 15px;"></div></div>
@@ -305,10 +279,7 @@
         <p id="profileHandle" class="text-muted">@user</p>
       </div>
 
-      <div id="profileCallActions" style="display: flex; gap: 10px; margin-top: 5px; margin-bottom: 20px; justify-content: center;">
-          <button id="startAudioCallBtn" onclick="document.getElementById('profileModal').style.display='none'" class="primary-btn glow-btn" style="background: rgba(16, 185, 129, 0.15); border: 1px solid #10b981; color: #10b981; padding: 10px; flex: 1;"><i class="fa-solid fa-phone"></i> Voice Call</button>
-          <button id="startVideoCallBtn" onclick="document.getElementById('profileModal').style.display='none'" class="primary-btn glow-btn" style="background: rgba(59, 130, 246, 0.15); border: 1px solid #3b82f6; color: #3b82f6; padding: 10px; flex: 1;"><i class="fa-solid fa-video"></i> Video Call</button>
-      </div>
+      
 
       <div class="bio-section"><p id="profileBioDisplay">Hey there! I am using Chit-Chat.</p><textarea id="profileBioEdit" style="display:none;"></textarea></div>
       <div style="color:var(--text-muted); font-size:12px; margin-top:10px;"><i class="fa-solid fa-calendar-days"></i> <span id="profileJoinDate">Joined: ...</span></div>
@@ -380,6 +351,6 @@
     </div>
   </div>
   <script type="module" src="script.js"></script>
-  <audio id="ringtoneAudio" loop src="ringtone.mp3" preload="auto"></audio>
+  
 </body>
 </html>
