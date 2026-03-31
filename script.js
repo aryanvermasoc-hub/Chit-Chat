@@ -98,24 +98,45 @@ authActionBtn.addEventListener("click", async () => {
           await emailjs.send("service_z5e6d5x", "template_fks6dsp", { to_name: fullName, to_email: realEmail, otp_code: generatedOTP });
           document.getElementById("otpModal").style.display = "flex"; authActionBtn.innerText = "Create Account"; 
       } else { 
-          let loginEmail = username;
-          // If they typed a username instead of an email, look up their real email in the database
+          let primaryEmail = username;
+          let fallbackEmail = null;
+
           if (!username.includes('@')) {
-              const q = query(collection(db, "users"), where("username", "==", username), limit(1));
-              const querySnapshot = await getDocs(q);
-              
-              if (!querySnapshot.empty) {
-                  const userData = querySnapshot.docs[0].data();
-                  // Use real email, fallback to old chitchat.app for your older test accounts
-                  loginEmail = userData.realEmail || `${username}@chitchat.app`;
-              } else {
-                  // Fallback so Firebase handles the "user not found" error normally
-                  loginEmail = `${username}@chitchat.app`; 
+              try {
+                  const q = query(collection(db, "users"), where("username", "==", username), limit(1));
+                  const querySnapshot = await getDocs(q);
+                  
+                  if (!querySnapshot.empty) {
+                      const userData = querySnapshot.docs[0].data();
+                      primaryEmail = userData.realEmail || `${username}@chitchat.app`;
+                      fallbackEmail = userData.realEmail ? `${username}@chitchat.app` : null; 
+                  } else {
+                      primaryEmail = `${username}@chitchat.app`; 
+                  }
+              } catch (dbError) {
+                  console.error("Firestore rules blocked read, falling back:", dbError);
+                  primaryEmail = `${username}@chitchat.app`;
               }
           }
-          await signInWithEmailAndPassword(auth, loginEmail, password); 
+
+          try {
+              // Attempt 1: Try the most likely email
+              await signInWithEmailAndPassword(auth, primaryEmail, password); 
+          } catch (err) {
+              // Attempt 2 (Auto-Fix): If Auth and Firestore are out of sync, try the other email automatically!
+              if (fallbackEmail && (err.code === 'auth/invalid-login-credentials' || err.code === 'auth/invalid-credential')) {
+                  console.log("Primary email failed, trying fallback due to migration desync...");
+                  await signInWithEmailAndPassword(auth, fallbackEmail, password);
+              } else {
+                  throw err; // Wrong password or actual error
+              }
+          }
       }
-  } catch (error) { alert(error.message || "Failed to process request."); authActionBtn.innerText = isSignupMode ? "Create Account" : "Enter Chit-Chat"; }
+  } catch (error) { 
+      console.error(error);
+      alert(error.message.replace("Firebase: ", "") || "Failed to process request."); 
+      authActionBtn.innerText = isSignupMode ? "Create Account" : "Enter Chit-Chat"; 
+  }
 });
 
 document.getElementById("verifyOtpBtn").addEventListener("click", async () => {
