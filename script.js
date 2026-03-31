@@ -1,5 +1,5 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.0.0/firebase-app.js";
-import { getFirestore, collection, addDoc, onSnapshot, doc, setDoc, query, orderBy, getDoc, getDocs, deleteDoc, updateDoc, arrayUnion, writeBatch, limit } from "https://www.gstatic.com/firebasejs/10.0.0/firebase-firestore.js";
+import { getFirestore, collection, addDoc, onSnapshot, doc, setDoc, query, orderBy, getDoc, getDocs, deleteDoc, updateDoc, arrayUnion, writeBatch, limit, where } from "https://www.gstatic.com/firebasejs/10.0.0/firebase-firestore.js";
 import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut, sendEmailVerification } from "https://www.gstatic.com/firebasejs/10.0.0/firebase-auth.js";
 
 const firebaseConfig = {
@@ -98,9 +98,23 @@ authActionBtn.addEventListener("click", async () => {
           await emailjs.send("service_z5e6d5x", "template_fks6dsp", { to_name: fullName, to_email: realEmail, otp_code: generatedOTP });
           document.getElementById("otpModal").style.display = "flex"; authActionBtn.innerText = "Create Account"; 
       } else { 
-          const loginEmail = username.includes('@') ? username : `${username}@chitchat.app`;
+          let loginEmail = username;
+          // If they typed a username instead of an email, look up their real email in the database
+          if (!username.includes('@')) {
+              const q = query(collection(db, "users"), where("username", "==", username), limit(1));
+              const querySnapshot = await getDocs(q);
+              
+              if (!querySnapshot.empty) {
+                  const userData = querySnapshot.docs[0].data();
+                  // Use real email, fallback to old chitchat.app for your older test accounts
+                  loginEmail = userData.realEmail || `${username}@chitchat.app`;
+              } else {
+                  // Fallback so Firebase handles the "user not found" error normally
+                  loginEmail = `${username}@chitchat.app`; 
+              }
+          }
           await signInWithEmailAndPassword(auth, loginEmail, password); 
-      } 
+      }
   } catch (error) { alert(error.message || "Failed to process request."); authActionBtn.innerText = isSignupMode ? "Create Account" : "Enter Chit-Chat"; }
 });
 
@@ -109,8 +123,9 @@ document.getElementById("verifyOtpBtn").addEventListener("click", async () => {
     if (enteredOtp !== generatedOTP) { alert("Invalid OTP!"); return; }
     verifyBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Creating...'; verifyBtn.disabled = true;
     try {
-        const accountEmail = `${pendingSignupData.username}@chitchat.app`;
-        const cred = await createUserWithEmailAndPassword(auth, accountEmail, pendingSignupData.password); 
+        // Use the actual email provided by the user for Firebase Auth
+        const accountEmail = pendingSignupData.realEmail;
+        const cred = await createUserWithEmailAndPassword(auth, accountEmail, pendingSignupData.password);
         await setDoc(doc(db, "users", cred.user.uid), { username: pendingSignupData.username, fullName: pendingSignupData.fullName, realEmail: pendingSignupData.realEmail, createdAt: Date.now(), isOnline: false, lastSeen: Date.now() });
         document.getElementById("otpModal").style.display = "none"; generatedOTP = null; pendingSignupData = null; document.getElementById("otpInput").value = "";
         verifyBtn.innerText = "Verify & Create Account"; verifyBtn.disabled = false; alert("Account verified! You can log in.");
