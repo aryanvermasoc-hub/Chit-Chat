@@ -508,7 +508,54 @@ let spGameType = ''; let spHighScore = 0;
 window.renderSinglePlayerAction = async (gameType) => { spGameType = gameType; let title = "Jet Fighter (Solo)"; if(gameType === 'carracing') title = "Car Racing (Solo)"; if(gameType === 'flappybird') title = "Flappy Bird (Solo)"; document.getElementById("activeGameTitle").innerText = title; gameUIContainer.innerHTML = `<h3>Loading High Score... <i class="fa-solid fa-spinner fa-spin"></i></h3>`; try { const userDoc = await getDoc(doc(db, "users", auth.currentUser.uid)); const data = userDoc.data(); spHighScore = (data && data.highScores && data.highScores[gameType]) ? data.highScores[gameType] : 0; } catch(e) { spHighScore = 0; } showSpActionMenu(); };
 window.showSpActionMenu = () => { isPlayingActionGame = false; gameUIContainer.innerHTML = `<div class="game-turn-indicator" style="margin-bottom: 5px;">Beat your High Score!</div><div style="font-size: 16px; color: var(--accent); margin-bottom: 15px; font-weight:bold;">High Score: ${spHighScore}</div><div class="action-game-container"><div style="position: relative; width: 100%; max-width: 300px;"><canvas id="actionCanvas" width="300" height="400" class="action-canvas" style="margin: 0;"></canvas><div id="startOverlay" style="position: absolute; top:0; left:0; width:100%; height:100%; display:flex; justify-content:center; align-items:center; background:rgba(0,0,0,0.6); border-radius:12px; z-index:10;"><button class="primary-btn glow-btn" id="btnStartGame" style="width:auto; padding:15px 40px; font-size: 16px;">Play Now</button></div></div><div class="game-btn-row" id="gameControls" style="display:none;"><button class="game-control-btn" id="btnLeft">⬅️</button><button class="game-control-btn" id="btnRight">➡️</button></div></div>`; const canvas = document.getElementById('actionCanvas'); if (canvas) { const ctx = canvas.getContext('2d'); if (spGameType === 'carracing') { ctx.fillStyle = '#8b5cf6'; ctx.fillRect(135, 330, 30, 50); } else if (spGameType === 'flappybird') { ctx.fillStyle = '#f59e0b'; ctx.beginPath(); ctx.arc(150, 200, 15, 0, Math.PI * 2); ctx.fill(); } else { ctx.fillStyle = '#10b981'; ctx.beginPath(); ctx.moveTo(150, 350); ctx.lineTo(165, 380); ctx.lineTo(135, 380); ctx.fill(); } } document.getElementById('btnStartGame').addEventListener('click', () => { isPlayingActionGame = true; document.getElementById('startOverlay').style.display = 'none'; document.getElementById('gameControls').style.display = 'flex'; if (spGameType === 'carracing') startCarRacing(null, true); else if (spGameType === 'flappybird') startFlappyBird(null, true); else startJetFighter(null, true); }); };
 window.handleSpActionGameOver = async (score) => { let isNewHighScore = false; if (score > spHighScore) { spHighScore = score; isNewHighScore = true; try { await setDoc(doc(db, "users", auth.currentUser.uid), { highScores: { [spGameType]: score } }, { merge: true }); } catch(e) {} } gameUIContainer.innerHTML = `<div class="game-turn-indicator" style="color:${isNewHighScore ? 'var(--primary)' : 'white'}">${isNewHighScore ? '🏆 NEW HIGH SCORE!' : 'GAME OVER'}</div><div style="font-size: 24px; text-align: center; margin: 20px 0;">Your Score: <b style="color:var(--primary)">${score}</b><br>High Score: <b style="color:var(--accent)">${spHighScore}</b></div><button class="primary-btn glow-btn" style="max-width:200px; margin-top:20px;" onclick="showSpActionMenu()">Play Again</button>`; };
-function renderActionGame(data, gameId, gameType) { const isPlayer1 = data.player1 === auth.currentUser.uid; const myScore = isPlayer1 ? data.p1Score : data.p2Score; const oppScore = isPlayer1 ? data.p2Score : data.p1Score; if (myScore !== undefined && myScore !== null && oppScore !== undefined && oppScore !== null) { isPlayingActionGame = false; let statusText = "It's a Tie!"; if (myScore > oppScore) statusText = "🎉 You Won!"; else if (myScore < oppScore) statusText = "😞 You Lost!"; gameUIContainer.innerHTML = `<div class="game-turn-indicator">${statusText}</div><div style="font-size: 24px; text-align: center; margin: 20px 0;">Your Score: <b style="color:var(--primary)">${myScore}</b><br>Opponent's Score: <b style="color:var(--accent)">${oppScore}</b></div><button class="primary-btn glow-btn" style="max-width:200px; margin-top:20px;" onclick="resetActionGame('${gameId}')">Play Again</button>`; return; } if (myScore !== undefined && myScore !== null) { isPlayingActionGame = false; gameUIContainer.innerHTML = `<div class="game-turn-indicator">Waiting for opponent to finish...</div><div style="font-size: 20px; text-align: center; margin: 20px 0;">Your Score: <b style="color:var(--primary)">${myScore}</b></div>`; return; } if (isPlayingActionGame) return; gameUIContainer.innerHTML = `<div class="game-turn-indicator" style="margin-bottom: 5px;">High Score Challenge!</div><div class="action-game-container"><div style="position: relative; width: 100%; max-width: 300px;"><canvas id="actionCanvas" width="300" height="400" class="action-canvas" style="margin: 0;"></canvas><div id="startOverlay" style="position: absolute; top:0; left:0; width:100%; height:100%; display:flex; justify-content:center; align-items:center; background:rgba(0,0,0,0.6); border-radius:12px; z-index:10; flex-direction:column; gap:10px;"><span style="color:white; font-size:14px;">Opponent is ready!</span><button class="primary-btn glow-btn" id="btnStartGame" style="width:auto; padding:15px 40px; font-size: 16px;">Play Now</button></div></div><div class="game-btn-row" id="gameControls" style="display:none;"><button class="game-control-btn" id="btnLeft">⬅️</button><button class="game-control-btn" id="btnRight">➡️</button></div></div>`; const canvas = document.getElementById('actionCanvas'); if (canvas) { const ctx = canvas.getContext('2d'); if (gameType === 'carracing') { ctx.fillStyle = '#8b5cf6'; ctx.fillRect(135, 330, 30, 50); } else { ctx.fillStyle = '#10b981'; ctx.beginPath(); ctx.moveTo(150, 350); ctx.lineTo(165, 380); ctx.lineTo(135, 380); ctx.fill(); } } document.getElementById('btnStartGame').addEventListener('click', () => { isPlayingActionGame = true; document.getElementById('startOverlay').style.display = 'none'; document.getElementById('gameControls').style.display = 'flex'; if (gameType === 'carracing') startCarRacing(gameId, isPlayer1); else startJetFighter(gameId, isPlayer1); }); }
+function renderActionGame(data, gameId, gameType) { 
+    const isPlayer1 = data.player1 === auth.currentUser.uid; 
+    const myScore = isPlayer1 ? data.p1Score : data.p2Score; 
+    const oppScore = isPlayer1 ? data.p2Score : data.p1Score; 
+    
+    if (myScore !== undefined && myScore !== null && oppScore !== undefined && oppScore !== null) { 
+        isPlayingActionGame = false; 
+        let statusText = "It's a Tie!"; 
+        if (myScore > oppScore) statusText = "🎉 You Won!"; 
+        else if (myScore < oppScore) statusText = "😞 You Lost!"; 
+        gameUIContainer.innerHTML = `<div class="game-turn-indicator">${statusText}</div><div style="font-size: 24px; text-align: center; margin: 20px 0;">Your Score: <b style="color:var(--primary)">${myScore}</b><br>Opponent's Score: <b style="color:var(--accent)">${oppScore}</b></div><button class="primary-btn glow-btn" style="max-width:200px; margin-top:20px;" onclick="resetActionGame('${gameId}')">Play Again</button>`; 
+        return; 
+    } 
+    
+    if (myScore !== undefined && myScore !== null) { 
+        isPlayingActionGame = false; 
+        gameUIContainer.innerHTML = `<div class="game-turn-indicator">Waiting for opponent to finish...</div><div style="font-size: 20px; text-align: center; margin: 20px 0;">Your Score: <b style="color:var(--primary)">${myScore}</b></div>`; 
+        return; 
+    } 
+    
+    if (isPlayingActionGame) return; 
+    
+    gameUIContainer.innerHTML = `<div class="game-turn-indicator" style="margin-bottom: 5px;">High Score Challenge!</div><div class="action-game-container"><div style="position: relative; width: 100%; max-width: 300px;"><canvas id="actionCanvas" width="300" height="400" class="action-canvas" style="margin: 0;"></canvas><div id="startOverlay" style="position: absolute; top:0; left:0; width:100%; height:100%; display:flex; justify-content:center; align-items:center; background:rgba(0,0,0,0.6); border-radius:12px; z-index:10; flex-direction:column; gap:10px;"><span style="color:white; font-size:14px;">Opponent is ready!</span><button class="primary-btn glow-btn" id="btnStartGame" style="width:auto; padding:15px 40px; font-size: 16px;">Play Now</button></div></div><div class="game-btn-row" id="gameControls" style="display:none;"><button class="game-control-btn" id="btnLeft">⬅️</button><button class="game-control-btn" id="btnRight">➡️</button></div></div>`; 
+    
+    const canvas = document.getElementById('actionCanvas'); 
+    if (canvas) { 
+        const ctx = canvas.getContext('2d'); 
+        if (gameType === 'carracing') { 
+            ctx.fillStyle = '#8b5cf6'; ctx.fillRect(135, 330, 30, 50); 
+        } else if (gameType === 'cybertanks') { 
+            // Draw a red square for the Cyber Tanks preview
+            ctx.fillStyle = '#ef4444'; ctx.fillRect(140, 350, 20, 20); 
+        } else { 
+            ctx.fillStyle = '#10b981'; ctx.beginPath(); ctx.moveTo(150, 350); ctx.lineTo(165, 380); ctx.lineTo(135, 380); ctx.fill(); 
+        } 
+    } 
+    
+    document.getElementById('btnStartGame').addEventListener('click', () => { 
+        isPlayingActionGame = true; 
+        document.getElementById('startOverlay').style.display = 'none'; 
+        document.getElementById('gameControls').style.display = 'flex'; 
+        
+        // --- THIS IS THE FIX ---
+        if (gameType === 'carracing') startCarRacing(gameId, isPlayer1); 
+        else if (gameType === 'cybertanks') startCyberTanks(gameId, isPlayer1); 
+        else startJetFighter(gameId, isPlayer1); 
+    }); 
+}
 window.resetActionGame = async (gameId) => { await updateDoc(doc(db, "games", gameId), { p1Score: null, p2Score: null }); };
 function startFlappyBird(gameId, isPlayer1) {
     const canvas = document.getElementById('actionCanvas');
