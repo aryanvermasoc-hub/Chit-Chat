@@ -154,8 +154,7 @@ document.getElementById("verifyOtpBtn").addEventListener("click", async () => {
     } catch (error) { alert(error.message); verifyBtn.innerText = "Verify & Create Account"; verifyBtn.disabled = false; }
 });
 
-document.getElementById("logoutBtn").addEventListener("click", async () => { if (confirm("Disconnect from Chit-Chat?")) { try { await updateDoc(doc(db, "users", auth.currentUser.uid), { isOnline: false, lastSeen: Date.now() }); } catch (e) {} if(myProfileUnsubscribe) myProfileUnsubscribe(); signOut(auth); } });
-
+document.getElementById("settingsLogoutBtn").addEventListener("click", async () => { if (confirm("Disconnect from Chit-Chat?")) { try { await updateDoc(doc(db, "users", auth.currentUser.uid), { isOnline: false, lastSeen: Date.now() }); } catch (e) {} if(myProfileUnsubscribe) myProfileUnsubscribe(); signOut(auth); } });
 onAuthStateChanged(auth, async (user) => {
   if (user) {
     authScreen.style.display = "none"; appScreen.style.display = "flex"; history.pushState({ page: "home" }, ""); 
@@ -1242,4 +1241,96 @@ window.addEventListener("popstate", (e) => {
     if (document.getElementById("activeGameArea") && document.getElementById("activeGameArea").style.display === "flex") { document.getElementById("closeGameBtn").click(); history.pushState(null, ""); return; }
     if (document.getElementById("exploreArea") && document.getElementById("exploreArea").style.display === "flex") { document.getElementById("closeExploreBtn").click(); history.pushState(null, ""); return; }
     if (window.innerWidth <= 992 && document.getElementById("activeChatState") && document.getElementById("activeChatState").style.display === "flex") { document.getElementById("backToUsersBtn").click(); history.pushState(null, ""); return; }
+});
+// =============================================================
+// SETTINGS & UI THEME LOGIC
+// =============================================================
+
+// 1. Theme Manager
+window.setTheme = (themeName) => {
+    document.body.className = ''; // Reset classes
+    if (themeName !== 'default') {
+        document.body.classList.add(themeName);
+    }
+    localStorage.setItem('chitchat_theme', themeName);
+};
+
+// Load saved theme on startup
+const savedTheme = localStorage.getItem('chitchat_theme');
+if (savedTheme) window.setTheme(savedTheme);
+
+// 2. Open Settings Modal & Pre-fill User Data
+document.getElementById("appSettingsBtn")?.addEventListener("click", () => {
+    if(myUserData) {
+        document.getElementById("settingsFullName").value = myUserData.fullName || "";
+        document.getElementById("settingsUsername").value = myUserData.username || "";
+        document.getElementById("settingsBio").value = myUserData.bio || "";
+    }
+    document.getElementById("appSettingsModal").style.display = "flex";
+});
+
+// 3. Save Profile Edits (Name, Username, Bio)
+document.getElementById("settingsSaveProfileBtn")?.addEventListener("click", async () => {
+    const newName = document.getElementById("settingsFullName").value.trim();
+    const newUsername = document.getElementById("settingsUsername").value.trim().toLowerCase();
+    const newBio = document.getElementById("settingsBio").value.trim();
+    
+    if (!newName || !newUsername) {
+        alert("Display Name and Username cannot be empty.");
+        return;
+    }
+    
+    const btn = document.getElementById("settingsSaveProfileBtn");
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Saving...';
+    try {
+        await updateDoc(doc(db, "users", auth.currentUser.uid), {
+            fullName: newName,
+            username: newUsername,
+            bio: newBio
+        });
+        showToast("Profile Updated", "Your details were saved successfully.");
+        document.getElementById("appSettingsModal").style.display = "none";
+    } catch(e) {
+        showToast("Error", "Failed to update profile.");
+    } finally {
+        btn.innerHTML = 'Save Profile';
+    }
+});
+
+// 4. Update Avatar directly from Settings
+const settingsPfpInput = document.getElementById("settingsPfpInput");
+document.getElementById("settingsChangePfpBtn")?.addEventListener("click", () => settingsPfpInput.click());
+
+settingsPfpInput?.addEventListener("change", async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const btn = document.getElementById("settingsChangePfpBtn");
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Uploading...';
+    btn.disabled = true;
+    
+    try {
+        const formData = new FormData(); 
+        formData.append("file", file); 
+        formData.append("upload_preset", UPLOAD_PRESET); 
+        const response = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`, { method: "POST", body: formData }); 
+        const data = await response.json(); 
+        await updateDoc(doc(db, "users", auth.currentUser.uid), { avatarUrl: data.secure_url }); 
+        showToast("Avatar Updated", "New profile picture set!");
+    } catch(err) {
+        showToast("Error", "Failed to upload avatar.");
+    } finally {
+        btn.innerHTML = '<i class="fa-solid fa-camera"></i> Update Avatar';
+        btn.disabled = false;
+        settingsPfpInput.value = "";
+    }
+});
+
+// Add appSettingsModal to the popstate closer array (Find line 462 and add it to the 'modals' array)
+// Note: It's easiest to just add this fallback listener here to close it on mobile back button:
+window.addEventListener("popstate", () => {
+    const sModal = document.getElementById("appSettingsModal");
+    if (sModal && sModal.style.display === "flex") {
+        sModal.style.display = "none";
+        history.pushState(null, "");
+    }
 });
