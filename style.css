@@ -381,3 +381,45 @@ body { background: var(--bg-base); color: var(--text-main); display: flex; justi
     0%, 100% { transform: translateY(0) scale(1.1); }
     50% { transform: translateY(-3px) scale(1.1); }
 }
+/* =========================================================
+   UI THEMES & SETTINGS
+   ========================================================= */
+body.theme-ocean {
+  --bg-base: #0f172a;
+  --primary: #0ea5e9;
+  --primary-glow: rgba(14, 165, 233, 0.3);
+  --accent: #14b8a6;
+  --msg-sent: linear-gradient(135deg, #0ea5e9, #3b82f6);
+}
+
+body.theme-forest {
+  --bg-base: #064e3b;
+  --primary: #10b981;
+  --primary-glow: rgba(16, 185, 129, 0.3);
+  --accent: #84cc16;
+  --msg-sent: linear-gradient(135deg, #10b981, #059669);
+}
+
+body.theme-sunset {
+  --bg-base: #450a0a;
+  --primary: #f97316;
+  --primary-glow: rgba(249, 115, 22, 0.3);
+  --accent: #ef4444;
+  --msg-sent: linear-gradient(135deg, #f97316, #ea580c);
+}
+
+.theme-btn {
+  border: 2px solid transparent;
+  border-radius: 20px;
+  padding: 8px 15px;
+  color: white;
+  font-weight: 600;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+}
+
+.theme-btn:hover {
+  transform: translateY(-2px) scale(1.05);
+}
