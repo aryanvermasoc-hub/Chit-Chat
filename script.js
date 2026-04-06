@@ -94,10 +94,24 @@ authActionBtn.addEventListener("click", async () => {
   authActionBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Processing...';
   try { 
       if (isSignupMode) { 
-          generatedOTP = Math.floor(100000 + Math.random() * 900000).toString(); pendingSignupData = { realEmail, password, username, fullName };
+          // 1. Check if the username already exists in Firestore
+          const usernameQuery = query(collection(db, "users"), where("username", "==", username), limit(1));
+          const usernameSnapshot = await getDocs(usernameQuery);
+          
+          if (!usernameSnapshot.empty) {
+              // 2. If it exists, alert the user and stop the signup process
+              alert("This username is already taken. Please choose a different one.");
+              authActionBtn.innerText = "Create Account";
+              return; 
+          }
+
+          // 3. If unique, proceed with generating OTP and sending the email
+          generatedOTP = Math.floor(100000 + Math.random() * 900000).toString(); 
+          pendingSignupData = { realEmail, password, username, fullName };
           await emailjs.send("service_z5e6d5x", "template_fks6dsp", { to_name: fullName, to_email: realEmail, otp_code: generatedOTP });
-          document.getElementById("otpModal").style.display = "flex"; authActionBtn.innerText = "Create Account"; 
-      } else { 
+          document.getElementById("otpModal").style.display = "flex"; 
+          authActionBtn.innerText = "Create Account"; 
+      } else {
           let primaryEmail = username;
           let fallbackEmail = null;
 
