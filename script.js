@@ -382,9 +382,26 @@ function openChat(targetUid, targetName, targetAvatar, isTargetOnline, targetLas
   document.getElementById("chatBox").innerHTML = ""; if(replyingToMsg) document.getElementById("cancelReplyBtn").click(); if (document.getElementById("privateDoodleArea")) document.getElementById("privateDoodleArea").style.display = "none";
   const overlay = document.getElementById("chatStateOverlay"); if(overlay) { overlay.style.display = "none"; overlay.innerHTML = ""; }
 document.getElementById("chatBox").style.backgroundImage = "none"; // Temporarily clear until the listener fetches the shared wallpaper
-  document.getElementById("chatTargetName").innerText = targetName; document.getElementById("chatTargetAvatar").src = targetAvatar; 
-  const targetStatus = document.getElementById("chatTargetStatus"); if (isTargetOnline) { targetStatus.classList.add('online'); targetStatus.innerText = "Online"; } else { targetStatus.classList.remove('online'); targetStatus.innerText = `Last seen: ${timeAgo(targetLastSeen)}`; }
-  emptyChatState.style.display = "none"; activeChatState.style.display = "flex"; if(window.innerWidth <= 992) { sidebar.classList.add("hidden"); history.pushState({ page: "chat" }, ""); }
+  document.getElementById("chatTargetName").innerText = targetName; 
+  document.getElementById("chatTargetAvatar").src = targetAvatar; 
+  
+  const targetUser = allUsers.find(u => u.id === targetUid);
+  const targetStatus = document.getElementById("chatTargetStatus");
+  
+  // Check privacy before showing text status
+  if (targetUser && canSeePrivacy(targetUser, 'privacyStatus')) {
+      if (isTargetOnline) { 
+          targetStatus.classList.add('online'); 
+          targetStatus.innerText = "Online"; 
+      } else { 
+          targetStatus.classList.remove('online'); 
+          targetStatus.innerText = `Last seen: ${timeAgo(targetLastSeen)}`; 
+      }
+  } else {
+      targetStatus.classList.remove('online');
+      targetStatus.innerText = "Offline"; 
+  }
+emptyChatState.style.display = "none"; activeChatState.style.display = "flex"; if(window.innerWidth <= 992) { sidebar.classList.add("hidden"); history.pushState({ page: "chat" }, ""); }
   loadMessages(); listenToTyping(); listenToChatStatus(targetName); 
 }
 
@@ -469,7 +486,30 @@ document.getElementById("cancelReplyBtn").addEventListener("click", () => { repl
 window.sendChatRequest = async () => { if (!currentChatId || !targetUserUid) return; try { await setDoc(doc(db, "chats", currentChatId), { status: 'pending', initiator: auth.currentUser.uid, createdAt: Date.now() }); await setDoc(doc(db, "users", targetUserUid), { chatMeta: { [auth.currentUser.uid]: { time: Date.now(), text: "👋 Connection Request", unread: true } } }, { merge: true }); showToast("Request Sent", "Waiting for approval."); } catch (error) { showToast("Error", "Failed to send request."); } };
 window.acceptChatRequest = async () => { if (!currentChatId) return; try { await updateDoc(doc(db, "chats", currentChatId), { status: 'accepted' }); showToast("Connected", "You can now chat!"); } catch (error) { showToast("Error", "Failed to accept request."); } };
 window.declineChatRequest = async () => { if (!currentChatId) return; try { await deleteDoc(doc(db, "chats", currentChatId)); showToast("Declined", "Request removed."); if (window.innerWidth <= 992) document.getElementById("backToUsersBtn").click(); } catch (error) { showToast("Error", "Failed to decline request."); } };
-function listenToTyping() { if (chatMetaUnsubscribe) chatMetaUnsubscribe(); if (isCurrentChatGroup) return; chatMetaUnsubscribe = onSnapshot(doc(db, "chats", currentChatId), (docSnap) => { if (docSnap.exists() && docSnap.data()[`typing_${targetUserUid}`]) { document.getElementById("chatTargetStatus").innerText = "typing..."; } else { const targetUser = allUsers.find(u => u.id === targetUserUid); if (targetUser && targetUser.isOnline) { document.getElementById("chatTargetStatus").innerText = "Online"; } else if (targetUser) { document.getElementById("chatTargetStatus").innerText = `Last seen: ${timeAgo(targetUser.lastSeen)}`; } } }); }
+function listenToTyping() { 
+    if (chatMetaUnsubscribe) chatMetaUnsubscribe(); 
+    if (isCurrentChatGroup) return; 
+    
+    chatMetaUnsubscribe = onSnapshot(doc(db, "chats", currentChatId), (docSnap) => { 
+        const targetUser = allUsers.find(u => u.id === targetUserUid);
+        const statusEl = document.getElementById("chatTargetStatus");
+        
+        // Only show status/typing if privacy allows it
+        if (targetUser && canSeePrivacy(targetUser, 'privacyStatus')) {
+            if (docSnap.exists() && docSnap.data()[`typing_${targetUserUid}`]) { 
+                statusEl.innerText = "typing..."; 
+            } else { 
+                if (targetUser.isOnline) { 
+                    statusEl.innerText = "Online"; 
+                } else { 
+                    statusEl.innerText = `Last seen: ${timeAgo(targetUser.lastSeen)}`; 
+                } 
+            } 
+        } else {
+            statusEl.innerText = "Offline";
+        }
+    }); 
+}
 msgInput.addEventListener("input", async () => { if(!currentChatId || isCurrentChatGroup) return; await setDoc(doc(db, "chats", currentChatId), { [`typing_${auth.currentUser.uid}`]: true }, { merge: true }); clearTimeout(typingTimeout); typingTimeout = setTimeout(async () => { await setDoc(doc(db, "chats", currentChatId), { [`typing_${auth.currentUser.uid}`]: false }, { merge: true }); }, 1500); });
 
 async function sendMessage() {
