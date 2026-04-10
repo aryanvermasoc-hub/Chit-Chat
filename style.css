@@ -423,3 +423,141 @@ body.theme-sunset {
 .theme-btn:hover {
   transform: translateY(-2px) scale(1.05);
 }
+/* =========================================================
+   COMPLETE THEME OVERRIDES (White & Black)
+   ========================================================= */
+
+/* ---------------------------------------------------------
+   1. LIGHT (WHITE) THEME
+   --------------------------------------------------------- */
+body.theme-light {
+  --bg-base: #f0f4f8;
+  --glass-bg: rgba(255, 255, 255, 0.95);
+  --glass-border: rgba(0, 0, 0, 0.1);
+  --primary: #6366f1;
+  --primary-glow: rgba(99, 102, 241, 0.2);
+  --accent: #f43f5e;
+  --text-main: #0f172a;
+  --text-muted: #64748b;
+  --msg-sent: linear-gradient(135deg, #6366f1, #4f46e5);
+  --msg-received: #f1f5f9; 
+}
+
+/* Base Layout & Modals */
+body.theme-light .ambient-bg { background: #e2e8f0; display: block; }
+body.theme-light .app-layout, 
+body.theme-light .sidebar, 
+body.theme-light .glass-card, 
+body.theme-light .modal-content {
+    background: var(--glass-bg) !important;
+    border-color: var(--glass-border) !important;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.05) !important;
+}
+body.theme-light .chat-area { background: rgba(255, 255, 255, 0.6) !important; }
+
+/* 🚨 AGGRESSIVE FIX: Inputs, Bio, & Forms (Overrides HTML inline styles) 🚨 */
+body.theme-light input, 
+body.theme-light textarea,
+body.theme-light #settingsBio,
+body.theme-light #profileBioEdit,
+body.theme-light .input-group,
+body.theme-light .search-container input,
+body.theme-light .input-pill {
+    background: #ffffff !important;
+    color: var(--text-main) !important;
+    border: 1px solid var(--glass-border) !important;
+}
+body.theme-light .input-group i, body.theme-light .search-container i { color: var(--text-muted) !important; }
+body.theme-light input::placeholder, body.theme-light textarea::placeholder { color: #94a3b8 !important; }
+
+/* 🚨 AGGRESSIVE FIX: "Update Avatar" & Secondary Buttons 🚨 */
+body.theme-light #settingsChangePfpBtn,
+body.theme-light #editAvatarBtn,
+body.theme-light .btn-decline {
+    background: #f1f5f9 !important;
+    color: var(--text-main) !important;
+    border: 1px solid var(--glass-border) !important;
+}
+body.theme-light #settingsChangePfpBtn i { color: var(--text-main) !important; }
+
+/* 🚨 AGGRESSIVE FIX: Toasts (Notifications) 🚨 */
+body.theme-light .toast {
+    background: #ffffff !important;
+    border: 1px solid var(--glass-border) !important;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.1) !important;
+}
+body.theme-light .toast-content span { color: var(--text-main) !important; }
+
+/* Cards & Game Elements */
+body.theme-light .game-card, 
+body.theme-light .news-feed-card, 
+body.theme-light .meme-card, 
+body.theme-light .lb-rank-card, 
+body.theme-light .explore-tab,
+body.theme-light .challenge-bubble {
+    background: #ffffff !important;
+    border: 1px solid var(--glass-border) !important;
+    color: var(--text-main) !important;
+}
+body.theme-light .explore-tab:hover { background: #f1f5f9 !important; }
+body.theme-light .explore-tab.active { background: rgba(99, 102, 241, 0.1) !important; color: var(--primary) !important; }
+body.theme-light .challenge-bubble h4, body.theme-light .meme-card h4 { color: var(--text-main) !important; }
+
+/* Preserve White Text ONLY on Primary Buttons & Sent Messages */
+body.theme-light .primary-btn:not(#settingsChangePfpBtn):not(#removeWallpaperBtn), 
+body.theme-light .btn-accept, 
+body.theme-light .message-wrapper.sent .msg-bubble,
+body.theme-light .message-wrapper.sent .msg-bubble span {
+    color: #ffffff !important;
+}
+
+
+/* ---------------------------------------------------------
+   2. BLACK (OLED) THEME
+   --------------------------------------------------------- */
+body.theme-black {
+  --bg-base: #000000;
+  --glass-bg: #000000;
+  --glass-border: rgba(255, 255, 255, 0.15);
+  --primary: #ffffff;
+  --primary-glow: rgba(255, 255, 255, 0.1);
+  --accent: #a3a3a3;
+  --text-main: #ffffff;
+  --text-muted: #737373;
+  --msg-sent: #262626;
+  --msg-received: #121212;
+}
+
+/* True Black Fundamentals */
+body.theme-black .ambient-bg { display: none; }
+body.theme-black .app-layout, 
+body.theme-black .sidebar, 
+body.theme-black .chat-area, 
+body.theme-black .modal-content, 
+body.theme-black .glass-card,
+body.theme-black .explore-container,
+body.theme-black .game-overlay-container { 
+    background: #000000 !important; 
+    box-shadow: none !important; 
+    border-color: var(--glass-border) !important;
+}
+
+/* Invert Buttons for Visibility */
+body.theme-black .primary-btn, 
+body.theme-black #chatToggleBtn, 
+body.theme-black .btn-accept {
+    background: #ffffff !important;
+    color: #000000 !important;
+    font-weight: bold !important;
+}
+body.theme-black .primary-btn i { color: #000000 !important; }
+
+/* Darken Cards & Inputs */
+body.theme-black .game-card, 
+body.theme-black .input-group, 
+body.theme-black input, 
+body.theme-black textarea,
+body.theme-black #settingsBio { 
+    background: #0a0a0a !important; 
+    border-color: #222 !important; 
+}
