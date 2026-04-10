@@ -316,7 +316,9 @@
               <button class="theme-btn" onclick="setTheme('theme-ocean')" style="background: #0ea5e9;">Ocean</button>
               <button class="theme-btn" onclick="setTheme('theme-forest')" style="background: #10b981;">Forest</button>
               <button class="theme-btn" onclick="setTheme('theme-sunset')" style="background: #f97316;">Sunset</button>
-          </div>
+              <button class="theme-btn" onclick="setTheme('theme-light')" style="background: #f8fafc; color: #0f172a; border: 1px solid #cbd5e1;">White</button>
+              <button class="theme-btn" onclick="setTheme('theme-black')" style="background: #000000; border: 1px solid #333;">Black</button>
+            </div>
       </div>
 
       <div style="text-align: left; margin-bottom: 25px;">
@@ -324,8 +326,27 @@
           <div class="input-group" style="margin-bottom: 10px;"><i class="fa-solid fa-font"></i><input type="text" id="settingsFullName" placeholder="Display Name"></div>
           <div class="input-group" style="margin-bottom: 10px;"><i class="fa-solid fa-at"></i><input type="text" id="settingsUsername" placeholder="Username"></div>
           <textarea id="settingsBio" style="width: 100%; height: 60px; background: rgba(0,0,0,0.2); color: white; border: 1px solid var(--glass-border); border-radius: 12px; padding: 12px; font-size: 13px; outline: none; resize: none; margin-bottom: 10px; font-family: 'Inter', sans-serif;" placeholder="Your Bio..."></textarea>
+
+<div style="display: flex; gap: 10px; margin-bottom: 15px;">
+    <div style="flex: 1;">
+        <label style="font-size: 11px; color: var(--text-muted); margin-bottom: 5px; display: block;">Active Status</label>
+        <select id="settingsStatusPrivacy" class="difficulty-select" style="width: 100%; margin-bottom: 0;">
+            <option value="everyone">Everyone</option>
+            <option value="friends">Friends Only</option>
+            <option value="none">Nobody</option>
+        </select>
+    </div>
+    <div style="flex: 1;">
+        <label style="font-size: 11px; color: var(--text-muted); margin-bottom: 5px; display: block;">Profile Picture</label>
+        <select id="settingsPfpPrivacy" class="difficulty-select" style="width: 100%; margin-bottom: 0;">
+            <option value="everyone">Everyone</option>
+            <option value="friends">Friends Only</option>
+            <option value="none">Nobody</option>
+        </select>
+    </div>
+</div>
           
-          <div style="display: flex; gap: 10px;">
+<div style="display: flex; gap: 10px;">
               <button id="settingsChangePfpBtn" class="primary-btn" style="flex: 1; background: rgba(255,255,255,0.1);"><i class="fa-solid fa-camera"></i> Update Avatar</button>
               <button id="settingsSaveProfileBtn" class="primary-btn glow-btn" style="flex: 1;">Save Profile</button>
           </div>
@@ -342,7 +363,8 @@
       <button onclick="document.getElementById('groupSettingsModal').style.display='none'" class="icon-btn close-modal-corner"><i class="fa-solid fa-xmark"></i></button>
       <div class="profile-header"><div style="position: relative; display: inline-block;"><img id="groupSettingsAvatar" src="" class="profile-avatar-large"><button onclick="triggerGroupAvatarUpload()" style="position:absolute; bottom:10px; right:0; background:var(--primary); color:white; border-radius:50%; width:35px; height:35px; border:none; cursor:pointer;"><i class="fa-solid fa-camera"></i></button></div><h2 id="groupSettingsName">Group Name</h2><p class="text-muted"><span id="groupMemberCount">0</span> Members</p></div>
       <div id="groupMembersList" style="margin-top: 15px; max-height: 150px; overflow-y: auto; text-align: left; background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px;"></div>
-      <div class="profile-actions"><button onclick="triggerAddGroupMember()" class="primary-btn" style="background: #3b82f6;"><i class="fa-solid fa-user-plus"></i> Add New Member</button><button id="deleteGroupBtn" class="primary-btn" style="background: #ef4444; display: none; margin-top: 10px;"><i class="fa-solid fa-trash"></i> Delete Group</button></div>
+<div id="groupPendingRequests" style="margin-top: 15px; display: none; max-height: 150px; overflow-y: auto; text-align: left; background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px;"></div>
+      <div class="profile-actions"><button id="addGroupMemberBtn" onclick="triggerAddGroupMember()" class="primary-btn" style="background: #3b82f6;"><i class="fa-solid fa-user-plus"></i> Add New Member</button><button id="deleteGroupBtn" class="primary-btn" style="background: #ef4444; display: none; margin-top: 10px;"><i class="fa-solid fa-trash"></i> Delete Group</button></div>
     </div>
   </div>
 
