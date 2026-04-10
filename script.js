@@ -1,5 +1,5 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.0.0/firebase-app.js";
-import { getFirestore, collection, addDoc, onSnapshot, doc, setDoc, query, orderBy, getDoc, getDocs, deleteDoc, updateDoc, arrayUnion, writeBatch, limit, where } from "https://www.gstatic.com/firebasejs/10.0.0/firebase-firestore.js";
+import { getFirestore, collection, addDoc, onSnapshot, doc, setDoc, query, orderBy, getDoc, getDocs, deleteDoc, updateDoc, arrayUnion, arrayRemove, writeBatch, limit, where } from "https://www.gstatic.com/firebasejs/10.0.0/firebase-firestore.js";
 import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut, sendEmailVerification } from "https://www.gstatic.com/firebasejs/10.0.0/firebase-auth.js";
 
 const firebaseConfig = {
@@ -58,13 +58,44 @@ function switchSidebarView(view) {
     else if (view === 'feed') { newsFeedContainer.style.display = "flex"; chatToggleBtn.innerHTML = '<i class="fa-solid fa-fire"></i> Feed (Active)'; chatToggleBtn.style.color = "var(--accent)"; homeGamesBtn.style.color = "var(--text-muted)"; if(openUsersListBtn) openUsersListBtn.style.color = "var(--text-muted)"; }
 }
 switchSidebarView('games');
-chatToggleBtn.addEventListener("click", () => { if (chatListContainer.style.display === "flex") switchSidebarView('feed'); else switchSidebarView('chats'); });
+chatToggleBtn.addEventListener("click", () => { if (newsFeedContainer.style.display === "flex") switchSidebarView('chats'); else switchSidebarView('feed'); });
 homeGamesBtn.addEventListener("click", () => { switchSidebarView('games'); });
 if(openUsersListBtn) openUsersListBtn.addEventListener("click", () => { switchSidebarView('chats'); openUsersListBtn.style.color = "var(--primary)"; });
 
 const encryptMessage = (text, secretKey) => { if (!text) return text; return CryptoJS.AES.encrypt(text, secretKey).toString(); };
 const decryptMessage = (cipherText, secretKey) => { if (!cipherText) return cipherText; try { const bytes = CryptoJS.AES.decrypt(cipherText, secretKey); return bytes.toString(CryptoJS.enc.Utf8); } catch (e) { return "[Encrypted Message]"; } };
-const generateAvatar = (userObj, fallbackName) => { if (userObj && userObj.avatarUrl) return userObj.avatarUrl; const name = (userObj && (userObj.fullName || userObj.username)) || fallbackName || "User"; return `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=random&color=fff&rounded=true&bold=true`; };
+// Mentions Formatter Engine
+const formatMentions = (text) => {
+    if (!text) return text;
+    const myUsername = myUserData ? myUserData.username.toLowerCase() : "";
+    return text.replace(/@([a-zA-Z0-9_]+)/g, (match, username) => {
+        // If they mentioned ME, highlight it green. If someone else, use primary color.
+        const isMe = username.toLowerCase() === myUsername;
+        const style = isMe 
+            ? "color: #10b981; font-weight: bold; background: rgba(16, 185, 129, 0.1); padding: 0 4px; border-radius: 4px;" 
+            : "color: var(--primary); font-weight: bold;";
+        return `<span style="${style}">${match}</span>`;
+    });
+};
+// Privacy Helper: Checks if user is allowed to see data
+const canSeePrivacy = (targetUser, privacyType) => {
+    const setting = targetUser[privacyType] || 'everyone';
+    if (setting === 'everyone' || targetUser.id === auth.currentUser.uid) return true;
+    if (setting === 'none') return false;
+    if (setting === 'friends') return !!(myUserData?.chatMeta?.[targetUser.id]);
+    return true;
+};
+
+const generateAvatar = (userObj, fallbackName) => { 
+    const name = (userObj && (userObj.fullName || userObj.username)) || fallbackName || "User";
+    const defaultAvatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=random&color=fff&rounded=true&bold=true`;
+    
+    if (userObj && userObj.avatarUrl) {
+        // Only return real avatar if privacy check passes
+        if (canSeePrivacy(userObj, 'privacyPfp')) return userObj.avatarUrl;
+    }
+    return defaultAvatar;
+};
 function timeAgo(ms) { if (!ms) return ""; const seconds = Math.floor((Date.now() - ms) / 1000); if (seconds < 60) return "Just now"; const minutes = Math.floor(seconds / 60); if (minutes < 60) return `${minutes} min ago`; const hours = Math.floor(minutes / 60); if (hours < 24) return `${hours} hr ago`; return `${Math.floor(hours / 24)} days ago`; }
 
 window.showToast = function(title, message, avatarUrl) {
@@ -168,7 +199,17 @@ document.getElementById("verifyOtpBtn").addEventListener("click", async () => {
     } catch (error) { alert(error.message); verifyBtn.innerText = "Verify & Create Account"; verifyBtn.disabled = false; }
 });
 
-document.getElementById("settingsLogoutBtn").addEventListener("click", async () => { if (confirm("Disconnect from Chit-Chat?")) { try { await updateDoc(doc(db, "users", auth.currentUser.uid), { isOnline: false, lastSeen: Date.now() }); } catch (e) {} if(myProfileUnsubscribe) myProfileUnsubscribe(); signOut(auth); } });
+document.getElementById("settingsLogoutBtn").addEventListener("click", async () => { 
+    if (confirm("Disconnect from Chit-Chat?")) { 
+        try { await updateDoc(doc(db, "users", auth.currentUser.uid), { isOnline: false, lastSeen: Date.now() }); } catch (e) {} 
+        if(myProfileUnsubscribe) myProfileUnsubscribe(); 
+        
+        // Hide the settings modal instantly before logging out
+        document.getElementById("appSettingsModal").style.display = "none"; 
+        
+        signOut(auth); 
+    } 
+});
 onAuthStateChanged(auth, async (user) => {
   if (user) {
     authScreen.style.display = "none"; appScreen.style.display = "flex"; history.pushState({ page: "home" }, ""); 
@@ -241,7 +282,10 @@ function renderSidebar() {
   sortedUsers.sort((a, b) => { let timeA = myUserData?.chatMeta?.[a.id]?.time || 0; let timeB = myUserData?.chatMeta?.[b.id]?.time || 0; return timeB - timeA; });
 
   sortedUsers.forEach((user) => {
-    const displayName = user.fullName || user.username; const avatarUrl = generateAvatar(user, displayName); const isOnline = user.isOnline ? "online" : "";
+    const displayName = user.fullName || user.username; 
+    const avatarUrl = generateAvatar(user, displayName); 
+    // Check if we are allowed to see their online status
+    const isOnline = (user.isOnline && canSeePrivacy(user, 'privacyStatus')) ? "online" : "";
     const meta = myUserData?.chatMeta?.[user.id]; const unreadStyle = meta?.unread ? "font-weight:700; color:var(--primary);" : "";
     let previewText = meta?.text ? meta.text : `@${user.username}`;
     if (previewText.startsWith("U2FsdGVkX1") || previewText.startsWith("U2Fz")) { const pChatId = auth.currentUser.uid < user.id ? `${auth.currentUser.uid}_${user.id}` : `${user.id}_${auth.currentUser.uid}`; previewText = decryptMessage(previewText, pChatId) || "🔒 Encrypted Message"; }
@@ -397,8 +441,9 @@ function loadMessages() {
         let groupSenderHtml = (isCurrentChatGroup && !isMe) ? `<div style="font-size:11px; color:var(--primary); font-weight:600; margin-bottom:4px;">${msg.senderName}</div>` : "";
         const encodedText = encodeURIComponent(decryptedText || (msg.imageUrl ? 'Image' : '')); const encodedName = encodeURIComponent(isMe ? 'You' : (msg.senderName || document.getElementById('chatTargetName').innerText));
         const ghostClass = msg.isGhost ? 'ghost-msg' : '';
-        contentHtml = `<div class="msg-bubble ${ghostClass}" onclick="openMessageModal('${msgId}', '${encodedText}', '${encodedName}', ${isMe}, 'chat')">${groupSenderHtml}${replyHtml}${imgHtml}<span style="word-wrap: break-word; white-space: pre-wrap; display: block; max-width: 100%;">${decryptedText}</span> ${msg.isEdited ? '<span style="font-size:10px; opacity:0.5; display:block; margin-top:5px;">(edited)</span>' : ''}</div>`;
-      }
+    const formattedText = formatMentions(decryptedText);
+contentHtml = `<div class="msg-bubble ${ghostClass}" onclick="openMessageModal('${msgId}', '${encodedText}', '${encodedName}', ${isMe}, 'chat')">${groupSenderHtml}${replyHtml}${imgHtml}<span style="word-wrap: break-word; white-space: pre-wrap; display: block; max-width: 100%;">${formattedText}</span> ${msg.isEdited ? '<span style="font-size:10px; opacity:0.5; display:block; margin-top:5px;">(edited)</span>' : ''}</div>`; 
+    }
       
       let avatarSrc = isCurrentChatGroup && !isMe ? generateAvatar(allUsers.find(u=>u.id===msg.sender), msg.senderName) : document.getElementById('chatTargetAvatar').src;
       let seenTickHtml = (isMe && msgId === lastMyMsgId && msg.seenAt) ? `<i class="fa-solid fa-check-double" style="color: #3b82f6; margin-left: 5px; font-size: 11px;"></i>` : '';
@@ -448,14 +493,118 @@ document.querySelector(".chat-header").addEventListener("click", (e) => {
     if (isCurrentChatGroup && currentChatId) {
         const group = allGroups.find(g => g.id === currentChatId); if(group) {
             document.getElementById("groupSettingsName").innerText = group.name; document.getElementById("groupMemberCount").innerText = group.members.length; document.getElementById("groupSettingsAvatar").src = group.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(group.name)}&background=8b5cf6&color=fff`;
-            const membersListDiv = document.getElementById("groupMembersList"); membersListDiv.innerHTML = "<h4 style='font-size:12px; color:var(--text-muted); margin-bottom:8px;'>Group Members:</h4>"; group.members.forEach(memberId => { const userObj = allUsers.find(u => u.id === memberId); const name = userObj ? (userObj.fullName || userObj.username) : "Unknown User"; const isMe = memberId === auth.currentUser.uid ? " (You)" : ""; membersListDiv.innerHTML += `<div style="font-size: 13px; padding: 4px 0; border-bottom: 1px solid rgba(255,255,255,0.05);">${name}${isMe}</div>`; });
-            const deleteBtn = document.getElementById("deleteGroupBtn");
-            if (group.createdBy === auth.currentUser.uid) { deleteBtn.style.display = "flex"; deleteBtn.onclick = async () => { if (confirm(`Are you sure you want to delete ${group.name}?`)) { deleteBtn.innerHTML = "<i class='fa-solid fa-spinner fa-spin'></i> Deleting..."; const msgsSnap = await getDocs(query(collection(db, "chats", currentChatId, "messages"))); const batch = writeBatch(db); msgsSnap.docs.forEach(doc => batch.delete(doc.ref)); await batch.commit(); await deleteDoc(doc(db, "groups", currentChatId)); document.getElementById("groupSettingsModal").style.display = "none"; document.getElementById("backToUsersBtn").click(); showToast("Group Deleted", "Group permanently wiped."); } }; } else { deleteBtn.style.display = "none"; }
+            const membersListDiv = document.getElementById("groupMembersList"); 
+membersListDiv.innerHTML = "<h4 style='font-size:12px; color:var(--text-muted); margin-bottom:8px;'>Group Members:</h4>"; 
+const isAdmin = group.createdBy === auth.currentUser.uid;
+
+group.members.forEach(memberId => { 
+    const userObj = allUsers.find(u => u.id === memberId); 
+    const name = userObj ? (userObj.fullName || userObj.username) : "Unknown User"; 
+    const isMe = memberId === auth.currentUser.uid ? " (You)" : ""; 
+    const adminBadge = memberId === group.createdBy ? " <i class='fa-solid fa-crown' style='color:#f59e0b; font-size:10px; margin-left:4px;' title='Admin'></i>" : "";
+    
+    let removeBtn = "";
+    if (isAdmin && memberId !== auth.currentUser.uid) {
+        removeBtn = `<button onclick="triggerRemoveMember('${group.id}', '${memberId}')" style="background:none; border:none; color:#ef4444; cursor:pointer; font-size:12px; float:right; padding: 2px 5px;"><i class="fa-solid fa-user-minus"></i> Remove</button>`;
+    }
+    
+    membersListDiv.innerHTML += `<div style="font-size: 13px; padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,0.05);">${name}${isMe}${adminBadge}${removeBtn}</div>`; 
+});
+           const deleteBtn = document.getElementById("deleteGroupBtn");
+            const addMemberBtn = document.getElementById("addGroupMemberBtn");
+            const pendingReqDiv = document.getElementById("groupPendingRequests");
+
+            if (addMemberBtn) { 
+                addMemberBtn.style.display = "flex"; 
+                addMemberBtn.innerHTML = isAdmin 
+                    ? '<i class="fa-solid fa-user-plus"></i> Add New Member' 
+                    : '<i class="fa-solid fa-user-plus"></i> Request to Add';
+            }
+
+            if (isAdmin) { 
+                deleteBtn.style.display = "flex"; 
+                if (group.pendingMembers && group.pendingMembers.length > 0) {
+                    pendingReqDiv.style.display = "block";
+                    pendingReqDiv.innerHTML = "<h4 style='font-size:12px; color:var(--primary); margin-bottom:8px;'>Pending Approvals:</h4>";
+                    group.pendingMembers.forEach(pendingId => {
+                        const pUser = allUsers.find(u => u.id === pendingId);
+                        const pName = pUser ? (pUser.fullName || pUser.username) : "Unknown User";
+                        pendingReqDiv.innerHTML += `
+                            <div style="font-size: 13px; padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,0.05); display: flex; justify-content: space-between; align-items: center;">
+                                <span>${pName}</span>
+                                <div>
+                                    <button onclick="approveMember('${group.id}', '${pendingId}')" style="background:#10b981; border:none; color:white; padding:4px 8px; border-radius:4px; font-size:11px; cursor:pointer; margin-right:5px;">Approve</button>
+                                    <button onclick="rejectMember('${group.id}', '${pendingId}')" style="background:#ef4444; border:none; color:white; padding:4px 8px; border-radius:4px; font-size:11px; cursor:pointer;">Reject</button>
+                                </div>
+                            </div>`;
+                    });
+                } else { pendingReqDiv.style.display = "none"; }
+
+                deleteBtn.onclick = async () => { 
+                    if (confirm(`Are you sure you want to delete ${group.name}?`)) { 
+                        deleteBtn.innerHTML = "<i class='fa-solid fa-spinner fa-spin'></i> Deleting..."; 
+                        const msgsSnap = await getDocs(query(collection(db, "chats", currentChatId, "messages"))); 
+                        const batch = writeBatch(db); 
+                        msgsSnap.docs.forEach(doc => batch.delete(doc.ref)); 
+                        await batch.commit(); 
+                        await deleteDoc(doc(db, "groups", currentChatId)); 
+                        document.getElementById("groupSettingsModal").style.display = "none"; 
+                        document.getElementById("backToUsersBtn").click(); 
+                        showToast("Group Deleted", "Group permanently wiped."); 
+                    } 
+                }; 
+            } else { 
+                deleteBtn.style.display = "none"; 
+                if (pendingReqDiv) pendingReqDiv.style.display = "none"; 
+            }
             document.getElementById("groupSettingsModal").style.display = "flex";
         }
     }
 });
-window.triggerAddGroupMember = async () => { const group = allGroups.find(g => g.id === currentChatId); if(!group) return; let promptText = "Type the number of the user to add:\n\n"; const selectableUsers = allUsers.filter(u => u.id !== auth.currentUser.uid && !group.members.includes(u.id)); if(selectableUsers.length === 0) { alert("All users are already in the group!"); return; } selectableUsers.forEach((u, index) => { promptText += `${index + 1}. ${u.fullName || u.username}\n`; }); const selection = prompt(promptText); if(selection) { const idx = parseInt(selection.trim()) - 1; if(selectableUsers[idx]) { await updateDoc(doc(db, "groups", currentChatId), { members: arrayUnion(selectableUsers[idx].id) }); showToast("Member Added", `${selectableUsers[idx].fullName || selectableUsers[idx].username} was added.`); document.getElementById("groupSettingsModal").style.display = "none"; } } };
+window.triggerAddGroupMember = async () => { 
+    const group = allGroups.find(g => g.id === currentChatId); 
+    if(!group) return; 
+    const isAdmin = group.createdBy === auth.currentUser.uid;
+    const pendingArr = group.pendingMembers || [];
+    let promptText = "Type the number of the user to add:\n\n"; 
+    const selectableUsers = allUsers.filter(u => u.id !== auth.currentUser.uid && !group.members.includes(u.id) && !pendingArr.includes(u.id)); 
+    
+    if(selectableUsers.length === 0) { 
+        alert("All users are already in the group or pending approval!"); 
+        return; 
+    } 
+    
+    selectableUsers.forEach((u, index) => { 
+        promptText += `${index + 1}. ${u.fullName || u.username}\n`; 
+    }); 
+    
+    const selection = prompt(promptText); 
+    if(selection) { 
+        const idx = parseInt(selection.trim()) - 1; 
+        if(selectableUsers[idx]) { 
+            const targetUid = selectableUsers[idx].id;
+            if (isAdmin) {
+                await updateDoc(doc(db, "groups", currentChatId), { members: arrayUnion(targetUid) }); 
+                showToast("Member Added", `${selectableUsers[idx].fullName || selectableUsers[idx].username} was added.`); 
+            } else {
+                await updateDoc(doc(db, "groups", currentChatId), { pendingMembers: arrayUnion(targetUid) }); 
+                showToast("Request Sent", "Admin must approve this request.");
+            }
+            document.getElementById("groupSettingsModal").style.display = "none"; 
+        } 
+    } 
+};
+window.triggerRemoveMember = async (groupId, memberId) => {
+    if(confirm("Kick this user from the group?")) {
+        try {
+            await updateDoc(doc(db, "groups", groupId), { members: arrayRemove(memberId) });
+            showToast("Member Removed", "User was kicked from the group.");
+            document.getElementById("groupSettingsModal").style.display = "none";
+        } catch(e) { 
+            alert("Failed to remove member. Are you sure you are the Admin?"); 
+        }
+    }
+};
 window.triggerGroupAvatarUpload = () => { const input = document.createElement("input"); input.type = "file"; input.accept = "image/*"; input.onchange = async (e) => { const file = e.target.files[0]; if(!file) return; try { showToast("Uploading...", "Updating group icon"); const formData = new FormData(); formData.append("file", file); formData.append("upload_preset", UPLOAD_PRESET); const response = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`, { method: "POST", body: formData }); const data = await response.json(); await updateDoc(doc(db, "groups", currentChatId), { avatarUrl: data.secure_url }); document.getElementById("groupSettingsAvatar").src = data.secure_url; document.getElementById("chatTargetAvatar").src = data.secure_url; showToast("Success", "Group icon updated!"); } catch(err) { alert("Failed to update group image."); } }; input.click(); };
 
 launchGameMenuBtn.addEventListener("click", () => { gameSelectionModal.style.display = "flex"; }); closeGameSelectBtn.addEventListener("click", () => { gameSelectionModal.style.display = "none"; });
@@ -1176,7 +1325,8 @@ function initGlobalLounge() {
             else {
                 let replyHtml = msg.replyToText ? `<div class="replied-msg-box" onclick="event.stopPropagation();"><b>${msg.replyToName}</b><div class="preview-text">${msg.replyToText}</div></div>` : "";
                 const encodedText = encodeURIComponent(msg.text || ""); const encodedName = encodeURIComponent(isMe ? 'You' : msg.senderName);
-                contentHtml = `<div class="msg-bubble" style="${isMe ? 'background: #10b981;' : ''}" onclick="openMessageModal('${msgId}', '${encodedText}', '${encodedName}', ${isMe}, 'global')">${nameTag}${replyHtml}<span style="word-wrap: break-word; white-space: pre-wrap; display: block; max-width: 100%;">${msg.text}</span>${msg.isEdited ? '<span style="font-size:10px; opacity:0.5; display:block; margin-top:5px;">(edited)</span>' : ''}</div>`;
+            const formattedText = formatMentions(msg.text);
+contentHtml = `<div class="msg-bubble" style="${isMe ? 'background: #10b981;' : ''}" onclick="openMessageModal('${msgId}', '${encodedText}', '${encodedName}', ${isMe}, 'global')">${nameTag}${replyHtml}<span style="word-wrap: break-word; white-space: pre-wrap; display: block; max-width: 100%;">${formattedText}</span>${msg.isEdited ? '<span style="font-size:10px; opacity:0.5; display:block; margin-top:5px;">(edited)</span>' : ''}</div>`; 
             }
             div.innerHTML = `${!isMe ? `<img src="${avatarUrl}" class="msg-avatar">` : ''}<div style="display:flex; flex-direction:column; max-width: 100%;">${contentHtml}<div class="msg-time">${timeStr}</div></div>${isMe ? `<img src="${document.getElementById('myAvatar').src}" class="msg-avatar">` : ''}`;
             globalChatBox.appendChild(div);
@@ -1279,10 +1429,12 @@ document.getElementById("appSettingsBtn")?.addEventListener("click", () => {
         document.getElementById("settingsFullName").value = myUserData.fullName || "";
         document.getElementById("settingsUsername").value = myUserData.username || "";
         document.getElementById("settingsBio").value = myUserData.bio || "";
+        // Pre-fill privacy choices
+        document.getElementById("settingsStatusPrivacy").value = myUserData.privacyStatus || "everyone";
+        document.getElementById("settingsPfpPrivacy").value = myUserData.privacyPfp || "everyone";
     }
     document.getElementById("appSettingsModal").style.display = "flex";
 });
-
 // 3. Save Profile Edits (Name, Username, Bio)
 document.getElementById("settingsSaveProfileBtn")?.addEventListener("click", async () => {
     const newName = document.getElementById("settingsFullName").value.trim();
@@ -1296,11 +1448,27 @@ document.getElementById("settingsSaveProfileBtn")?.addEventListener("click", asy
     
     const btn = document.getElementById("settingsSaveProfileBtn");
     btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Saving...';
+    
     try {
+        // --- NEW: Check for duplicate username ONLY if they changed it ---
+        if (newUsername !== myUserData.username) {
+            const usernameQuery = query(collection(db, "users"), where("username", "==", newUsername), limit(1));
+            const usernameSnapshot = await getDocs(usernameQuery);
+            
+            if (!usernameSnapshot.empty) {
+                alert("This username is already taken by another user.");
+                btn.innerHTML = 'Save Profile';
+                return; // Stop the save process
+            }
+        }
+        // ---------------------------------------------------------------
+
         await updateDoc(doc(db, "users", auth.currentUser.uid), {
             fullName: newName,
             username: newUsername,
-            bio: newBio
+            bio: newBio,
+            privacyStatus: document.getElementById("settingsStatusPrivacy").value,
+            privacyPfp: document.getElementById("settingsPfpPrivacy").value
         });
         showToast("Profile Updated", "Your details were saved successfully.");
         document.getElementById("appSettingsModal").style.display = "none";
@@ -1310,7 +1478,6 @@ document.getElementById("settingsSaveProfileBtn")?.addEventListener("click", asy
         btn.innerHTML = 'Save Profile';
     }
 });
-
 // 4. Update Avatar directly from Settings
 const settingsPfpInput = document.getElementById("settingsPfpInput");
 document.getElementById("settingsChangePfpBtn")?.addEventListener("click", () => settingsPfpInput.click());
@@ -1348,3 +1515,23 @@ window.addEventListener("popstate", () => {
         history.pushState(null, "");
     }
 });
+window.approveMember = async (groupId, memberId) => {
+    try {
+        await updateDoc(doc(db, "groups", groupId), {
+            members: arrayUnion(memberId),
+            pendingMembers: arrayRemove(memberId)
+        });
+        showToast("Approved", "User has been added to the group.");
+        document.getElementById("groupSettingsModal").style.display = "none";
+    } catch (e) { alert("Error approving member."); }
+};
+
+window.rejectMember = async (groupId, memberId) => {
+    try {
+        await updateDoc(doc(db, "groups", groupId), {
+            pendingMembers: arrayRemove(memberId)
+        });
+        showToast("Rejected", "Request deleted.");
+        document.getElementById("groupSettingsModal").style.display = "none";
+    } catch (e) { alert("Error rejecting member."); }
+};
