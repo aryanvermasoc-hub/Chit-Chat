@@ -1,6 +1,8 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.0.0/firebase-app.js";
 import { getFirestore, collection, addDoc, onSnapshot, doc, setDoc, query, orderBy, getDoc, getDocs, deleteDoc, updateDoc, arrayUnion, arrayRemove, writeBatch, limit, where } from "https://www.gstatic.com/firebasejs/10.0.0/firebase-firestore.js";
 import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut, sendEmailVerification } from "https://www.gstatic.com/firebasejs/10.0.0/firebase-auth.js";
+// NEW: Import Messaging
+import { getMessaging } from "https://www.gstatic.com/firebasejs/10.0.0/firebase-messaging.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyAc1esUcE7tXVRIXvknsUZCrRJR_PNhMzE", 
@@ -15,3 +17,5 @@ const firebaseConfig = {
 export const app = initializeApp(firebaseConfig); 
 export const db = getFirestore(app); 
 export const auth = getAuth(app);
+// NEW: Export Messaging
+export const messaging = getMessaging(app);
