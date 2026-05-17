@@ -1,5 +1,9 @@
-import { db, auth } from './firebase.js';
+
+
+
+import { db, auth, messaging } from './firebase.js';
 import { CryptoE2EE } from './crypto.js';
+import { getToken } from "https://www.gstatic.com/firebasejs/10.0.0/firebase-messaging.js";
 import { collection, addDoc, onSnapshot, doc, setDoc, query, orderBy, getDoc, getDocs, deleteDoc, updateDoc, arrayUnion, arrayRemove, writeBatch, limit, where } from "https://www.gstatic.com/firebasejs/10.0.0/firebase-firestore.js";
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.0.0/firebase-auth.js";
 
@@ -174,6 +178,16 @@ onAuthStateChanged(auth, async (user) => {
     authScreen.style.display = "none"; appScreen.style.display = "flex"; history.pushState({ page: "home" }, ""); 
     await updateDoc(doc(db, "users", user.uid), { isOnline: true }); showToast("Welcome Back!", "You are securely connected.");
     window.addEventListener("beforeunload", () => updateDoc(doc(db, "users", user.uid), { isOnline: false, lastSeen: Date.now() }));
+    
+    // --- NOTIFICATION POP-UP CODE ---
+    Notification.requestPermission().then(async (permission) => {
+        if (permission === 'granted') {
+            const token = await getToken(messaging, { vapidKey: 'BBJgewscsRgCdrhz8e5MOgL1H_OSO3ASN5m9w81HdhpUQdWQzzNdhQFpOXpxEHQn_tqklSTDETvtZHnmbYVfabI' });
+            if (token) await updateDoc(doc(db, "users", user.uid), { fcmToken: token });
+        }
+    }).catch(err => console.log("Notification error:", err));
+    // --------------------------------
+
     startMyProfileListener(user.uid); loadSidebarData(); loadNewsFeed(); 
   } else {
     authScreen.style.display = "flex"; appScreen.style.display = "none"; emptyChatState.style.display = "flex"; activeChatState.style.display = "none";
