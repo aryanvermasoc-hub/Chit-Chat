@@ -880,3 +880,38 @@ document.querySelectorAll('.modal-overlay').forEach(modal => {
     modal.addEventListener('click', (e) => { if (e.target === modal) { modal.style.display = 'none'; } });
 });
 document.getElementById('toastContainer').style.zIndex = "9999";
+// Variable to store the install event
+let deferredPrompt;
+
+// 1. Catch the hidden browser install event
+window.addEventListener('beforeinstallprompt', (e) => {
+  // Prevent Chrome from showing its default mini-infobar
+  e.preventDefault();
+  // Save the event so it can be triggered later
+  deferredPrompt = e;
+  
+  // Optional: Show your custom "Install App" button here
+  // document.getElementById('myCustomInstallButton').style.display = 'block';
+});
+
+// 2. Attach it to a button click (Assume you created a button with ID 'installAppBtn')
+const installAppBtn = document.getElementById('installAppBtn');
+if (installAppBtn) {
+    installAppBtn.addEventListener('click', async () => {
+      if (deferredPrompt) {
+        // Show the native install prompt
+        deferredPrompt.prompt();
+        // Wait for the user to respond to the prompt
+        const { outcome } = await deferredPrompt.userChoice;
+        if (outcome === 'accepted') {
+          console.log('User accepted the install prompt');
+        } else {
+          console.log('User dismissed the install prompt');
+        }
+        // We've used the prompt, and can't use it again, throw it away
+        deferredPrompt = null;
+      } else {
+        alert("Your browser doesn't support this or the app is already installed!");
+      }
+    });
+}
