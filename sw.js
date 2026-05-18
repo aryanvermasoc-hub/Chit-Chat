@@ -65,3 +65,10 @@ self.addEventListener("fetch", (event) => {
     fetch(event.request).catch(() => caches.match(event.request))
   );
 });
+// --- FORCE UPDATE LOGIC ---
+// This listens for a message from app.js to skip the waiting phase
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
+});
