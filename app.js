@@ -940,3 +940,66 @@ if (installAppBtn) {
     }
   });
 }
+// =========================================================
+// MANUAL PWA UPDATE LOGIC
+// =========================================================
+const updateAppBtn = document.getElementById('updateAppBtn');
+
+if (updateAppBtn) {
+  updateAppBtn.addEventListener('click', async () => {
+    if ('serviceWorker' in navigator) {
+      const originalText = updateAppBtn.innerHTML;
+      updateAppBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Checking GitHub...';
+      updateAppBtn.disabled = true;
+
+      try {
+        const reg = await navigator.serviceWorker.ready;
+        await reg.update(); // Force the browser to check the server for sw.js changes
+
+        if (reg.waiting) {
+          // An update was already downloaded and is waiting
+          reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+        } else {
+          // Listen for a new update downloading right now
+          let updateFound = false;
+          reg.addEventListener('updatefound', () => {
+            updateFound = true;
+            const newWorker = reg.installing;
+            newWorker.addEventListener('statechange', () => {
+              if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                newWorker.postMessage({ type: 'SKIP_WAITING' });
+              }
+            });
+          });
+
+          // If no update is found after 2 seconds, tell the user they are up to date
+          setTimeout(() => {
+            if (!updateFound && !reg.waiting) {
+              showToast("Up to Date", "You are running the latest version!");
+              updateAppBtn.innerHTML = originalText;
+              updateAppBtn.disabled = false;
+            }
+          }, 2000);
+        }
+      } catch (err) {
+        showToast("Update Failed", "Could not check for updates.");
+        updateAppBtn.innerHTML = originalText;
+        updateAppBtn.disabled = false;
+      }
+    } else {
+      showToast("Error", "Service workers not supported.");
+    }
+  });
+}
+
+// When the service worker successfully updates, refresh the page automatically
+let refreshing = false;
+navigator.serviceWorker.addEventListener('controllerchange', () => {
+  if (!refreshing) {
+    refreshing = true;
+    showToast("Update Complete!", "Reloading app...");
+    setTimeout(() => {
+      window.location.reload();
+    }, 1500);
+  }
+});
