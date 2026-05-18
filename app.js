@@ -898,38 +898,45 @@ document.querySelectorAll('.modal-overlay').forEach(modal => {
     modal.addEventListener('click', (e) => { if (e.target === modal) { modal.style.display = 'none'; } });
 });
 document.getElementById('toastContainer').style.zIndex = "9999";
-// Variable to store the install event
+// =========================================================
+// PWA INSTALLATION LOGIC
+// =========================================================
 let deferredPrompt;
+const installAppBtn = document.getElementById('installAppBtn');
 
-// 1. Catch the hidden browser install event
+// 1. Catch the browser's hidden install event
 window.addEventListener('beforeinstallprompt', (e) => {
   // Prevent Chrome from showing its default mini-infobar
   e.preventDefault();
   // Save the event so it can be triggered later
   deferredPrompt = e;
   
-  // Optional: Show your custom "Install App" button here
-  // document.getElementById('myCustomInstallButton').style.display = 'block';
+  // Unhide our custom "Install App" button in the sidebar
+  if (installAppBtn) {
+    installAppBtn.style.display = 'flex';
+  }
 });
 
-// 2. Attach it to a button click (Assume you created a button with ID 'installAppBtn')
-const installAppBtn = document.getElementById('installAppBtn');
+// 2. Handle the user clicking the install button
 if (installAppBtn) {
-    installAppBtn.addEventListener('click', async () => {
-      if (deferredPrompt) {
-        // Show the native install prompt
-        deferredPrompt.prompt();
-        // Wait for the user to respond to the prompt
-        const { outcome } = await deferredPrompt.userChoice;
-        if (outcome === 'accepted') {
-          console.log('User accepted the install prompt');
-        } else {
-          console.log('User dismissed the install prompt');
-        }
-        // We've used the prompt, and can't use it again, throw it away
-        deferredPrompt = null;
+  installAppBtn.addEventListener('click', async () => {
+    if (deferredPrompt) {
+      // Show the native browser install prompt
+      deferredPrompt.prompt();
+      
+      // Wait for the user to respond
+      const { outcome } = await deferredPrompt.userChoice;
+      if (outcome === 'accepted') {
+        console.log('User installed Chit-Chat');
+        // Hide the button since it's installed now
+        installAppBtn.style.display = 'none';
       } else {
-        alert("Your browser doesn't support this or the app is already installed!");
+        console.log('User dismissed the install prompt');
       }
-    });
+      // Clear the prompt variable, it can only be used once
+      deferredPrompt = null;
+    } else {
+      alert("Your browser doesn't support this or the app is already installed!");
+    }
+  });
 }
