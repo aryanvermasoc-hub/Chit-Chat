@@ -233,9 +233,22 @@ function startMyProfileListener(uid) {
     }
   });
 }
-
 function loadSidebarData() {
-  onSnapshot(collection(db, "users"), (snapshot) => { allUsers = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })); renderSidebar(); });
+  onSnapshot(collection(db, "users"), (snapshot) => { 
+      allUsers = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })); 
+      renderSidebar(); 
+      if (targetUserUid && !isCurrentChatGroup) {
+          const tUser = allUsers.find(u => u.id === targetUserUid);
+          if (tUser) document.getElementById("chatTargetAvatar").src = generateAvatar(tUser, tUser.fullName || tUser.username);
+      }
+      
+      // NEW: Instantly update all visible chat bubbles on the screen
+      document.querySelectorAll('.msg-avatar[data-uid]').forEach(img => {
+          const uid = img.getAttribute('data-uid');
+          const uUser = allUsers.find(x => x.id === uid);
+          if (uUser) img.src = generateAvatar(uUser, uUser.fullName || uUser.username);
+      });
+  });
   onSnapshot(collection(db, "groups"), (snapshot) => { allGroups = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })); renderSidebar(); });
 }
 
@@ -447,9 +460,13 @@ function loadMessages() {
         contentHtml = `<div class="msg-bubble ${ghostClass}" onclick="openMessageModal('${msgId}', '${encodedText}', '${encodedName}', ${isMe}, 'chat')">${groupSenderHtml}${replyHtml}${imgHtml}<span style="word-wrap: break-word; white-space: pre-wrap; display: block; max-width: 100%;">${formattedText}</span> ${msg.isEdited ? '<span style="font-size:10px; opacity:0.5; display:block; margin-top:5px;">(edited)</span>' : ''}</div>`; 
       }
       
-      let avatarSrc = isCurrentChatGroup && !isMe ? generateAvatar(allUsers.find(u=>u.id===msg.sender), msg.senderName) : document.getElementById('chatTargetAvatar').src;
+      let avatarSrc = document.getElementById('chatTargetAvatar').src;
+if (!isMe) {
+    const senderUser = allUsers.find(u => u.id === msg.sender);
+    if (senderUser) avatarSrc = generateAvatar(senderUser, msg.senderName);
+}
       let seenTickHtml = (isMe && msgId === lastMyMsgId && msg.seenAt) ? `<i class="fa-solid fa-check-double" style="color: #3b82f6; margin-left: 5px; font-size: 11px;"></i>` : '';
-      div.innerHTML = `${!isMe ? `<img src="${avatarSrc}" class="msg-avatar">` : ''}<div style="display:flex; flex-direction:column; max-width: 100%;">${contentHtml}<div class="msg-time">${timeStr}${seenTickHtml}</div></div>`;
+      div.innerHTML = `${!isMe ? `<img src="${avatarSrc}" class="msg-avatar" data-uid="${msg.sender}">` : ''}<div style="display:flex; flex-direction:column; max-width: 100%;">${contentHtml}<div class="msg-time">${timeStr}${seenTickHtml}</div></div>`;
       fragment.appendChild(div);
     }
     chatBox.appendChild(fragment); chatBox.scrollTop = chatBox.scrollHeight;
@@ -741,7 +758,8 @@ function initGlobalLounge() {
             const msg = docSnap.data(); const msgId = docSnap.id; const isMe = msg.sender === auth.currentUser.uid;
             if (msg.deletedFor && msg.deletedFor.includes(auth.currentUser.uid)) return;
             const timeStr = new Date(msg.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); const div = document.createElement("div"); div.className = `message-wrapper ${isMe ? 'sent' : 'received'}`;
-            const avatarUrl = msg.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(msg.senderName)}&background=10b981&color=fff`;
+            const senderUser = allUsers.find(u => u.id === msg.sender);
+const avatarUrl = senderUser ? generateAvatar(senderUser, msg.senderName) : (msg.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(msg.senderName)}&background=10b981&color=fff`);
             let nameTag = !isMe ? `<div style="font-size:11px; color: #10b981; font-weight:600; margin-bottom:4px;">${msg.senderName}</div>` : ""; let contentHtml = "";
             if (msg.isDeleted) { contentHtml = `<div class="msg-bubble msg-deleted"><i class="fa-solid fa-ban"></i> This message was deleted</div>`; } 
             else {
@@ -750,7 +768,7 @@ function initGlobalLounge() {
             const formattedText = formatMentions(msg.text);
 contentHtml = `<div class="msg-bubble" style="${isMe ? 'background: #10b981;' : ''}" onclick="openMessageModal('${msgId}', '${encodedText}', '${encodedName}', ${isMe}, 'global')">${nameTag}${replyHtml}<span style="word-wrap: break-word; white-space: pre-wrap; display: block; max-width: 100%;">${formattedText}</span>${msg.isEdited ? '<span style="font-size:10px; opacity:0.5; display:block; margin-top:5px;">(edited)</span>' : ''}</div>`; 
             }
-            div.innerHTML = `${!isMe ? `<img src="${avatarUrl}" class="msg-avatar">` : ''}<div style="display:flex; flex-direction:column; max-width: 100%;">${contentHtml}<div class="msg-time">${timeStr}</div></div>${isMe ? `<img src="${document.getElementById('myAvatar').src}" class="msg-avatar">` : ''}`;
+            div.innerHTML = `${!isMe ? `<img src="${avatarUrl}" class="msg-avatar" data-uid="${msg.sender}">` : ''}<div style="display:flex; flex-direction:column; max-width: 100%;">${contentHtml}<div class="msg-time">${timeStr}</div></div>${isMe ? `<img src="${document.getElementById('myAvatar').src}" class="msg-avatar" data-uid="${auth.currentUser.uid}">` : ''}`;
             globalChatBox.appendChild(div);
         });
         globalChatBox.scrollTop = globalChatBox.scrollHeight;
