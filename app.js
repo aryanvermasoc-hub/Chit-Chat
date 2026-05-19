@@ -6,7 +6,13 @@ import { CryptoE2EE } from './crypto.js';
 import { getToken } from "https://www.gstatic.com/firebasejs/10.0.0/firebase-messaging.js";
 import { collection, addDoc, onSnapshot, doc, setDoc, query, orderBy, getDoc, getDocs, deleteDoc, updateDoc, arrayUnion, arrayRemove, writeBatch, limit, where } from "https://www.gstatic.com/firebasejs/10.0.0/firebase-firestore.js";
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.0.0/firebase-auth.js";
-
+// =========================================================
+// URL CLEANUP LOGIC (Removes ?updated=... after reload)
+// =========================================================
+if (window.location.search.includes('updated=')) {
+    const cleanUrl = window.location.href.split('?')[0];
+    window.history.replaceState(null, '', cleanUrl);
+}
 const CLOUD_NAME = "ddkov7oka"; const UPLOAD_PRESET = "chitchat_preset"; 
 
 let currentChatId = null; let currentChatStatus = null; let targetUserUid = null;
