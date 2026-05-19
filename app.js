@@ -947,9 +947,24 @@ if (installAppBtn) {
   });
 }
 // =========================================================
-// AUTOMATIC & RELIABLE PWA UPDATE LOGIC (DOUBLE REFRESH FIX)
+// AUTOMATIC & RELIABLE PWA UPDATE LOGIC (MASTER FIX)
 // =========================================================
 const updateAppBtn = document.getElementById('updateAppBtn');
+
+// Master Lock: Double refresh ko hamesha ke liye rokne ke liye
+let refreshing = false; 
+const performAppUpdate = () => {
+  if (!refreshing) {
+    refreshing = true;
+    showToast("Update Complete!", "Reloading app...");
+    setTimeout(() => {
+      window.location.href = window.location.href.split('?')[0] + '?updated=' + Date.now();
+    }, 1000);
+  }
+};
+
+// Normal browser event handler
+navigator.serviceWorker.addEventListener('controllerchange', performAppUpdate);
 
 if (updateAppBtn) {
   updateAppBtn.addEventListener('click', async () => {
@@ -958,9 +973,8 @@ if (updateAppBtn) {
       updateAppBtn.innerHTML = '<i class="fa-solid fa-arrows-rotate fa-spin"></i> Checking Server...';
       updateAppBtn.disabled = true;
 
-      // Fail-Safe function
       const resetBtn = () => {
-         if (updateAppBtn) {
+         if (updateAppBtn && !refreshing) {
              updateAppBtn.innerHTML = originalText;
              updateAppBtn.disabled = false;
          }
@@ -968,81 +982,64 @@ if (updateAppBtn) {
 
       try {
         const reg = await navigator.serviceWorker.getRegistration();
-        
         if (!reg) {
             showToast("Error", "Service Worker nahi mila.");
             resetBtn();
             return;
         }
 
-        // 🚨 FIX 1: Removed manual double refresh. Let controllerchange handle it smoothly!
+        const forceUpdate = (worker) => {
+            updateAppBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Updating...';
+            worker.postMessage({ type: 'SKIP_WAITING' });
+            // Fallback: Agar browser event bhool jaye, toh ye 1.5 sec baad zabardasti reload karega
+            setTimeout(performAppUpdate, 1500); 
+        };
+
+        // Case 1: Update pehle se hi background mein ready/waiting hai
         if (reg.waiting) {
-          showToast("Applying Update", "App refresh ho raha hai...");
-          updateAppBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Updating...';
-          reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+          forceUpdate(reg.waiting);
           return;
         }
 
-        let updateFound = false;
+        // Server par naya version check karein
+        await reg.update();
+        await new Promise(resolve => setTimeout(resolve, 500)); // Chota buffer time
 
-        const onUpdateFound = () => {
-          updateFound = true;
-          const newWorker = reg.installing;
-          if (newWorker) {
-            newWorker.addEventListener('statechange', () => {
-              if (newWorker.state === 'installed') {
-                newWorker.postMessage({ type: 'SKIP_WAITING' });
-              } else if (newWorker.state === 'redundant') {
-                // Agar internet disconnect hone se install fail hua
-                resetBtn();
-              }
-            });
-          }
-        };
-        
-        reg.addEventListener('updatefound', onUpdateFound);
-
-        const updateCheck = reg.update();
-        const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 8000));
-        
-        await Promise.race([updateCheck, timeout]);
-        await new Promise(resolve => setTimeout(resolve, 1000));
-
-        if (!updateFound) {
-          showToast("Up to Date", "Aap latest version par hain!");
-          resetBtn();
-        } else {
+        // Case 2: Naya update mil gaya aur download ho raha hai
+        if (reg.installing) {
           showToast("Update Found", "Downloading update...");
           updateAppBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Updating...';
-          // 🚨 FIX 2: Changed spinner timeout from 5s to 20s to give mobile internet time to download
-          setTimeout(resetBtn, 20000);
+          
+          reg.installing.addEventListener('statechange', (e) => {
+            if (e.target.state === 'installed') {
+              forceUpdate(e.target);
+            } else if (e.target.state === 'redundant') {
+              showToast("Error", "Download failed.");
+              resetBtn();
+            }
+          });
+          
+          setTimeout(resetBtn, 20000); // 20-second fail-safe timeout
+          return;
+        } 
+        
+        // Case 3: Update itni jaldi download hua ki seedha waiting mein aa gaya
+        if (reg.waiting) {
+           forceUpdate(reg.waiting);
+           return;
         }
 
-        reg.removeEventListener('updatefound', onUpdateFound);
+        // Case 4: Koi naya update nahi hai
+        showToast("Up to Date", "Aap latest version par hain!");
+        resetBtn();
 
       } catch (err) {
         console.error("PWA Update Error:", err);
-        if (err.message === "Timeout") {
-            showToast("Up to Date", "Aap latest version par hain!");
-        } else {
-            showToast("Update Failed", "Server se connect nahi ho paaye.");
-        }
+        showToast("Up to Date", "Aap latest version par hain!"); 
         resetBtn();
       }
     } else {
-      showToast("Error", "Aapka browser PWA updates support nahi karta.");
+      showToast("Error", "Aapka browser updates support nahi karta.");
     }
   });
 }
-
-// When the service worker successfully updates...
-let refreshing = false;
-navigator.serviceWorker.addEventListener('controllerchange', () => {
-  if (!refreshing) {
-    refreshing = true;
-    showToast("Update Complete!", "Reloading app...");
-    setTimeout(() => {
-      window.location.href = window.location.href.split('?')[0] + '?updated=' + Date.now();
-    }, 1500);
-  }
-});
