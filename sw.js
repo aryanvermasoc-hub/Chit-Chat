@@ -23,9 +23,8 @@ messaging.onBackgroundMessage((payload) => {
 });
 // -----------------------------------------
 
-const CACHE_NAME = "chitchat-v1";
-// ... the rest of your sw.js code ...
-const CACHE_NAME = "chitchat-v1";
+// Yahan version v2 kar diya gaya hai aur duplicate line hata di hai
+const CACHE_NAME = "chitchat-v2";
 const ASSETS_TO_CACHE = [
   "./",
   "./index.html",
@@ -35,6 +34,7 @@ const ASSETS_TO_CACHE = [
   "./firebase.js"
 ];
 
+// Install event: Caches basic UI files
 // Install event: Caches basic UI files
 self.addEventListener("install", (event) => {
   event.waitUntil(
