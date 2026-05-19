@@ -941,10 +941,7 @@ if (installAppBtn) {
   });
 }
 // =========================================================
-// AUTOMATIC & RELIABLE PWA UPDATE LOGIC
-// =========================================================
-/// =========================================================
-// AUTOMATIC & RELIABLE PWA UPDATE LOGIC (ULTIMATE FIX)
+// AUTOMATIC & RELIABLE PWA UPDATE LOGIC (DEADLOCK FIX)
 // =========================================================
 const updateAppBtn = document.getElementById('updateAppBtn');
 
@@ -964,18 +961,23 @@ if (updateAppBtn) {
       };
 
       try {
-        // FIX: getRegistration use kiya hai taaki hang na ho
         const reg = await navigator.serviceWorker.getRegistration();
         
         if (!reg) {
-            showToast("Error", "Service Worker not found. Please refresh the page.");
+            showToast("Error", "Service Worker nahi mila.");
             resetBtn();
             return;
         }
 
+        // 🔥 FIX: Agar update waiting mein atka hai, toh turant HARD RELOAD karein
         if (reg.waiting) {
+          showToast("Applying Update", "App refresh ho raha hai...");
           reg.waiting.postMessage({ type: 'SKIP_WAITING' });
-          setTimeout(resetBtn, 3000);
+          
+          // Zabardasti page refresh taaki deadlock toot jaye
+          setTimeout(() => {
+              window.location.href = window.location.href.split('?')[0] + '?updated=' + Date.now();
+          }, 1500);
           return;
         }
 
@@ -995,13 +997,17 @@ if (updateAppBtn) {
         
         reg.addEventListener('updatefound', onUpdateFound);
 
-        await reg.update();
+        const updateCheck = reg.update();
+        const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 8000));
+        
+        await Promise.race([updateCheck, timeout]);
         await new Promise(resolve => setTimeout(resolve, 1000));
 
         if (!updateFound) {
-          showToast("Up to Date.");
+          showToast("Up to Date", "Aap latest version par hain!");
           resetBtn();
         } else {
+          showToast("Update Found", "Naya version download ho raha hai...");
           updateAppBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Updating...';
           setTimeout(resetBtn, 5000);
         }
@@ -1009,7 +1015,12 @@ if (updateAppBtn) {
         reg.removeEventListener('updatefound', onUpdateFound);
 
       } catch (err) {
-        showToast("Update Failed", "Server se connect nahi ho paaye.");
+        console.error("PWA Update Error:", err);
+        if (err.message === "Timeout") {
+            showToast("Up to Date", "Aap latest version par hain!");
+        } else {
+            showToast("Update Failed", "Server se connect nahi ho paaye.");
+        }
         resetBtn();
       }
     } else {
@@ -1025,7 +1036,6 @@ navigator.serviceWorker.addEventListener('controllerchange', () => {
     refreshing = true;
     showToast("Update Complete!", "Reloading app...");
     setTimeout(() => {
-      // Installed PWA ko force (hard) reload karne ke liye
       window.location.href = window.location.href.split('?')[0] + '?updated=' + Date.now();
     }, 1500);
   }
