@@ -21,10 +21,10 @@ messaging.onBackgroundMessage((payload) => {
   };
   self.registration.showNotification(notificationTitle, notificationOptions);
 });
-// -----------------------------------------
 
-// Yahan version v2 kar diya gaya hai aur duplicate line hata di hai
-const CACHE_NAME = "chitchat-v2";
+
+
+const CACHE_NAME = "chitchat-v3";
 const ASSETS_TO_CACHE = [
   "./",
   "./index.html",
