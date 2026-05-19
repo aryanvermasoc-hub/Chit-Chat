@@ -999,7 +999,7 @@ if (updateAppBtn) {
         await new Promise(resolve => setTimeout(resolve, 1000));
 
         if (!updateFound) {
-          showToast("Up to Date");
+          showToast("Up to Date.");
           resetBtn();
         } else {
           updateAppBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Updating...';
@@ -1025,7 +1025,8 @@ navigator.serviceWorker.addEventListener('controllerchange', () => {
     refreshing = true;
     showToast("Update Complete!", "Reloading app...");
     setTimeout(() => {
-      window.location.reload();
+      // Installed PWA ko force (hard) reload karne ke liye
+      window.location.href = window.location.href.split('?')[0] + '?updated=' + Date.now();
     }, 1500);
   }
 });
