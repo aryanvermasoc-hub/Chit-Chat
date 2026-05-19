@@ -971,7 +971,7 @@ if (updateAppBtn) {
 
         // 🔥 FIX: Agar update waiting mein atka hai, toh turant HARD RELOAD karein
         if (reg.waiting) {
-          showToast("Applying Update", "App refresh ho raha hai...");
+          showToast("Applying Update", "Refreshing the app...");
           reg.waiting.postMessage({ type: 'SKIP_WAITING' });
           
           // Zabardasti page refresh taaki deadlock toot jaye
@@ -1004,10 +1004,10 @@ if (updateAppBtn) {
         await new Promise(resolve => setTimeout(resolve, 1000));
 
         if (!updateFound) {
-          showToast("Up to Date", "Aap latest version par hain!");
+          showToast("Up to Date", "You are on our latest version");
           resetBtn();
         } else {
-          showToast("Update Found", "Naya version download ho raha hai...");
+          showToast("Update Found", "New version updating...");
           updateAppBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Updating...';
           setTimeout(resetBtn, 5000);
         }
@@ -1017,7 +1017,7 @@ if (updateAppBtn) {
       } catch (err) {
         console.error("PWA Update Error:", err);
         if (err.message === "Timeout") {
-            showToast("Up to Date", "Aap latest version par hain!");
+            showToast("Up to Date", "You are on our latest version");
         } else {
             showToast("Update Failed", "Server se connect nahi ho paaye.");
         }
