@@ -947,7 +947,7 @@ if (installAppBtn) {
   });
 }
 // =========================================================
-// AUTOMATIC & RELIABLE PWA UPDATE LOGIC (DEADLOCK FIX)
+// AUTOMATIC & RELIABLE PWA UPDATE LOGIC (DOUBLE REFRESH FIX)
 // =========================================================
 const updateAppBtn = document.getElementById('updateAppBtn');
 
@@ -975,15 +975,11 @@ if (updateAppBtn) {
             return;
         }
 
-        // 🔥 FIX: Agar update waiting mein atka hai, toh turant HARD RELOAD karein
+        // 🚨 FIX 1: Removed manual double refresh. Let controllerchange handle it smoothly!
         if (reg.waiting) {
-          showToast("Applying Update", "Refreshing the app...");
+          showToast("Applying Update", "App refresh ho raha hai...");
+          updateAppBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Updating...';
           reg.waiting.postMessage({ type: 'SKIP_WAITING' });
-          
-          // Zabardasti page refresh taaki deadlock toot jaye
-          setTimeout(() => {
-              window.location.href = window.location.href.split('?')[0] + '?updated=' + Date.now();
-          }, 1500);
           return;
         }
 
@@ -996,6 +992,9 @@ if (updateAppBtn) {
             newWorker.addEventListener('statechange', () => {
               if (newWorker.state === 'installed') {
                 newWorker.postMessage({ type: 'SKIP_WAITING' });
+              } else if (newWorker.state === 'redundant') {
+                // Agar internet disconnect hone se install fail hua
+                resetBtn();
               }
             });
           }
@@ -1010,12 +1009,13 @@ if (updateAppBtn) {
         await new Promise(resolve => setTimeout(resolve, 1000));
 
         if (!updateFound) {
-          showToast("Up to Date", "You are on our latest version");
+          showToast("Up to Date", "Aap latest version par hain!");
           resetBtn();
         } else {
-          showToast("Update Found", "New version updating...");
+          showToast("Update Found", "Downloading update...");
           updateAppBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Updating...';
-          setTimeout(resetBtn, 5000);
+          // 🚨 FIX 2: Changed spinner timeout from 5s to 20s to give mobile internet time to download
+          setTimeout(resetBtn, 20000);
         }
 
         reg.removeEventListener('updatefound', onUpdateFound);
@@ -1023,7 +1023,7 @@ if (updateAppBtn) {
       } catch (err) {
         console.error("PWA Update Error:", err);
         if (err.message === "Timeout") {
-            showToast("Up to Date", "You are on our latest version");
+            showToast("Up to Date", "Aap latest version par hain!");
         } else {
             showToast("Update Failed", "Server se connect nahi ho paaye.");
         }
