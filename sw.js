@@ -21,10 +21,10 @@ messaging.onBackgroundMessage((payload) => {
   };
   self.registration.showNotification(notificationTitle, notificationOptions);
 });
+// -----------------------------------------
 
-
-
-const CACHE_NAME = "chitchat-v3";
+// Yahan version v2 kar diya gaya hai aur duplicate line hata di hai
+const CACHE_NAME = "chitchat-v6";
 const ASSETS_TO_CACHE = [
   "./",
   "./index.html",
@@ -44,7 +44,7 @@ self.addEventListener("install", (event) => {
   );
 });
 
-// Activate event: Cleans up old caches
+// Activate event: Cleans up old caches and FORCES control over the installed app
 self.addEventListener("activate", (event) => {
   event.waitUntil(
     caches.keys().then((cacheNames) => {
@@ -55,10 +55,12 @@ self.addEventListener("activate", (event) => {
           }
         })
       );
+    }).then(() => {
+      // Yeh line sabse important hai installed app ke liye!
+      return self.clients.claim(); 
     })
   );
 });
-
 // Fetch event: Network-first strategy to ensure Firebase works perfectly
 self.addEventListener("fetch", (event) => {
   event.respondWith(
