@@ -941,7 +941,10 @@ if (installAppBtn) {
   });
 }
 // =========================================================
-// MANUAL PWA UPDATE LOGIC
+// AUTOMATIC & RELIABLE PWA UPDATE LOGIC
+// =========================================================
+/// =========================================================
+// AUTOMATIC & RELIABLE PWA UPDATE LOGIC (ULTIMATE FIX)
 // =========================================================
 const updateAppBtn = document.getElementById('updateAppBtn');
 
@@ -949,50 +952,73 @@ if (updateAppBtn) {
   updateAppBtn.addEventListener('click', async () => {
     if ('serviceWorker' in navigator) {
       const originalText = updateAppBtn.innerHTML;
-      updateAppBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Checking GitHub...';
+      updateAppBtn.innerHTML = '<i class="fa-solid fa-arrows-rotate fa-spin"></i> Checking Server...';
       updateAppBtn.disabled = true;
 
+      // Fail-Safe function
+      const resetBtn = () => {
+         if (updateAppBtn) {
+             updateAppBtn.innerHTML = originalText;
+             updateAppBtn.disabled = false;
+         }
+      };
+
       try {
-        const reg = await navigator.serviceWorker.ready;
-        await reg.update(); // Force the browser to check the server for sw.js changes
+        // FIX: getRegistration use kiya hai taaki hang na ho
+        const reg = await navigator.serviceWorker.getRegistration();
+        
+        if (!reg) {
+            showToast("Error", "Service Worker not found. Please refresh the page.");
+            resetBtn();
+            return;
+        }
 
         if (reg.waiting) {
-          // An update was already downloaded and is waiting
           reg.waiting.postMessage({ type: 'SKIP_WAITING' });
-        } else {
-          // Listen for a new update downloading right now
-          let updateFound = false;
-          reg.addEventListener('updatefound', () => {
-            updateFound = true;
-            const newWorker = reg.installing;
+          setTimeout(resetBtn, 3000);
+          return;
+        }
+
+        let updateFound = false;
+
+        const onUpdateFound = () => {
+          updateFound = true;
+          const newWorker = reg.installing;
+          if (newWorker) {
             newWorker.addEventListener('statechange', () => {
-              if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+              if (newWorker.state === 'installed') {
                 newWorker.postMessage({ type: 'SKIP_WAITING' });
               }
             });
-          });
+          }
+        };
+        
+        reg.addEventListener('updatefound', onUpdateFound);
 
-          // If no update is found after 2 seconds, tell the user they are up to date
-          setTimeout(() => {
-            if (!updateFound && !reg.waiting) {
-              showToast("Up to Date", "You are running the latest version!");
-              updateAppBtn.innerHTML = originalText;
-              updateAppBtn.disabled = false;
-            }
-          }, 2000);
+        await reg.update();
+        await new Promise(resolve => setTimeout(resolve, 1000));
+
+        if (!updateFound) {
+          showToast("Up to Date");
+          resetBtn();
+        } else {
+          updateAppBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Updating...';
+          setTimeout(resetBtn, 5000);
         }
+
+        reg.removeEventListener('updatefound', onUpdateFound);
+
       } catch (err) {
-        showToast("Update Failed", "Could not check for updates.");
-        updateAppBtn.innerHTML = originalText;
-        updateAppBtn.disabled = false;
+        showToast("Update Failed", "Server se connect nahi ho paaye.");
+        resetBtn();
       }
     } else {
-      showToast("Error", "Service workers not supported.");
+      showToast("Error", "Aapka browser PWA updates support nahi karta.");
     }
   });
 }
 
-// When the service worker successfully updates, refresh the page automatically
+// When the service worker successfully updates...
 let refreshing = false;
 navigator.serviceWorker.addEventListener('controllerchange', () => {
   if (!refreshing) {
