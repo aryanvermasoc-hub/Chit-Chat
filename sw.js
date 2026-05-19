@@ -24,7 +24,7 @@ messaging.onBackgroundMessage((payload) => {
 // -----------------------------------------
 
 // Yahan version v2 kar diya gaya hai aur duplicate line hata di hai
-const CACHE_NAME = "chitchat-v7";
+const CACHE_NAME = "chitchat-v8";
 const ASSETS_TO_CACHE = [
   "./",
   "./index.html",
