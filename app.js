@@ -999,7 +999,7 @@ if (updateAppBtn) {
         await new Promise(resolve => setTimeout(resolve, 1000));
 
         if (!updateFound) {
-          showToast("Up to Date.");
+          showToast("Up to");
           resetBtn();
         } else {
           updateAppBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Updating...';
