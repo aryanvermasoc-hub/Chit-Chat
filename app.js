@@ -952,15 +952,14 @@ if (installAppBtn) {
 const updateAppBtn = document.getElementById('updateAppBtn');
 let refreshing = false; 
 
-// Listen for the controlling service worker changing (this means a new SW has taken over)
+// This will ONLY fire when a new Service Worker has successfully taken over
 navigator.serviceWorker.addEventListener('controllerchange', () => {
   if (!refreshing) {
     refreshing = true;
-    showToast("Update Complete!", "Reloading app to apply changes...");
+    showToast("Update Complete!", "Applying changes...");
     setTimeout(() => {
-      // Reload and clear cached URL parameters
       window.location.href = window.location.href.split('?')[0] + '?updated=' + Date.now();
-    }, 1500);
+    }, 1000);
   }
 });
 
@@ -986,14 +985,18 @@ if (updateAppBtn) {
             return;
         }
 
-        // 1. If there's already a waiting worker, force it to take over
+        // 1. If an update was already downloaded in the background and is waiting
         if (reg.waiting) {
           updateAppBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Applying Update...';
           reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+          // We don't force a reload here anymore. We wait for 'controllerchange' to fire.
+          
+          // Failsafe: Reset button if it hangs (meaning worker is corrupted), but don't refresh.
+          setTimeout(resetBtn, 3000); 
           return;
         }
 
-        // 2. Setup a listener for when a NEW update is found during our check
+        // 2. Setup a listener for NEW updates found during this specific check
         let updateFound = false;
         reg.addEventListener('updatefound', () => {
           updateFound = true;
@@ -1003,31 +1006,30 @@ if (updateAppBtn) {
           newWorker.addEventListener('statechange', () => {
             if (newWorker.state === 'installed') {
               if (navigator.serviceWorker.controller) {
-                // Update downloaded successfully, tell it to take over
+                // Download complete, tell it to take over
                 updateAppBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Applying Update...';
                 newWorker.postMessage({ type: 'SKIP_WAITING' });
               } else {
-                // This is a fresh install, not an update
                 showToast("Up to Date", "You are on our latest version.");
                 resetBtn();
               }
             } else if (newWorker.state === 'redundant') {
-               showToast("Error", "Download failed.");
+               showToast("Error", "Update failed.");
                resetBtn();
             }
           });
         }, { once: true });
 
-        // 3. Force the browser to check the server for a new sw.js
+        // 3. Force the browser to check the server for sw.js changes
         await reg.update();
 
-        // 4. If 'updatefound' didn't fire shortly after checking, we are already up to date
+        // 4. If no update was found on the server, show the toast and reset
         setTimeout(() => {
             if (!updateFound && !reg.waiting && !refreshing) {
                 showToast("Up to Date", "You are on our latest version.");
                 resetBtn();
             }
-        }, 1500);
+        }, 1000);
 
       } catch (err) {
         console.error("PWA Update Error:", err);
