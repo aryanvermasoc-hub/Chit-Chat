@@ -183,12 +183,16 @@ onAuthStateChanged(auth, async (user) => {
     window.addEventListener("beforeunload", () => updateDoc(doc(db, "users", user.uid), { isOnline: false, lastSeen: Date.now() }));
     
     // --- NOTIFICATION POP-UP CODE ---
+    if (typeof Notification !== 'undefined' && 'serviceWorker' in navigator) {
     Notification.requestPermission().then(async (permission) => {
         if (permission === 'granted') {
-            const token = await getToken(messaging, { vapidKey: 'BBJgewscsRgCdrhz8e5MOgL1H_OSO3ASN5m9w81HdhpUQdWQzzNdhQFpOXpxEHQn_tqklSTDETvtZHnmbYVfabI' });
-            if (token) await updateDoc(doc(db, "users", user.uid), { fcmToken: token });
+            try {
+                const token = await getToken(messaging, { vapidKey: 'BBJgewscsRgCdrhz8e5MOgL1H_OSO3ASN5m9w81HdhpUQdWQzzNdhQFpOXpxEHQn_tqklSTDETvtZHnmbYVfabI' });
+                if (token) await updateDoc(doc(db, "users", user.uid), { fcmToken: token });
+            } catch(tokenErr) { console.log("FCM token error:", tokenErr); }
         }
     }).catch(err => console.log("Notification error:", err));
+    }
     // --------------------------------
 
     startMyProfileListener(user.uid); loadSidebarData(); loadNewsFeed(); 
@@ -202,7 +206,7 @@ async function loadNewsFeed() {
   const container = document.getElementById("newsFeedContainer"); container.innerHTML = '<div style="text-align:center; padding: 40px;"><i class="fa-solid fa-spinner fa-spin"></i> Loading News...</div>';
   try {
     const res = await fetch(`https://dev.to/api/articles?per_page=15&page=${Math.floor(Math.random() * 5) + 1}&tag=programming`); const articles = await res.json(); container.innerHTML = '';
-    articles.forEach(article => { container.innerHTML += `<div class="news-feed-card"><h4>${article.title}</h4><p>${article.description || 'Tap to read...'}</p><a href="${article.url}" target="_blank">Read Article</a></div>`; });
+    articles.forEach(article => { container.innerHTML += `<div class="news-feed-card"><h4>${article.title}</h4><p>${article.description || 'Tap to read...'}</p><a href="${article.url}" target="_blank" rel="noopener noreferrer">Read Article</a></div>`; });
   } catch(e) { container.innerHTML = '<div style="text-align:center; color: #ff4757;">Failed to load news.</div>'; }
 }
 
@@ -950,7 +954,8 @@ const updateAppBtn = document.getElementById('updateAppBtn');
 let refreshing = false; 
 
 // Fires ONLY when a new Service Worker has successfully taken over — reload to apply it
-navigator.serviceWorker.addEventListener('controllerchange', () => {
+// Guard: navigator.serviceWorker may not exist on some browsers/iOS
+if ('serviceWorker' in navigator) navigator.serviceWorker.addEventListener('controllerchange', () => {
   if (!refreshing) {
     refreshing = true;
     showToast("🎉 Update Applied!", "Reloading with the latest version...");
@@ -992,7 +997,7 @@ if (updateAppBtn) {
         updateAppBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Applying Update...';
         reg.waiting.postMessage({ type: 'SKIP_WAITING' });
         // controllerchange listener above will handle the reload
-        setTimeout(() => resetBtn(), 4000); // failsafe only
+        setTimeout(() => { if (!refreshing) resetBtn(); }, 4000); // silent failsafe only
         return;
       }
 
