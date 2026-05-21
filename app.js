@@ -1,6 +1,3 @@
-
-
-
 import { db, auth, messaging } from './firebase.js';
 import { CryptoE2EE } from './crypto.js';
 import { getToken } from "https://www.gstatic.com/firebasejs/10.0.0/firebase-messaging.js";
@@ -952,92 +949,96 @@ if (installAppBtn) {
 const updateAppBtn = document.getElementById('updateAppBtn');
 let refreshing = false; 
 
-// This will ONLY fire when a new Service Worker has successfully taken over
+// Fires ONLY when a new Service Worker has successfully taken over — reload to apply it
 navigator.serviceWorker.addEventListener('controllerchange', () => {
   if (!refreshing) {
     refreshing = true;
-    showToast("Update Complete!", "Applying changes...");
+    showToast("🎉 Update Applied!", "Reloading with the latest version...");
     setTimeout(() => {
       window.location.href = window.location.href.split('?')[0] + '?updated=' + Date.now();
-    }, 1000);
+    }, 1200);
   }
 });
 
 if (updateAppBtn) {
   updateAppBtn.addEventListener('click', async () => {
-    if ('serviceWorker' in navigator) {
-      const originalText = updateAppBtn.innerHTML;
-      updateAppBtn.innerHTML = '<i class="fa-solid fa-arrows-rotate fa-spin"></i> Checking Server...';
-      updateAppBtn.disabled = true;
-
-      const resetBtn = () => {
-         if (updateAppBtn && !refreshing) {
-             updateAppBtn.innerHTML = originalText;
-             updateAppBtn.disabled = false;
-         }
-      };
-
-      try {
-        const reg = await navigator.serviceWorker.getRegistration();
-        if (!reg) {
-            showToast("Error", "Service Worker not found.");
-            resetBtn();
-            return;
-        }
-
-        // 1. If an update was already downloaded in the background and is waiting
-        if (reg.waiting) {
-          updateAppBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Applying Update...';
-          reg.waiting.postMessage({ type: 'SKIP_WAITING' });
-          // We don't force a reload here anymore. We wait for 'controllerchange' to fire.
-          
-          // Failsafe: Reset button if it hangs (meaning worker is corrupted), but don't refresh.
-          setTimeout(resetBtn, 3000); 
-          return;
-        }
-
-        // 2. Setup a listener for NEW updates found during this specific check
-        let updateFound = false;
-        reg.addEventListener('updatefound', () => {
-          updateFound = true;
-          const newWorker = reg.installing;
-          updateAppBtn.innerHTML = '<i class="fa-solid fa-download fa-fade"></i> Downloading Update...';
-          
-          newWorker.addEventListener('statechange', () => {
-            if (newWorker.state === 'installed') {
-              if (navigator.serviceWorker.controller) {
-                // Download complete, tell it to take over
-                updateAppBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Applying Update...';
-                newWorker.postMessage({ type: 'SKIP_WAITING' });
-              } else {
-                showToast("Up to Date", "You are on our latest version.");
-                resetBtn();
-              }
-            } else if (newWorker.state === 'redundant') {
-               showToast("Error", "Update failed.");
-               resetBtn();
-            }
-          });
-        }, { once: true });
-
-        // 3. Force the browser to check the server for sw.js changes
-        await reg.update();
-
-        // 4. If no update was found on the server, show the toast and reset
-        setTimeout(() => {
-            if (!updateFound && !reg.waiting && !refreshing) {
-                showToast("Up to Date", "You are on our latest version.");
-                resetBtn();
-            }
-        }, 1000);
-
-      } catch (err) {
-        console.error("PWA Update Error:", err);
-        showToast("Error", "Failed to check the server."); 
-        resetBtn();
-      }
-    } else {
+    if (!('serviceWorker' in navigator)) {
       showToast("Error", "Your browser does not support updates.");
+      return;
+    }
+
+    const originalText = updateAppBtn.innerHTML;
+    updateAppBtn.innerHTML = '<i class="fa-solid fa-arrows-rotate fa-spin"></i> Checking...';
+    updateAppBtn.disabled = true;
+
+    const resetBtn = (msg) => {
+      if (updateAppBtn && !refreshing) {
+        updateAppBtn.innerHTML = originalText;
+        updateAppBtn.disabled = false;
+      }
+      if (msg) showToast("Up to Date ✓", msg);
+    };
+
+    try {
+      const reg = await navigator.serviceWorker.getRegistration();
+      if (!reg) {
+        showToast("Error", "Service Worker not found.");
+        resetBtn();
+        return;
+      }
+
+      // CASE 1: An update was already downloaded in the background and is waiting to activate
+      if (reg.waiting) {
+        updateAppBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Applying Update...';
+        reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+        // controllerchange listener above will handle the reload
+        setTimeout(() => resetBtn(), 4000); // failsafe only
+        return;
+      }
+
+      // CASE 2: Listen for a NEW update discovered during this check
+      let updateFound = false;
+
+      reg.addEventListener('updatefound', () => {
+        updateFound = true;
+        const newWorker = reg.installing;
+        updateAppBtn.innerHTML = '<i class="fa-solid fa-download fa-fade"></i> Downloading Update...';
+
+        newWorker.addEventListener('statechange', () => {
+          if (newWorker.state === 'installed') {
+            if (navigator.serviceWorker.controller) {
+              // New version downloaded — activate it immediately
+              updateAppBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Applying Update...';
+              newWorker.postMessage({ type: 'SKIP_WAITING' });
+              // controllerchange listener will reload the page
+            } else {
+              // First install — no previous controller, nothing to update
+              resetBtn("You are on our latest version.");
+            }
+          } else if (newWorker.state === 'redundant') {
+            showToast("Error", "Update check failed. Please try again.");
+            resetBtn();
+          }
+        });
+      }, { once: true });
+
+      // Ask the browser to fetch sw.js from the server and compare
+      await reg.update();
+
+      // CASE 3: reg.update() completed with no new worker found = already up to date
+      setTimeout(() => {
+        if (!updateFound && !reg.waiting && !refreshing) {
+          resetBtn("You are on our latest version.");
+        }
+      }, 1500); // 1.5s grace period for slow networks
+
+    } catch (err) {
+      console.error("PWA Update Error:", err);
+      showToast("Error", "Could not reach the server. Try again.");
+      if (updateAppBtn && !refreshing) {
+        updateAppBtn.innerHTML = originalText;
+        updateAppBtn.disabled = false;
+      }
     }
   });
 }
