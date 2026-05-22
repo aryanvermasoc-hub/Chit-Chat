@@ -425,12 +425,15 @@ window.openChat = async (targetUid, targetName, targetAvatar, isTargetOnline, ta
   document.getElementById("chatTargetName").innerText = targetName; 
   document.getElementById("chatTargetAvatar").src = targetAvatar; 
 
-  // --- FIX: Switch UI FIRST before crypto blocks the thread ---
   emptyChatState.style.display = "none"; 
   activeChatState.style.display = "flex"; 
   if(window.innerWidth <= 992) { sidebar.style.display = "none"; history.pushState({ page: "chat" }, ""); }
 
-  // --- FIX: Wrap Crypto in try/catch ---
+  // 1. FIRE THESE INSTANTLY so the wallpaper and typing status load immediately without waiting
+  listenToTyping(); 
+  listenToChatStatus(targetName); 
+
+  // 2. NOW safely wait for Crypto keys to load for the messages
   try {
       activeSharedKey = await CryptoE2EE.getSharedKey(targetPublicKey);
   } catch (error) {
@@ -446,7 +449,7 @@ window.openChat = async (targetUid, targetName, targetAvatar, isTargetOnline, ta
       else { targetStatus.classList.remove('online'); targetStatus.innerText = `Last seen: ${timeAgo(targetLastSeen)}`; }
   } else { targetStatus.classList.remove('online'); targetStatus.innerText = "Offline"; }
   
-  loadMessages(); listenToTyping(); listenToChatStatus(targetName); 
+  loadMessages(); 
 }
 
 window.openGroupChat = (groupId, groupName, memberCount) => {
