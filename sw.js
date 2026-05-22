@@ -29,7 +29,7 @@ const ASSETS_TO_CACHE = [
   "./",
   "./index.html",
   "./style.css",
-  "./app.js",
+  "./main.js",
   "./crypto.js",
   "./firebase.js"
 ];
