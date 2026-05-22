@@ -43,7 +43,11 @@ const modalMsgTimerSelect = document.getElementById("modalMsgTimerSelect"); cons
 const wallpaperInput = document.getElementById("wallpaperInput"); const clearChatMeBtn = document.getElementById("clearChatMeBtn");
 const removeWallpaperBtn = document.getElementById("removeWallpaperBtn"); const launchGameMenuBtn = document.getElementById("launchGameMenuBtn");
 const chatDoodleBtn = document.getElementById("chatDoodleBtn");
-
+const activeGameArea = document.getElementById("activeGameArea");
+const gameUIContainer = document.getElementById("gameUIContainer");
+const gameSelectionModal = document.getElementById("gameSelectionModal");
+const closeGameSelectBtn = document.getElementById("closeGameSelectBtn");
+const closeGameBtn = document.getElementById("closeGameBtn");
 const ghostModeBtn = document.getElementById("ghostModeBtn"); window.isGhostModeActive = false;
 if (ghostModeBtn) {
     ghostModeBtn.addEventListener("click", async () => {
