@@ -28,6 +28,15 @@
   </script>
 </head>
 <body>
+  <div id="mobile-debug" style="position:fixed; top:0; left:0; width: 100%; background:red; color:white; z-index:999999; font-size:12px; padding:10px; pointer-events:none;"></div>
+<script>
+  window.onerror = function(msg, url, line) {
+    document.getElementById('mobile-debug').innerHTML += msg + ' (Line ' + line + ')<br>';
+  };
+  window.addEventListener('unhandledrejection', function(e) {
+    document.getElementById('mobile-debug').innerHTML += 'Promise Error: ' + (e.reason ? e.reason.message || e.reason : 'Unknown') + '<br>';
+  });
+</script>
   <div id="toastContainer" class="toast-container"></div>
   <div class="ambient-bg"><div class="blob blob-1"></div><div class="blob blob-2"></div></div>
 
