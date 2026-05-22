@@ -71,8 +71,8 @@ function switchSidebarView(view) {
     else if (view === 'games') { gamesNavContainer.style.display = "flex"; chatToggleBtn.innerHTML = '<i class="fa-solid fa-fire"></i> Feed'; chatToggleBtn.style.color = "white"; homeGamesBtn.style.color = "var(--primary)"; if(openUsersListBtn) openUsersListBtn.style.color = "var(--text-muted)"; } 
     else if (view === 'feed') { newsFeedContainer.style.display = "flex"; chatToggleBtn.innerHTML = '<i class="fa-solid fa-fire"></i> Feed (Active)'; chatToggleBtn.style.color = "var(--accent)"; homeGamesBtn.style.color = "var(--text-muted)"; if(openUsersListBtn) openUsersListBtn.style.color = "var(--text-muted)"; }
 }
-switchSidebarView('games');
-bindPointerTap(chatToggleBtn, () => { if (newsFeedContainer.style.display === "flex") switchSidebarView('chats'); else switchSidebarView('feed'); });
+// Force strict mobile browsers (iOS) to register game card taps
+document.querySelectorAll('.game-card').forEach(card => card.style.cursor = 'pointer');
 bindPointerTap(homeGamesBtn, () => { switchSidebarView('games'); });
 if(openUsersListBtn) bindPointerTap(openUsersListBtn, () => { switchSidebarView('chats'); openUsersListBtn.style.color = "var(--primary)"; });
 
@@ -369,8 +369,8 @@ document.querySelector(".current-user").addEventListener("click", () => { if(aut
 if (backToUsersBtn) { 
     backToUsersBtn.addEventListener("click", () => { 
         if (window.innerWidth <= 992) { 
-            sidebar.classList.remove("hidden"); activeChatState.style.display = "none"; emptyChatState.style.display = "flex"; 
-            currentChatId = null; targetUserUid = null; isCurrentChatGroup = false; activeSharedKey = null;
+            sidebar.style.display = "flex"; activeChatState.style.display = "none"; emptyChatState.style.display = "flex";
+             currentChatId = null; targetUserUid = null; isCurrentChatGroup = false; activeSharedKey = null;
             if (messagesUnsubscribe) { messagesUnsubscribe(); messagesUnsubscribe = null; }
             if (chatDocUnsubscribe) { chatDocUnsubscribe(); chatDocUnsubscribe = null; }
             if (chatMetaUnsubscribe) { chatMetaUnsubscribe(); chatMetaUnsubscribe = null; }
@@ -428,7 +428,7 @@ window.openChat = async (targetUid, targetName, targetAvatar, isTargetOnline, ta
   // --- FIX: Switch UI FIRST before crypto blocks the thread ---
   emptyChatState.style.display = "none"; 
   activeChatState.style.display = "flex"; 
-  if(window.innerWidth <= 992) { sidebar.classList.add("hidden"); history.pushState({ page: "chat" }, ""); }
+  if(window.innerWidth <= 992) { sidebar.style.display = "none"; history.pushState({ page: "chat" }, ""); }
 
   // --- FIX: Wrap Crypto in try/catch ---
   try {
@@ -456,7 +456,7 @@ window.openGroupChat = (groupId, groupName, memberCount) => {
   const overlay = document.getElementById("chatStateOverlay"); if(overlay) { overlay.style.display = "none"; overlay.innerHTML = ""; }
   const groupData = allGroups.find(g => g.id === groupId); const avatarToUse = groupData && groupData.avatarUrl ? groupData.avatarUrl : `https://ui-avatars.com/api/?name=${encodeURIComponent(groupName)}&background=8b5cf6&color=fff`;
   document.getElementById("chatTargetName").innerText = groupName; document.getElementById("chatTargetAvatar").src = avatarToUse; document.getElementById("chatTargetStatus").innerText = `${memberCount} members`;
-  emptyChatState.style.display = "none"; activeChatState.style.display = "flex"; if(window.innerWidth <= 992) { sidebar.classList.add("hidden"); history.pushState({ page: "chat" }, ""); }
+  emptyChatState.style.display = "none"; activeChatState.style.display = "flex"; if(window.innerWidth <= 992) { sidebar.style.display = "none"; history.pushState({ page: "chat" }, ""); }
   loadMessages(); listenToChatStatus(groupName); 
 }
 
@@ -641,7 +641,7 @@ document.querySelectorAll(".game-select-btn").forEach(btn => {
     });
 });
 window.acceptGameChallenge = async (gameId, gameType) => { await updateDoc(doc(db, "games", gameId), { status: "playing" }); joinGameRoom(gameId, gameType); };
-closeGameBtn.addEventListener("click", () => { if(currentAnimationId) cancelAnimationFrame(currentAnimationId); if (singlePlayerMode) { singlePlayerMode = false; spTttActive = false; if (window.innerWidth <= 992) sidebar.classList.remove("hidden"); } else { if(gameUnsubscribe) gameUnsubscribe(); if(currentGameId) { updateDoc(doc(db, "games", currentGameId), { status: "abandoned" }); } } activeGameArea.style.display = "none"; currentGameId = null; isPlayingActionGame = false; if (currentChatId) { loadMessages(); } });
+closeGameBtn.addEventListener("click", () => { if(currentAnimationId) cancelAnimationFrame(currentAnimationId); if (singlePlayerMode) { singlePlayerMode = false; spTttActive = false; if (window.innerWidth <= 992) sidebar.style.display = "flex"; } else { if(gameUnsubscribe) gameUnsubscribe(); if(currentGameId) { updateDoc(doc(db, "games", currentGameId), { status: "abandoned" }); } } activeGameArea.style.display = "none"; currentGameId = null; isPlayingActionGame = false; if (currentChatId) { loadMessages(); } });
 function joinGameRoom(gameId, gameType) {
     currentGameId = gameId; isPlayingActionGame = false; singlePlayerMode = false; activeGameArea.style.display = "flex";
     let gTitle = "Game"; if (gameType === 'tictactoe') gTitle = "Tic Tac Toe"; if (gameType === 'rps') gTitle = "Rock Paper Scissors"; if (gameType === 'jetfighter') gTitle = "Jet Fighter"; if (gameType === 'carracing') gTitle = "Car Racing"; if (gameType === 'ludo') gTitle = "Ludo Arena"; document.getElementById("activeGameTitle").innerText = gTitle;
@@ -668,7 +668,7 @@ function renderLudo(data, gameId) {
 window.rollLudoDice = async (gameId, myRole) => { const diceBtn = document.getElementById("ludoDiceBtn"); diceBtn.classList.add("dice-rolling"); diceBtn.classList.remove("pulse"); diceBtn.disabled = true; setTimeout(async () => { const roll = Math.floor(Math.random() * 6) + 1; await updateDoc(doc(db, "games", gameId), { diceValue: roll }); const docSnap = await getDoc(doc(db, "games", gameId)); const data = docSnap.data(); let canMove = false; data.ludoTokens[myRole].forEach(pos => { if (pos === -1 && roll === 6) canMove = true; if (pos !== -1) { if (myRole === 'p1' && pos + roll <= 57) canMove = true; if (myRole === 'p2') { let absoluteProgress = pos >= 26 ? (pos - 26) : (pos + 26); if (absoluteProgress + roll <= 57) canMove = true; } } }); if (!canMove) { showToast("No Moves!", "Skipping turn..."); const nextTurn = data.player1 === auth.currentUser.uid ? data.player2 : data.player1; await updateDoc(doc(db, "games", gameId), { turn: nextTurn, diceValue: null }); } }, 500); };
 window.moveLudoToken = async (gameId, data, tokenIndex, role) => { let tokens = { ...data.ludoTokens }; let roll = data.diceValue; let currPos = tokens[role][tokenIndex]; let newPos = currPos; if (currPos === -1) { if (roll !== 6) return; newPos = role === 'p1' ? 0 : 26; } else { if (role === 'p1') { newPos = currPos + roll; if (newPos > 51 && currPos <= 51) newPos = 51 + (newPos - 51); if (newPos > 57) return; } else { newPos = currPos + roll; if (currPos <= 24 && newPos >= 25) { newPos = 56 + (newPos - 24); } else if (newPos > 51 && currPos > 24 && currPos <= 51) { newPos = newPos - 52; } if (newPos > 62) return; } } tokens[role][tokenIndex] = newPos; const safeZones = [0, 8, 13, 21, 26, 34, 39, 47]; let hasKilled = false; let oppRole = role === 'p1' ? 'p2' : 'p1'; if (!safeZones.includes(newPos) && newPos <= 51) { tokens[oppRole].forEach((oppPos, idx) => { if (oppPos === newPos) { tokens[oppRole][idx] = -1; hasKilled = true; } }); } let hasWon = false; if (role === 'p1' && tokens.p1.every(p => p === 57)) hasWon = true; if (role === 'p2' && tokens.p2.every(p => p === 62)) hasWon = true; let nextTurn = data.turn; let nextDice = null; if (roll !== 6 && !hasKilled && !hasWon) { nextTurn = data.player1 === auth.currentUser.uid ? data.player2 : data.player1; } await updateDoc(doc(db, "games", gameId), { ludoTokens: tokens, turn: nextTurn, diceValue: nextDice, winner: hasWon ? auth.currentUser.uid : null }); };
 window.resetLudo = async (gameId) => { const docSnap = await getDoc(doc(db, "games", gameId)); await updateDoc(doc(db, "games", gameId), { ludoTokens: { p1: [-1, -1, -1, -1], p2: [-1, -1, -1, -1] }, winner: null, turn: docSnap.data().player1, diceValue: null }); };
-window.startSinglePlayer = (gameType) => { singlePlayerMode = true; currentGameId = null; if (window.innerWidth <= 992) sidebar.classList.add("hidden"); activeGameArea.style.display = "flex"; if (gameType === 'tictactoe') { spTttReset(); } else if (gameType === 'rps') { renderSinglePlayerRPS(); } else if (gameType === 'jetfighter' || gameType === 'carracing' || gameType === 'flappybird') { renderSinglePlayerAction(gameType); } };
+window.startSinglePlayer = (gameType) => { singlePlayerMode = true; currentGameId = null; if (window.innerWidth <= 992) sidebar.style.display = "none"; activeGameArea.style.display = "flex"; if (gameType === 'tictactoe') { spTttReset(); } else if (gameType === 'rps') { renderSinglePlayerRPS(); } else if (gameType === 'jetfighter' || gameType === 'carracing' || gameType === 'flappybird') { renderSinglePlayerAction(gameType); } };
 let spTttBoard = ["","","","","","","","",""]; let spTttActive = true;
 window.renderSinglePlayerTTT = () => { document.getElementById("activeGameTitle").innerText = "Tic Tac Toe (Solo)"; let html = `<div class="game-turn-indicator" style="margin-bottom:10px;">You vs Computer</div><select id="spDifficulty" class="difficulty-select" onchange="changeSpDifficulty(this.value)"><option value="easy" ${currentSpDifficulty==='easy'?'selected':''}>Difficulty: Easy</option><option value="medium" ${currentSpDifficulty==='medium'?'selected':''}>Difficulty: Medium</option><option value="hard" ${currentSpDifficulty==='hard'?'selected':''}>Difficulty: Hard</option></select><div class="ttt-board">`; spTttBoard.forEach((cell, i) => { const cellClass = cell === 'X' ? 'x' : (cell === 'O' ? 'o' : ''); html += `<div class="ttt-cell ${cellClass}" onclick="spTttMove(${i})">${cell}</div>`; }); html += `</div>`; if(!spTttActive) html += `<button class="primary-btn glow-btn" style="max-width:200px; margin-top:20px;" onclick="spTttReset()">Play Again</button>`; gameUIContainer.innerHTML = html; };
 function getBotMoveTTT(board, difficulty) { let empty = board.map((c, i) => c === "" ? i : null).filter(c => c !== null); if (empty.length === 0) return -1; if (difficulty === 'easy') return empty[Math.floor(Math.random() * empty.length)]; const checkWin = (player) => { const lines = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]]; for(let line of lines) { const [a,b,c] = line; if(board[a]===player && board[b]===player && board[c]==="") return c; if(board[a]===player && board[c]===player && board[b]==="") return b; if(board[b]===player && board[c]===player && board[a]==="") return a; } return null; }; let winMove = checkWin("O"); let blockMove = checkWin("X"); if (difficulty === 'hard') { if (winMove !== null) return winMove; if (blockMove !== null) return blockMove; if (board[4] === "") return 4; const corners = [0, 2, 6, 8].filter(c => board[c] === ""); if (corners.length > 0) return corners[Math.floor(Math.random() * corners.length)]; return empty[Math.floor(Math.random() * empty.length)]; } if (Math.random() > 0.4) { if (winMove !== null) return winMove; if (blockMove !== null) return blockMove; } return empty[Math.floor(Math.random() * empty.length)]; }
@@ -789,12 +789,12 @@ if (undoPDoodleBtn) { undoPDoodleBtn.addEventListener("click", async () => { if 
 // --- EXPLORE HUB ---
 const exploreBtn = document.getElementById("exploreBtn"); const exploreArea = document.getElementById("exploreArea"); const closeExploreBtn = document.getElementById("closeExploreBtn"); const exploreTabs = document.querySelectorAll(".explore-tab"); const exploreSections = document.querySelectorAll(".explore-section"); let globalChatUnsubscribe = null;
 bindPointerTap(exploreBtn, () => {
-    history.pushState({ page: "explore" }, ""); exploreArea.style.display = "flex"; if(window.innerWidth <= 992) sidebar.classList.add("hidden");
+    history.pushState({ page: "explore" }, ""); exploreArea.style.display = "flex"; if(window.innerWidth <= 992) sidebar.style.display = "none";
     exploreTabs.forEach(t => t.classList.remove("active")); exploreSections.forEach(s => s.classList.remove("active"));
     document.querySelector('.explore-tab[data-target="exploreMemes"]').classList.add("active"); document.getElementById("exploreMemes").classList.add("active");
     initMemesFeed();
 });
-bindPointerTap(closeExploreBtn, () => { exploreArea.style.display = "none"; if(globalChatUnsubscribe) { globalChatUnsubscribe(); globalChatUnsubscribe = null; } if(window.innerWidth <= 992) sidebar.classList.remove("hidden"); });
+bindPointerTap(closeExploreBtn, () => { exploreArea.style.display = "none"; if(globalChatUnsubscribe) { globalChatUnsubscribe(); globalChatUnsubscribe = null; } if(window.innerWidth <= 992) sidebar.style.display = "flex"; });
 exploreTabs.forEach(tab => {
     bindPointerTap(tab, () => {
         exploreTabs.forEach(t => t.classList.remove("active")); exploreSections.forEach(s => s.classList.remove("active")); tab.classList.add("active");
