@@ -1,6 +1,31 @@
 /** * End-to-End Encryption Engine (E2EE) using Web Crypto API 
  * Uses ECDH for Key Exchange and AES-GCM for Encrypt/Decrypt
+ * Upgraded to use IndexedDB for secure key storage (XSS protection)
  */
+
+// Helper: Safely store and retrieve keys from IndexedDB
+const SecureKeyStore = {
+    async openDB() {
+        return new Promise((resolve, reject) => {
+            const req = indexedDB.open("ChitChatSecurity", 1);
+            req.onupgradeneeded = (e) => e.target.result.createObjectStore("keys");
+            req.onsuccess = (e) => resolve(e.target.result);
+            req.onerror = (e) => reject(e);
+        });
+    },
+    async saveKey(keyName, value) {
+        const db = await this.openDB();
+        const tx = db.transaction("keys", "readwrite");
+        tx.objectStore("keys").put(value, keyName);
+        return new Promise((resolve) => tx.oncomplete = resolve);
+    },
+    async getKey(keyName) {
+        const db = await this.openDB();
+        const tx = db.transaction("keys", "readonly");
+        const req = tx.objectStore("keys").get(keyName);
+        return new Promise((resolve) => req.onsuccess = () => resolve(req.result));
+    }
+};
 
 export const CryptoE2EE = {
     // Generates a local Public/Private ECDH key pair on signup
@@ -12,15 +37,16 @@ export const CryptoE2EE = {
         const publicKeyJwk = await window.crypto.subtle.exportKey("jwk", keyPair.publicKey);
         const privateKeyJwk = await window.crypto.subtle.exportKey("jwk", keyPair.privateKey);
         
-        // Private key NEVER leaves the browser
-        localStorage.setItem("chitchat_private_key", JSON.stringify(privateKeyJwk));
+        // Private key NEVER leaves the browser; locked safely in IndexedDB
+        await SecureKeyStore.saveKey("chitchat_private_key", privateKeyJwk);
         return publicKeyJwk; // Save to Firestore
     },
 
     // Combines My Private Key + Friend's Public Key = Shared AES Secret
     async getSharedKey(peerPublicKeyJwk) {
         try {
-            const privKeyJwk = JSON.parse(localStorage.getItem("chitchat_private_key"));
+            // Retrieve safely from IndexedDB instead of localStorage
+            const privKeyJwk = await SecureKeyStore.getKey("chitchat_private_key");
             if (!privKeyJwk || !peerPublicKeyJwk) return null;
             
             const privateKey = await window.crypto.subtle.importKey("jwk", privKeyJwk, { name: "ECDH", namedCurve: "P-256" }, true, ["deriveKey", "deriveBits"]);
