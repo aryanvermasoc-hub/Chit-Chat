@@ -1099,39 +1099,54 @@ if (updateAppBtn) {
   });
 }
 // =========================================================
-// MOBILE KEYBOARD VIEWPORT FIX
+// MOBILE KEYBOARD VIEWPORT FIX (ANDROID & IOS)
 // =========================================================
 
-// 1. Modern API: Resizes the app dynamically when the keyboard opens
-if (window.visualViewport) {
-    window.visualViewport.addEventListener('resize', () => {
-        // Force the body to match the exact visible height above the keyboard
-        document.body.style.height = window.visualViewport.height + 'px';
+function lockViewport() {
+    if (window.visualViewport) {
+        const h = window.visualViewport.height;
         
-        // Snap the window back to the top so the header isn't pushed off
+        // 1. Force all main containers to shrink, stopping them from extending off-screen
+        document.documentElement.style.height = h + 'px';
+        document.body.style.height = h + 'px';
+        const appScreen = document.getElementById("appScreen");
+        if (appScreen) appScreen.style.height = h + 'px';
+        
+        // 2. Vigorously snap back to the top to fight Android's automatic panning
         window.scrollTo(0, 0);
+        document.documentElement.scrollTop = 0;
+        document.body.scrollTop = 0;
         
-        // Keep the chats scrolled to the bottom when the keyboard opens
+        // 3. Keep the actual chat messages scrolled to the bottom
         const activeChat = document.getElementById("chatBox");
         const globalChat = document.getElementById("globalChatBox");
         if (activeChat) activeChat.scrollTop = activeChat.scrollHeight;
         if (globalChat) globalChat.scrollTop = globalChat.scrollHeight;
-    });
+    }
 }
 
-// 2. iOS Safari Safety Catch: Stops Apple's aggressive auto-scrolling
+// Listen to both resize AND scroll. Android triggers a scroll when it pushes the layout up.
+if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', lockViewport);
+    window.visualViewport.addEventListener('scroll', lockViewport);
+}
+
+// 3. Focus and Blur handlers for the text inputs
 const chatInputs = [document.getElementById("msg"), document.getElementById("globalMsgInput")];
 chatInputs.forEach(input => {
     if (input) {
         input.addEventListener('focus', () => {
-            // Fire twice to catch the start and end of the keyboard slide animation
-            setTimeout(() => window.scrollTo(0, 0), 100);
-            setTimeout(() => window.scrollTo(0, 0), 300);
+            // Fire multiple times during the keyboard animation to keep the header pinned
+            setTimeout(lockViewport, 50);
+            setTimeout(lockViewport, 300);
         });
         
-        // Reset the body height when the keyboard closes
         input.addEventListener('blur', () => {
+            // Restore everything to full height when the keyboard closes
+            document.documentElement.style.height = '100dvh';
             document.body.style.height = '100dvh';
+            const appScreen = document.getElementById("appScreen");
+            if (appScreen) appScreen.style.height = '100%';
             window.scrollTo(0, 0);
         });
     }
