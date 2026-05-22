@@ -68,7 +68,7 @@ body { background: var(--bg-base); color: var(--text-main); display: flex; justi
 .current-user .name { font-weight: 600; font-size: 15px; }
 .current-user .handle { color: var(--text-muted); font-size: 12px; }
 .users-list { flex: 1; overflow-y: auto; padding: 10px; }
-.user-item { padding: 12px; border-radius: 12px; display: flex; align-items: center; gap: 12px; cursor: pointer; transition: background 0.3s; position: relative; }
+.user-item { padding: 12px; border-radius: 12px; display: flex; align-items: center; gap: 12px; cursor: pointer; touch-action: manipulation; transition: background 0.3s; position: relative; }
 
 .user-item.active { background: rgba(139, 92, 246, 0.1); border: 1px solid rgba(139, 92, 246, 0.2); }
 .user-meta { display: flex; flex-direction: column; justify-content: center; flex: 1; min-width: 0; overflow: hidden; }
@@ -394,7 +394,6 @@ body { background: var(--bg-base); color: var(--text-main); display: flex; justi
 
 .message-wrapper, .msg-bubble, .user-item {
     will-change: transform, opacity;
-    contain: content;
 }
 /* =========================================================
    GHOST MODE STYLES
