@@ -388,8 +388,13 @@ function listenToChatStatus(targetName) {
             const data = snap.data(); currentChatStatus = data.status;
             if (data.messageTimer !== undefined && modalMsgTimerSelect && modalMsgTimerSelect.value != data.messageTimer) modalMsgTimerSelect.value = data.messageTimer; 
             if (data.doodleActive) initPrivateDoodle(); else { if (document.getElementById("privateDoodleArea")) document.getElementById("privateDoodleArea").style.display = "none"; if(pDoodleUnsubscribe) { pDoodleUnsubscribe(); pDoodleUnsubscribe = null; } }
-            if (data.wallpaperUrl) { document.getElementById("chatBox").style.backgroundImage = `linear-gradient(rgba(10,10,15,0.8), rgba(10,10,15,0.8)), url('${data.wallpaperUrl}')`; } else { document.getElementById("chatBox").style.backgroundImage = "none"; }
-            
+           if (data.wallpaperUrl) { 
+                document.getElementById("chatWallpaper").style.backgroundImage = `linear-gradient(rgba(10,10,15,0.8), rgba(10,10,15,0.8)), url('${data.wallpaperUrl}')`; 
+                localStorage.setItem(`wp_${currentChatId}`, data.wallpaperUrl); // Cache it
+            } else { 
+                document.getElementById("chatWallpaper").style.backgroundImage = "none"; 
+                localStorage.removeItem(`wp_${currentChatId}`); // Clear cache
+            }
             const previousGhostState = window.isGhostModeActive; window.isGhostModeActive = !!data.ghostModeActive;
             if (window.isGhostModeActive) {
                 if (ghostModeBtn) ghostModeBtn.classList.add("active"); if (inputWrapper) inputWrapper.classList.add("ghost-input-active");
@@ -421,7 +426,13 @@ window.openChat = async (targetUid, targetName, targetAvatar, isTargetOnline, ta
   document.getElementById("chatSettingsBtn").style.display = "none"; document.getElementById("chatDoodleBtn").style.display = "none"; if (ghostModeBtn) ghostModeBtn.style.display = "none"; document.getElementById("launchGameMenuBtn").style.display = "none"; 
   document.getElementById("chatBox").innerHTML = ""; if(replyingToMsg) document.getElementById("cancelReplyBtn").click(); if (document.getElementById("privateDoodleArea")) document.getElementById("privateDoodleArea").style.display = "none";
   const overlay = document.getElementById("chatStateOverlay"); if(overlay) { overlay.style.display = "none"; overlay.innerHTML = ""; }
-  document.getElementById("chatBox").style.backgroundImage = "none"; 
+  // Instantly apply cached wallpaper if it exists to prevent delay
+  const cachedWallpaper = localStorage.getItem(`wp_${currentChatId}`);
+  if (cachedWallpaper) {
+      document.getElementById("chatWallpaper").style.backgroundImage = `linear-gradient(rgba(10,10,15,0.8), rgba(10,10,15,0.8)), url('${cachedWallpaper}')`;
+  } else {
+      document.getElementById("chatWallpaper").style.backgroundImage = "none";
+  }
   document.getElementById("chatTargetName").innerText = targetName; 
   document.getElementById("chatTargetAvatar").src = targetAvatar; 
 
@@ -455,7 +466,7 @@ window.openChat = async (targetUid, targetName, targetAvatar, isTargetOnline, ta
 window.openGroupChat = (groupId, groupName, memberCount) => {
   isCurrentChatGroup = true; currentChatId = groupId; targetUserUid = null; activeSharedKey = null; // No E2EE for groups in this version
   document.getElementById("launchGameMenuBtn").style.display = "none"; document.getElementById("chatSettingsBtn").style.display = "none"; document.getElementById("chatDoodleBtn").style.display = "none"; if (ghostModeBtn) ghostModeBtn.style.display = "none"; 
-  document.getElementById("chatBox").innerHTML = ""; document.getElementById("chatBox").style.backgroundImage = "none"; if(replyingToMsg) document.getElementById("cancelReplyBtn").click(); if(pDoodleUnsubscribe) { pDoodleUnsubscribe(); pDoodleUnsubscribe = null; }
+  document.getElementById("chatBox").innerHTML = "";document.getElementById("chatWallpaper").style.backgroundImage = "none"; if(replyingToMsg) document.getElementById("cancelReplyBtn").click(); if(pDoodleUnsubscribe) { pDoodleUnsubscribe(); pDoodleUnsubscribe = null; }
   const overlay = document.getElementById("chatStateOverlay"); if(overlay) { overlay.style.display = "none"; overlay.innerHTML = ""; }
   const groupData = allGroups.find(g => g.id === groupId); const avatarToUse = groupData && groupData.avatarUrl ? groupData.avatarUrl : `https://ui-avatars.com/api/?name=${encodeURIComponent(groupName)}&background=8b5cf6&color=fff`;
   document.getElementById("chatTargetName").innerText = groupName; document.getElementById("chatTargetAvatar").src = avatarToUse; document.getElementById("chatTargetStatus").innerText = `${memberCount} members`;
