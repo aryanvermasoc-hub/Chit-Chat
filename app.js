@@ -66,7 +66,7 @@ switchSidebarView('games');
 bindPointerTap(chatToggleBtn, () => { if (newsFeedContainer.style.display === "flex") switchSidebarView('chats'); else switchSidebarView('feed'); });
 bindPointerTap(homeGamesBtn, () => { switchSidebarView('games'); });
 if(openUsersListBtn) bindPointerTap(openUsersListBtn, () => { switchSidebarView('chats'); openUsersListBtn.style.color = "var(--primary)"; });
-document.querySelectorAll('.game-card').forEach(card => bindPointerTap(card, () => card.click()));
+
 
 const formatMentions = (text) => {
     if (!text) return text;
@@ -106,20 +106,11 @@ window.showToast = function(title, message, avatarUrl) {
 
 function bindPointerTap(element, handler) {
   if (!element || typeof handler !== 'function') return;
-  const wrapped = (event) => {
-    if (event.type === 'pointerup' || event.type === 'click' || event.type === 'touchend') {
-      event.preventDefault();
-      handler(event);
-    }
-  };
-  if (window.PointerEvent) {
-    element.addEventListener('pointerup', wrapped);
-  } else {
-    element.addEventListener('click', wrapped);
-    element.addEventListener('touchend', wrapped, { passive: false });
-  }
+  // Relying strictly on the native click event prevents mobile touch-lifecycle bugs
+  element.addEventListener('click', (event) => {
+    handler(event);
+  });
 }
-
 const emailGroup = document.getElementById("emailGroup"); const confirmPasswordGroup = document.getElementById("confirmPasswordGroup");
 const toggleAuthMode = (signup) => { 
   isSignupMode = signup; 
