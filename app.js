@@ -63,9 +63,10 @@ function switchSidebarView(view) {
     else if (view === 'feed') { newsFeedContainer.style.display = "flex"; chatToggleBtn.innerHTML = '<i class="fa-solid fa-fire"></i> Feed (Active)'; chatToggleBtn.style.color = "var(--accent)"; homeGamesBtn.style.color = "var(--text-muted)"; if(openUsersListBtn) openUsersListBtn.style.color = "var(--text-muted)"; }
 }
 switchSidebarView('games');
-chatToggleBtn.addEventListener("click", () => { if (newsFeedContainer.style.display === "flex") switchSidebarView('chats'); else switchSidebarView('feed'); });
-homeGamesBtn.addEventListener("click", () => { switchSidebarView('games'); });
-if(openUsersListBtn) openUsersListBtn.addEventListener("click", () => { switchSidebarView('chats'); openUsersListBtn.style.color = "var(--primary)"; });
+bindPointerTap(chatToggleBtn, () => { if (newsFeedContainer.style.display === "flex") switchSidebarView('chats'); else switchSidebarView('feed'); });
+bindPointerTap(homeGamesBtn, () => { switchSidebarView('games'); });
+if(openUsersListBtn) bindPointerTap(openUsersListBtn, () => { switchSidebarView('chats'); openUsersListBtn.style.color = "var(--primary)"; });
+document.querySelectorAll('.game-card').forEach(card => bindPointerTap(card, () => card.click()));
 
 const formatMentions = (text) => {
     if (!text) return text;
@@ -102,6 +103,22 @@ window.showToast = function(title, message, avatarUrl) {
   toast.innerHTML = `<img src="${imgUrl}" style="width: 40px; height: 40px; border-radius: 50%; object-fit: cover;"><div class="toast-content" style="display: flex; flex-direction: column; overflow: hidden;"><span style="font-weight: 600; font-size: 14px; margin-bottom: 2px;">${title}</span><span style="font-size: 12px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${message}</span></div>`;
   container.appendChild(toast); setTimeout(() => { toast.style.animation = "fadeOutToast 0.5s ease forwards"; setTimeout(() => { if(toast.parentElement) toast.remove(); }, 500); }, 4000);
 };
+
+function bindPointerTap(element, handler) {
+  if (!element || typeof handler !== 'function') return;
+  const wrapped = (event) => {
+    if (event.type === 'pointerup' || event.type === 'click' || event.type === 'touchend') {
+      event.preventDefault();
+      handler(event);
+    }
+  };
+  if (window.PointerEvent) {
+    element.addEventListener('pointerup', wrapped);
+  } else {
+    element.addEventListener('click', wrapped);
+    element.addEventListener('touchend', wrapped, { passive: false });
+  }
+}
 
 const emailGroup = document.getElementById("emailGroup"); const confirmPasswordGroup = document.getElementById("confirmPasswordGroup");
 const toggleAuthMode = (signup) => { 
@@ -285,7 +302,7 @@ async function renderSidebar() {
     myGroups.forEach(group => {
       const groupCard = document.createElement("div"); groupCard.className = "user-item";
       groupCard.innerHTML = `<div class="avatar-wrapper"><div class="avatar" style="background:var(--primary); display:flex; justify-content:center; align-items:center; color:white; font-weight:bold; font-size:18px;">${group.name.charAt(0)}</div></div><div class="user-meta"><span class="name">${group.name}</span><span class="handle">${group.members.length} members</span></div>`;
-      groupCard.onclick = () => openGroupChat(group.id, group.name, group.members.length);
+      bindPointerTap(groupCard, () => openGroupChat(group.id, group.name, group.members.length));
       groupFrag.appendChild(groupCard);
     });
   }
@@ -318,7 +335,7 @@ async function renderSidebar() {
       }
       const userCard = document.createElement("div"); userCard.className = "user-item";
       userCard.innerHTML = `<div class="avatar-wrapper"><img src="${avatarUrl}" class="avatar"><div class="status-dot ${isOnline}"></div></div><div class="user-meta"><span class="name" style="${unreadStyle}">${displayName}</span><span class="handle" style="${unreadStyle}">${previewText}</span></div>${meta?.unread ? '<div style="width:10px; height:10px; background:var(--primary); border-radius:50%; flex-shrink:0;"></div>' : ''}`;
-      userCard.onclick = () => { if(meta?.unread) updateDoc(doc(db, "users", auth.currentUser.uid), { [`chatMeta.${user.id}.unread`]: false }); openChat(user.id, displayName, avatarUrl, user.isOnline, user.lastSeen, user.publicKey); }
+      bindPointerTap(userCard, () => { if(meta?.unread) updateDoc(doc(db, "users", auth.currentUser.uid), { [`chatMeta.${user.id}.unread`]: false }); openChat(user.id, displayName, avatarUrl, user.isOnline, user.lastSeen, user.publicKey); });
       userFrag.appendChild(userCard);
     }
   }
@@ -605,9 +622,10 @@ window.triggerAddGroupMember = async () => { const group = allGroups.find(g => g
 window.triggerRemoveMember = async (groupId, memberId) => { if(confirm("Kick this user from the group?")) { try { await updateDoc(doc(db, "groups", groupId), { members: arrayRemove(memberId) }); showToast("Member Removed", "User was kicked from the group."); document.getElementById("groupSettingsModal").style.display = "none"; } catch(e) { alert("Failed to remove member. Are you sure you are the Admin?"); } } };
 window.triggerGroupAvatarUpload = () => { const input = document.createElement("input"); input.type = "file"; input.accept = "image/*"; input.onchange = async (e) => { const file = e.target.files[0]; if(!file) return; try { showToast("Uploading...", "Updating group icon"); const formData = new FormData(); formData.append("file", file); formData.append("upload_preset", UPLOAD_PRESET); const response = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`, { method: "POST", body: formData }); const data = await response.json(); await updateDoc(doc(db, "groups", currentChatId), { avatarUrl: data.secure_url }); document.getElementById("groupSettingsAvatar").src = data.secure_url; document.getElementById("chatTargetAvatar").src = data.secure_url; showToast("Success", "Group icon updated!"); } catch(err) { alert("Failed to update group image."); } }; input.click(); };
 
-launchGameMenuBtn.addEventListener("click", () => { gameSelectionModal.style.display = "flex"; }); closeGameSelectBtn.addEventListener("click", () => { gameSelectionModal.style.display = "none"; });
+bindPointerTap(launchGameMenuBtn, () => { gameSelectionModal.style.display = "flex"; });
+bindPointerTap(closeGameSelectBtn, () => { gameSelectionModal.style.display = "none"; });
 document.querySelectorAll(".game-select-btn").forEach(btn => {
-    btn.addEventListener("click", async () => {
+    bindPointerTap(btn, async () => {
         const gameType = btn.getAttribute("data-game"); gameSelectionModal.style.display = "none"; const timerValue = modalMsgTimerSelect ? parseInt(modalMsgTimerSelect.value) : 60000;
         if (gameType === 'doodle') {
             if (isCurrentChatGroup) { alert("Doodle is for 1v1 only!"); return; }
@@ -772,15 +790,15 @@ if (undoPDoodleBtn) { undoPDoodleBtn.addEventListener("click", async () => { if 
 
 // --- EXPLORE HUB ---
 const exploreBtn = document.getElementById("exploreBtn"); const exploreArea = document.getElementById("exploreArea"); const closeExploreBtn = document.getElementById("closeExploreBtn"); const exploreTabs = document.querySelectorAll(".explore-tab"); const exploreSections = document.querySelectorAll(".explore-section"); let globalChatUnsubscribe = null;
-exploreBtn.addEventListener("click", () => {
+bindPointerTap(exploreBtn, () => {
     history.pushState({ page: "explore" }, ""); exploreArea.style.display = "flex"; if(window.innerWidth <= 992) sidebar.classList.add("hidden");
     exploreTabs.forEach(t => t.classList.remove("active")); exploreSections.forEach(s => s.classList.remove("active"));
     document.querySelector('.explore-tab[data-target="exploreMemes"]').classList.add("active"); document.getElementById("exploreMemes").classList.add("active");
     initMemesFeed();
 });
-closeExploreBtn.addEventListener("click", () => { exploreArea.style.display = "none"; if(globalChatUnsubscribe) { globalChatUnsubscribe(); globalChatUnsubscribe = null; } if(window.innerWidth <= 992) sidebar.classList.remove("hidden"); });
+bindPointerTap(closeExploreBtn, () => { exploreArea.style.display = "none"; if(globalChatUnsubscribe) { globalChatUnsubscribe(); globalChatUnsubscribe = null; } if(window.innerWidth <= 992) sidebar.classList.remove("hidden"); });
 exploreTabs.forEach(tab => {
-    tab.addEventListener("click", () => {
+    bindPointerTap(tab, () => {
         exploreTabs.forEach(t => t.classList.remove("active")); exploreSections.forEach(s => s.classList.remove("active")); tab.classList.add("active");
         const target = tab.getAttribute("data-target"); document.getElementById(target).classList.add("active");
         if (target === "exploreLounge") initGlobalLounge();
