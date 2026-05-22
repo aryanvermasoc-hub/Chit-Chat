@@ -264,43 +264,56 @@ document.getElementById("showGroupsTab").addEventListener("click", () => { docum
 
 async function renderSidebar() {
   const usersListEl = document.getElementById("usersList"); const groupsListEl = document.getElementById("groupsList");
-  usersListEl.innerHTML = ""; if(groupsListEl) groupsListEl.innerHTML = "";
 
-  allGroups.forEach(group => {
-    if (!group.members.includes(auth.currentUser.uid)) return; 
-    const groupCard = document.createElement("div"); groupCard.className = "user-item";
-    groupCard.innerHTML = `<div class="avatar-wrapper"><div class="avatar" style="background:var(--primary); display:flex; justify-content:center; align-items:center; color:white; font-weight:bold; font-size:18px;">${group.name.charAt(0)}</div></div><div class="user-meta"><span class="name">${group.name}</span><span class="handle">${group.members.length} members</span></div>`;
-    groupCard.onclick = () => openGroupChat(group.id, group.name, group.members.length);
-    if(groupsListEl) groupsListEl.appendChild(groupCard);
-  });
-  if (allGroups.filter(g => g.members.includes(auth.currentUser.uid)).length === 0 && groupsListEl) {
-      groupsListEl.innerHTML = '<div style="padding: 20px; text-align: center; color: var(--text-muted); font-size: 13px;"><i class="fa-solid fa-users" style="font-size: 24px; margin-bottom: 10px; opacity: 0.5;"></i><br>You are not in any groups yet.</div>';
+  // --- BUILD GROUPS into a fragment first (no DOM touch yet) ---
+  const groupFrag = document.createDocumentFragment();
+  let myGroups = allGroups.filter(g => g.members.includes(auth.currentUser.uid));
+  if (myGroups.length === 0) {
+    const empty = document.createElement("div");
+    empty.style.cssText = "padding: 20px; text-align: center; color: var(--text-muted); font-size: 13px;";
+    empty.innerHTML = '<i class="fa-solid fa-users" style="font-size: 24px; margin-bottom: 10px; opacity: 0.5;"></i><br>You are not in any groups yet.';
+    groupFrag.appendChild(empty);
+  } else {
+    myGroups.forEach(group => {
+      const groupCard = document.createElement("div"); groupCard.className = "user-item";
+      groupCard.innerHTML = `<div class="avatar-wrapper"><div class="avatar" style="background:var(--primary); display:flex; justify-content:center; align-items:center; color:white; font-weight:bold; font-size:18px;">${group.name.charAt(0)}</div></div><div class="user-meta"><span class="name">${group.name}</span><span class="handle">${group.members.length} members</span></div>`;
+      groupCard.onclick = () => openGroupChat(group.id, group.name, group.members.length);
+      groupFrag.appendChild(groupCard);
+    });
   }
 
+  // --- BUILD USERS into a fragment — all awaits happen BEFORE touching the live DOM ---
   let sortedUsers = [...allUsers].filter(u => u.id !== auth.currentUser.uid);
-  if (sortedUsers.length === 0 && usersListEl) {
-      usersListEl.innerHTML = '<div style="padding: 20px; text-align: center; color: var(--text-muted); font-size: 13px;">No users found.</div>';
-  }
   sortedUsers.sort((a, b) => { let timeA = myUserData?.chatMeta?.[a.id]?.time || 0; let timeB = myUserData?.chatMeta?.[b.id]?.time || 0; return timeB - timeA; });
 
-  for (const user of sortedUsers) {
-    const displayName = user.fullName || user.username; 
-    const avatarUrl = generateAvatar(user, displayName); 
-    const isOnline = (user.isOnline && canSeePrivacy(user, 'privacyStatus')) ? "online" : "";
-    const meta = myUserData?.chatMeta?.[user.id]; const unreadStyle = meta?.unread ? "font-weight:700; color:var(--primary);" : "";
-    let previewText = meta?.text ? meta.text : `@${user.username}`;
-    
-    // Decrypt Sidebar items gracefully
-    if (previewText.startsWith("E2EE:")) { 
+  const userFrag = document.createDocumentFragment();
+  if (sortedUsers.length === 0) {
+    const empty = document.createElement("div");
+    empty.style.cssText = "padding: 20px; text-align: center; color: var(--text-muted); font-size: 13px;";
+    empty.innerText = "No users found.";
+    userFrag.appendChild(empty);
+  } else {
+    for (const user of sortedUsers) {
+      const displayName = user.fullName || user.username;
+      const avatarUrl = generateAvatar(user, displayName);
+      const isOnline = (user.isOnline && canSeePrivacy(user, 'privacyStatus')) ? "online" : "";
+      const meta = myUserData?.chatMeta?.[user.id]; const unreadStyle = meta?.unread ? "font-weight:700; color:var(--primary);" : "";
+      let previewText = meta?.text ? meta.text : `@${user.username}`;
+      // Decrypt Sidebar items gracefully
+      if (previewText.startsWith("E2EE:")) {
         const tempKey = await CryptoE2EE.getSharedKey(user.publicKey);
-        previewText = await CryptoE2EE.decrypt(previewText, tempKey); 
+        previewText = await CryptoE2EE.decrypt(previewText, tempKey);
+      }
+      const userCard = document.createElement("div"); userCard.className = "user-item";
+      userCard.innerHTML = `<div class="avatar-wrapper"><img src="${avatarUrl}" class="avatar"><div class="status-dot ${isOnline}"></div></div><div class="user-meta"><span class="name" style="${unreadStyle}">${displayName}</span><span class="handle" style="${unreadStyle}">${previewText}</span></div>${meta?.unread ? '<div style="width:10px; height:10px; background:var(--primary); border-radius:50%; flex-shrink:0;"></div>' : ''}`;
+      userCard.onclick = () => { if(meta?.unread) updateDoc(doc(db, "users", auth.currentUser.uid), { [`chatMeta.${user.id}.unread`]: false }); openChat(user.id, displayName, avatarUrl, user.isOnline, user.lastSeen, user.publicKey); }
+      userFrag.appendChild(userCard);
     }
-    
-    const userCard = document.createElement("div"); userCard.className = "user-item";
-    userCard.innerHTML = `<div class="avatar-wrapper"><img src="${avatarUrl}" class="avatar"><div class="status-dot ${isOnline}"></div></div><div class="user-meta"><span class="name" style="${unreadStyle}">${displayName}</span><span class="handle" style="${unreadStyle}">${previewText}</span></div>${meta?.unread ? '<div style="width:10px; height:10px; background:var(--primary); border-radius:50%; flex-shrink:0;"></div>' : ''}`;
-    userCard.onclick = () => { if(meta?.unread) updateDoc(doc(db, "users", auth.currentUser.uid), { [`chatMeta.${user.id}.unread`]: false }); openChat(user.id, displayName, avatarUrl, user.isOnline, user.lastSeen, user.publicKey); }
-    usersListEl.appendChild(userCard);
   }
+
+  // --- ATOMIC DOM SWAP — only now do we clear and repopulate the live DOM ---
+  if(groupsListEl) { groupsListEl.innerHTML = ""; groupsListEl.appendChild(groupFrag); }
+  usersListEl.innerHTML = ""; usersListEl.appendChild(userFrag);
 }
 
 const createGroupBtn = document.getElementById("createGroupBtn");
