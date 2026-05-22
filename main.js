@@ -1098,3 +1098,41 @@ if (updateAppBtn) {
     }
   });
 }
+// =========================================================
+// MOBILE KEYBOARD VIEWPORT FIX
+// =========================================================
+
+// 1. Modern API: Resizes the app dynamically when the keyboard opens
+if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', () => {
+        // Force the body to match the exact visible height above the keyboard
+        document.body.style.height = window.visualViewport.height + 'px';
+        
+        // Snap the window back to the top so the header isn't pushed off
+        window.scrollTo(0, 0);
+        
+        // Keep the chats scrolled to the bottom when the keyboard opens
+        const activeChat = document.getElementById("chatBox");
+        const globalChat = document.getElementById("globalChatBox");
+        if (activeChat) activeChat.scrollTop = activeChat.scrollHeight;
+        if (globalChat) globalChat.scrollTop = globalChat.scrollHeight;
+    });
+}
+
+// 2. iOS Safari Safety Catch: Stops Apple's aggressive auto-scrolling
+const chatInputs = [document.getElementById("msg"), document.getElementById("globalMsgInput")];
+chatInputs.forEach(input => {
+    if (input) {
+        input.addEventListener('focus', () => {
+            // Fire twice to catch the start and end of the keyboard slide animation
+            setTimeout(() => window.scrollTo(0, 0), 100);
+            setTimeout(() => window.scrollTo(0, 0), 300);
+        });
+        
+        // Reset the body height when the keyboard closes
+        input.addEventListener('blur', () => {
+            document.body.style.height = '100dvh';
+            window.scrollTo(0, 0);
+        });
+    }
+});
