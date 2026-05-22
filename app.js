@@ -225,8 +225,12 @@ function startMyProfileListener(uid) {
               if(preview === "🎮 GAME CHALLENGE" || preview === "🎨 DOODLE REQUEST") { showToast(`Challenge!`, `${sName} sent you a request.`, sAvatar); } 
               else {
                   if (preview.startsWith("E2EE:")) {
-                      const tempKey = await CryptoE2EE.getSharedKey(sender.publicKey);
-                      preview = await CryptoE2EE.decrypt(preview, tempKey); 
+                      try {
+                          const tempKey = await CryptoE2EE.getSharedKey(sender.publicKey);
+                          preview = await CryptoE2EE.decrypt(preview, tempKey); 
+                      } catch (cryptoErr) {
+                          preview = "🔒 Encrypted Message";
+                      }
                   }
                   showToast(`New Message from ${sName}`, preview, sAvatar);
               }
@@ -299,10 +303,14 @@ async function renderSidebar() {
       const isOnline = (user.isOnline && canSeePrivacy(user, 'privacyStatus')) ? "online" : "";
       const meta = myUserData?.chatMeta?.[user.id]; const unreadStyle = meta?.unread ? "font-weight:700; color:var(--primary);" : "";
       let previewText = meta?.text ? meta.text : `@${user.username}`;
-      // Decrypt Sidebar items gracefully
+     // Decrypt Sidebar items gracefully
       if (previewText.startsWith("E2EE:")) {
-        const tempKey = await CryptoE2EE.getSharedKey(user.publicKey);
-        previewText = await CryptoE2EE.decrypt(previewText, tempKey);
+        try {
+            const tempKey = await CryptoE2EE.getSharedKey(user.publicKey);
+            previewText = await CryptoE2EE.decrypt(previewText, tempKey);
+        } catch (cryptoErr) {
+            previewText = "🔒 Encrypted Message";
+        }
       }
       const userCard = document.createElement("div"); userCard.className = "user-item";
       userCard.innerHTML = `<div class="avatar-wrapper"><img src="${avatarUrl}" class="avatar"><div class="status-dot ${isOnline}"></div></div><div class="user-meta"><span class="name" style="${unreadStyle}">${displayName}</span><span class="handle" style="${unreadStyle}">${previewText}</span></div>${meta?.unread ? '<div style="width:10px; height:10px; background:var(--primary); border-radius:50%; flex-shrink:0;"></div>' : ''}`;
@@ -397,9 +405,20 @@ window.openChat = async (targetUid, targetName, targetAvatar, isTargetOnline, ta
   document.getElementById("chatBox").style.backgroundImage = "none"; 
   document.getElementById("chatTargetName").innerText = targetName; 
   document.getElementById("chatTargetAvatar").src = targetAvatar; 
-  
-  // Create AES Secret via ECDH
-  activeSharedKey = await CryptoE2EE.getSharedKey(targetPublicKey);
+
+  // --- FIX: Switch UI FIRST before crypto blocks the thread ---
+  emptyChatState.style.display = "none"; 
+  activeChatState.style.display = "flex"; 
+  if(window.innerWidth <= 992) { sidebar.classList.add("hidden"); history.pushState({ page: "chat" }, ""); }
+
+  // --- FIX: Wrap Crypto in try/catch ---
+  try {
+      activeSharedKey = await CryptoE2EE.getSharedKey(targetPublicKey);
+  } catch (error) {
+      console.error("Encryption blocked:", error);
+      showToast("Security Warning", "E2EE requires a secure HTTPS connection.");
+      activeSharedKey = null;
+  }
 
   const targetUser = allUsers.find(u => u.id === targetUid);
   const targetStatus = document.getElementById("chatTargetStatus");
@@ -408,7 +427,6 @@ window.openChat = async (targetUid, targetName, targetAvatar, isTargetOnline, ta
       else { targetStatus.classList.remove('online'); targetStatus.innerText = `Last seen: ${timeAgo(targetLastSeen)}`; }
   } else { targetStatus.classList.remove('online'); targetStatus.innerText = "Offline"; }
   
-  emptyChatState.style.display = "none"; activeChatState.style.display = "flex"; if(window.innerWidth <= 992) { sidebar.classList.add("hidden"); history.pushState({ page: "chat" }, ""); }
   loadMessages(); listenToTyping(); listenToChatStatus(targetName); 
 }
 
