@@ -23,8 +23,8 @@ messaging.onBackgroundMessage((payload) => {
 });
 // -----------------------------------------
 
-// Yahan version v2 kar diya gaya hai aur duplicate line hata di hai
-const CACHE_NAME = "chitchat-v1.1.7";
+
+const CACHE_NAME = "chitchat-v20";
 const ASSETS_TO_CACHE = [
   "./",
   "./index.html",
