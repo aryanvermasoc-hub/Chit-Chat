@@ -229,7 +229,7 @@ onAuthStateChanged(auth, async (user) => {
         Notification.requestPermission().then(async (permission) => {
             if (permission === 'granted') {
                 try {
-                    const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
+                   const registration = await navigator.serviceWorker.register('firebase-messaging-sw.js');
                     await navigator.serviceWorker.ready;
                     
                     // YAHAN PAR MAINE AAPKI CORRECTED KEY DAAL DI HAI 👇
@@ -269,8 +269,13 @@ function startMyProfileListener(uid) {
         for (let otherUid in data.chatMeta) {
           let newMeta = data.chatMeta[otherUid]; let oldMeta = myUserData.chatMeta ? myUserData.chatMeta[otherUid] : null;
           if (newMeta.unread && (!oldMeta || oldMeta.time !== newMeta.time)) {
-            if (currentChatId && targetUserUid === otherUid) { updateDoc(doc(db, "users", uid), { [`chatMeta.${otherUid}.unread`]: false }); } 
-            else {
+    const isSidebarCovering = window.innerWidth <= 992 && sidebar.style.display !== "none";
+    const isChatVisible = activeChatState.style.display === "flex" && !isSidebarCovering;
+    
+    if (currentChatId && targetUserUid === otherUid && isChatVisible) { 
+        updateDoc(doc(db, "users", uid), { [`chatMeta.${otherUid}.unread`]: false }); 
+    } 
+    else {
               const sender = allUsers.find(u => u.id === otherUid); const sName = sender ? (sender.fullName || sender.username) : "Someone"; const sAvatar = generateAvatar(sender, sName); let preview = newMeta.text;
               if(preview === "🎮 GAME CHALLENGE" || preview === "🎨 DOODLE REQUEST") { showToast(`Challenge!`, `${sName} sent you a request.`, sAvatar); } 
               else {
