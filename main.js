@@ -224,16 +224,27 @@ onAuthStateChanged(auth, async (user) => {
     await updateDoc(doc(db, "users", user.uid), { isOnline: true }); showToast("Welcome Back!", "You are securely connected.");
     window.addEventListener("beforeunload", () => updateDoc(doc(db, "users", user.uid), { isOnline: false, lastSeen: Date.now() }));
     
-    // --- NOTIFICATION POP-UP CODE ---
+   // --- NOTIFICATION POP-UP CODE ---
     if (typeof Notification !== 'undefined' && 'serviceWorker' in navigator) {
-    Notification.requestPermission().then(async (permission) => {
-        if (permission === 'granted') {
-            try {
-                const token = await getToken(messaging, { vapidKey: 'BBJgewscsRgCdrhz8e5MOgL1H_OSO3ASN5m9w81HdhpUQdWQzzNdhQFpOXpxEHQn_tqklSTDETvtZHnmbYVfabI' });
-                if (token) await updateDoc(doc(db, "users", user.uid), { fcmToken: token });
-            } catch(tokenErr) { console.log("FCM token error:", tokenErr); }
-        }
-    }).catch(err => console.log("Notification error:", err));
+        Notification.requestPermission().then(async (permission) => {
+            if (permission === 'granted') {
+                try {
+                    // 1. Pehle Service Worker register karein
+                    const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
+                    
+                    // 2. SABSE ZAROORI: Uske puri tarah 'Ready' hone ka wait karein
+                    await navigator.serviceWorker.ready;
+                    
+                    // 3. Ab token maangein aur Firebase ko registration pass karein
+                    const token = await getToken(messaging, { 
+                        vapidKey: 'BBJgewscsRgCdrhz8e5MOgL1H_OSO3ASN5m9w81HdhpUQdWQzzNdhQFpOXpxEHQn_tqklSTDETvtZHnmbYVfabI',
+                        serviceWorkerRegistration: registration 
+                    });
+                    
+                    if (token) await updateDoc(doc(db, "users", user.uid), { fcmToken: token });
+                } catch(tokenErr) { console.log("FCM token error:", tokenErr); }
+            }
+        }).catch(err => console.log("Notification error:", err));
     }
     // --------------------------------
 
