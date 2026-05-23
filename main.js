@@ -687,7 +687,34 @@ searchInput.addEventListener("input", (e) => {
 });
 const fileInput = document.createElement("input"); fileInput.type = "file"; fileInput.accept = "image/*"; fileInput.style.display = "none"; document.body.appendChild(fileInput);
 document.querySelector('.fa-paperclip').parentElement.addEventListener("click", () => fileInput.click());
-fileInput.addEventListener("change", async (e) => { const file = e.target.files[0]; if (!file || !currentChatId) return; const originalHtml = sendBtn.innerHTML; sendBtn.innerHTML = "<i class='fa-solid fa-spinner fa-spin'></i>"; sendBtn.disabled = true; try { const formData = new FormData(); formData.append("file", file); formData.append("upload_preset", UPLOAD_PRESET); const response = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`, { method: "POST", body: formData }); const data = await response.json(); const timerValue = modalMsgTimerSelect ? parseInt(modalMsgTimerSelect.value) : 60000; const optimizedUrl = data.secure_url.replace('/upload/', '/upload/q_auto,f_auto,w_600/'); const payload = { text: "", imageUrl: optimizedUrl, imagePublicId: data.public_id, sender: auth.currentUser.uid, senderName: document.getElementById("myName").innerText, time: Date.now(), isEdited: false, isDeleted: false }; if (timerValue > 0) payload.timerDuration = timerValue; await addDoc(collection(db, "chats", currentChatId, "messages"), payload); } catch (err) { alert("Upload failed: " + err.message); } finally { sendBtn.innerHTML = originalHtml; sendBtn.disabled = false; fileInput.value = ""; } });
+fileInput.addEventListener("change", async (e) => { 
+    const file = e.target.files[0]; if (!file || !currentChatId) return; 
+    const originalHtml = sendBtn.innerHTML; sendBtn.innerHTML = "<i class='fa-solid fa-spinner fa-spin'></i>"; sendBtn.disabled = true; 
+    try { 
+        const formData = new FormData(); formData.append("file", file); formData.append("upload_preset", UPLOAD_PRESET); 
+        const response = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`, { method: "POST", body: formData }); 
+        const data = await response.json(); 
+        const timerValue = modalMsgTimerSelect ? parseInt(modalMsgTimerSelect.value) : 60000; 
+        const optimizedUrl = data.secure_url.replace('/upload/', '/upload/q_auto,f_auto,w_600/'); 
+        const payload = { text: "", imageUrl: optimizedUrl, imagePublicId: data.public_id, sender: auth.currentUser.uid, senderName: document.getElementById("myName").innerText, time: Date.now(), isEdited: false, isDeleted: false }; 
+        if (timerValue > 0) payload.timerDuration = timerValue; 
+        
+        // 1. Save the actual message
+        await addDoc(collection(db, "chats", currentChatId, "messages"), payload); 
+
+        // 2. NEW: Update the metadata so the notification actually triggers!
+        if (!isCurrentChatGroup) {
+            try {
+                await setDoc(doc(db, "users", auth.currentUser.uid), { chatMeta: { [targetUserUid]: { time: Date.now(), text: `You sent an image 📷`, unread: false } } }, { merge: true });
+                await setDoc(doc(db, "users", targetUserUid), { chatMeta: { [auth.currentUser.uid]: { time: Date.now(), text: `Sent an image 📷`, unread: true } } }, { merge: true });
+            } catch(err) {}
+        }
+    } catch (err) { 
+        alert("Upload failed: " + err.message); 
+    } finally { 
+        sendBtn.innerHTML = originalHtml; sendBtn.disabled = false; fileInput.value = ""; 
+    } 
+});
 document.querySelector(".chat-header").addEventListener("click", (e) => {
     if (e.target.closest('.mobile-back-btn') || e.target.closest('#launchGameMenuBtn') || e.target.closest('#chatSettingsBtn') || e.target.closest('#chatDoodleBtn') || e.target.closest('#ghostModeBtn')) return;
     if (isCurrentChatGroup && currentChatId) {
