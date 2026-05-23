@@ -274,16 +274,17 @@ function startMyProfileListener(uid) {
 
           if (newMeta.unread && (!oldMeta || oldMeta.time !== newMeta.time)) {
             try {
-                const sidebarEl = document.getElementById("sidebar");
+                // 1. Safe DOM Checks that will NEVER crash if an element is missing
                 const activeChatEl = document.getElementById("activeChatState");
                 const gameAreaEl = document.getElementById("activeGameArea");
-                const reelsAreaEl = document.getElementById("reelsArea");
+                const sidebarEl = document.getElementById("sidebar");
 
-                const isSidebarCovering = window.innerWidth <= 992 && sidebarEl && !sidebarEl.classList.contains("hidden");
+                // Correctly checks if sidebar is open on mobile
+                const isSidebarCovering = window.innerWidth <= 992 && sidebarEl && sidebarEl.style.display !== "none";
                 const isGameCovering = gameAreaEl && gameAreaEl.style.display === "flex";
-                const isReelsCovering = reelsAreaEl && reelsAreaEl.style.display === "flex";
                 
-                const isChatVisible = activeChatEl && activeChatEl.style.display === "flex" && !isSidebarCovering && !isGameCovering && !isReelsCovering;
+                // Chat is ONLY visible if it is open AND nothing is covering it
+                const isChatVisible = activeChatEl && activeChatEl.style.display === "flex" && !isSidebarCovering && !isGameCovering;
 
                 if (currentChatId && targetUserUid === otherUid && isChatVisible) {
                   // You are looking at the chat -> Just mark as read
@@ -295,35 +296,39 @@ function startMyProfileListener(uid) {
                   const sAvatar = generateAvatar(sender, sName);
                   let preview = newMeta.text;
 
-                  // 1. Decrypt the message so it doesn't just say "Secure Message"
+                  // Safely decrypt the message so the notification shows real text
                   if (preview === "🎮 GAME CHALLENGE" || preview === "🎨 DOODLE REQUEST") {
                       preview = `${sName} sent you a request.`;
                   } else if (preview.startsWith("E2EE:")) {
                       try {
-                          const tempKey = await CryptoE2EE.getSharedKey(sender.publicKey);
-                          preview = await CryptoE2EE.decrypt(preview, tempKey); 
+                          if (sender && sender.publicKey) {
+                              const tempKey = await CryptoE2EE.getSharedKey(sender.publicKey);
+                              preview = await CryptoE2EE.decrypt(preview, tempKey); 
+                          } else {
+                              preview = "🔒 Secure Message";
+                          }
                       } catch (cryptoErr) {
                           preview = "🔒 Secure Message";
                       }
                   }
                   
-                  // 2. Show the in-app HTML Toast
+                  // 2. Trigger the in-app HTML Toast
                   showToast(`New Message from ${sName}`, preview, sAvatar);
                   
-                  // 3. FORCE THE NATIVE ANDROID NOTIFICATION
+                  // 3. Trigger the Native Android Phone Notification (with vibration)
                   if (Notification.permission === 'granted' && 'serviceWorker' in navigator) {
                       navigator.serviceWorker.ready.then((registration) => {
                           registration.showNotification(`New message from ${sName}`, {
                               body: preview,
                               icon: sAvatar || './icon-192.png',
                               badge: './icon-192.png',
-                              vibrate: [200, 100, 200] // Makes the phone buzz
+                              vibrate: [200, 100, 200]
                           });
                       });
                   }
                 }
             } catch(err) {
-                console.error("Notification Error Prevented:", err);
+                console.error("Notification Safety Net Caught an Error:", err);
             }
           }
         }
