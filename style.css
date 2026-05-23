@@ -132,12 +132,13 @@ body { background: var(--bg-base); color: var(--text-main); display: flex; justi
 .messages-container { flex: 1; overflow-y: auto; padding: 30px; display: flex; flex-direction: column; gap: 20px; z-index: 1; position: relative; }
 
 /* New Fixed Wallpaper Class */
+/* Fixed Wallpaper Class */
 .chat-wallpaper {
-  position: fixed;
+  position: absolute;  /* Changed from fixed */
   top: 0;
   left: 0;
-  width: 100vw;
-  height: 100vh; /* Ignores visual viewport shrinking */
+  width: 100%;         /* Changed from 100vw */
+  height: 100%;        /* Changed from 100vh */
   z-index: 0;
   background-size: cover;
   background-position: center;
