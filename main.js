@@ -274,29 +274,33 @@ function startMyProfileListener(uid) {
 
           if (newMeta.unread && (!oldMeta || oldMeta.time !== newMeta.time)) {
             try {
-                // 1. Safe DOM Checks that will NEVER crash if an element is missing
+                // 1. Check EVERY overlay screen to see what you are currently looking at
                 const activeChatEl = document.getElementById("activeChatState");
                 const gameAreaEl = document.getElementById("activeGameArea");
+                const exploreAreaEl = document.getElementById("exploreArea");
+                const doodleAreaEl = document.getElementById("privateDoodleArea");
                 const sidebarEl = document.getElementById("sidebar");
 
-                // Correctly checks if sidebar is open on mobile
-                const isSidebarCovering = window.innerWidth <= 992 && sidebarEl && sidebarEl.style.display !== "none";
                 const isGameCovering = gameAreaEl && gameAreaEl.style.display === "flex";
+                const isExploreCovering = exploreAreaEl && exploreAreaEl.style.display === "flex";
+                const isDoodleCovering = doodleAreaEl && doodleAreaEl.style.display === "flex";
+                const isSidebarCovering = window.innerWidth <= 992 && sidebarEl && sidebarEl.style.display !== "none";
                 
-                // Chat is ONLY visible if it is open AND nothing is covering it
-                const isChatVisible = activeChatEl && activeChatEl.style.display === "flex" && !isSidebarCovering && !isGameCovering;
+                // Chat is ONLY truly visible if it is open AND no other screens are blocking it
+                const isChatVisible = activeChatEl && activeChatEl.style.display === "flex" 
+                    && !isGameCovering && !isExploreCovering && !isDoodleCovering && !isSidebarCovering;
 
                 if (currentChatId && targetUserUid === otherUid && isChatVisible) {
-                  // You are looking at the chat -> Just mark as read
+                  // You are physically looking at their chat -> Just mark as read
                   await updateDoc(doc(db, "users", uid), { [`chatMeta.${otherUid}.unread`]: false });
                 } else {
-                  // You are NOT looking at the chat -> SHOW NOTIFICATIONS
+                  // You are NOT looking at the chat -> SHOW ALL NOTIFICATIONS
                   const sender = allUsers.find(u => u.id === otherUid);
                   const sName = sender ? (sender.fullName || sender.username) : "Someone";
                   const sAvatar = generateAvatar(sender, sName);
                   let preview = newMeta.text;
 
-                  // Safely decrypt the message so the notification shows real text
+                  // Safely decrypt the message
                   if (preview === "🎮 GAME CHALLENGE" || preview === "🎨 DOODLE REQUEST") {
                       preview = `${sName} sent you a request.`;
                   } else if (preview.startsWith("E2EE:")) {
@@ -312,19 +316,20 @@ function startMyProfileListener(uid) {
                       }
                   }
                   
-                  // 2. Trigger the in-app HTML Toast
+                  // 2. Trigger the in-app HTML Toast (Slide down from top)
                   showToast(`New Message from ${sName}`, preview, sAvatar);
                   
-                  // 3. Trigger the Native Android Phone Notification (with vibration)
+                  // 3. Trigger Native Android Phone Notification
                   if (Notification.permission === 'granted' && 'serviceWorker' in navigator) {
                       navigator.serviceWorker.ready.then((registration) => {
                           registration.showNotification(`New message from ${sName}`, {
                               body: preview,
-                              icon: sAvatar || './icon-192.png',
+                              // CRITICAL: We MUST use a local icon here. Android blocks external URLs!
+                              icon: './icon-192.png', 
                               badge: './icon-192.png',
-                              vibrate: [200, 100, 200]
+                              vibrate: [200, 100, 200] // Buzzes the phone
                           });
-                      });
+                      }).catch(e => console.log("SW notification blocked:", e));
                   }
                 }
             } catch(err) {
