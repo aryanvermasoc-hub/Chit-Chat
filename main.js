@@ -269,14 +269,23 @@ function startMyProfileListener(uid) {
         for (let otherUid in data.chatMeta) {
           let newMeta = data.chatMeta[otherUid]; let oldMeta = myUserData.chatMeta ? myUserData.chatMeta[otherUid] : null;
           if (newMeta.unread && (!oldMeta || oldMeta.time !== newMeta.time)) {
-    const isSidebarCovering = window.innerWidth <= 992 && sidebar.style.display !== "none";
-    const isChatVisible = activeChatState.style.display === "flex" && !isSidebarCovering;
     
+    // Fix 1: Properly check if the mobile sidebar is open using its class
+    const isSidebarCovering = window.innerWidth <= 992 && !sidebar.classList.contains("hidden");
+    
+    // Fix 2: Check if Games or Reels are currently covering the screen
+    const isGameCovering = document.getElementById("activeGameArea").style.display === "flex";
+    const isReelsCovering = document.getElementById("reelsArea").style.display === "flex";
+    
+    // Chat is ONLY truly visible if it's open AND nothing else is covering it
+    const isChatVisible = activeChatState.style.display === "flex" && !isSidebarCovering && !isGameCovering && !isReelsCovering;
+
     if (currentChatId && targetUserUid === otherUid && isChatVisible) { 
         updateDoc(doc(db, "users", uid), { [`chatMeta.${otherUid}.unread`]: false }); 
     } 
     else {
-              const sender = allUsers.find(u => u.id === otherUid); const sName = sender ? (sender.fullName || sender.username) : "Someone"; const sAvatar = generateAvatar(sender, sName); let preview = newMeta.text;
+        const sender = allUsers.find(u => u.id === otherUid);
+         const sName = sender ? (sender.fullName || sender.username) : "Someone"; const sAvatar = generateAvatar(sender, sName); let preview = newMeta.text;
               if(preview === "🎮 GAME CHALLENGE" || preview === "🎨 DOODLE REQUEST") { showToast(`Challenge!`, `${sName} sent you a request.`, sAvatar); } 
               else {
                   if (preview.startsWith("E2EE:")) {
