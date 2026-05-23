@@ -624,7 +624,7 @@ async function sendMessage() {
   }
   try { await addDoc(collection(db, "chats", currentChatId, "messages"), payload); } catch (e) { showToast("Error", "Message failed to send."); }
 }
-sendBtn.addEventListener("click", sendMessage); msgInput.addEventListener("keypress", (e) => { if (e.key === "Enter") sendMessage(); });
+sendBtn.addEventListener("click", sendMessage); msgInput.addEventListener("keypress", (e) => { if (e.key === "Enter") { e.preventDefault(); sendMessage(); } });
 searchInput.addEventListener("input", (e) => { 
     const term = e.target.value.toLowerCase(); let hasVisible = false;
     document.querySelectorAll(".user-item").forEach(item => { const match = item.innerText.toLowerCase().includes(term); item.style.display = match ? "flex" : "none"; if (match) hasVisible = true; }); 
@@ -884,7 +884,7 @@ async function sendGlobalMessage() {
     if (replyingToMsg && replyingToMsg.context === 'global') { payload.replyToId = replyingToMsg.id; payload.replyToText = replyingToMsg.text; payload.replyToName = replyingToMsg.name; document.getElementById("cancelReplyBtn").click(); }
     try { await addDoc(collection(db, "global_lounge"), payload); } catch(e) { showToast("Error", "Message failed to send."); } 
 }
-sendGlobalBtn.addEventListener("click", sendGlobalMessage); globalMsgInput.addEventListener("keypress", (e) => { if(e.key === "Enter") sendGlobalMessage(); });
+sendGlobalBtn.addEventListener("click", sendGlobalMessage); globalMsgInput.addEventListener("keypress", (e) => { if(e.key === "Enter") { e.preventDefault(); sendGlobalMessage(); } });
 
 const lbGameSelect = document.getElementById("lbGameSelect"); const leaderboardList = document.getElementById("leaderboardList");
 async function initLeaderboard() { lbGameSelect.addEventListener("change", fetchLeaderboard); fetchLeaderboard(); }
