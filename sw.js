@@ -24,7 +24,7 @@ messaging.onBackgroundMessage((payload) => {
 // -----------------------------------------
 
 
-const CACHE_NAME = "chitchat-v32";
+const CACHE_NAME = "chitchat-v33";
 const ASSETS_TO_CACHE = [
   "./",
   "./index.html",
