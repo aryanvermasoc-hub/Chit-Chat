@@ -4,11 +4,11 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, interactive-widget=resizes-content">
   <title>Chit-Chat | Premium Messaging & Games</title>
-  <link rel="manifest" href="manifest.json">
+  <link rel="manifest" href="./manifest.json">
   <meta name="theme-color" content="#8b5cf6">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <link rel="apple-touch-icon" href="icon-192.png">
+  <link rel="apple-touch-icon" href="./icon-192.png">
 
 <script>
     // Temporarily nuke the Service Worker to force a fresh load
@@ -23,13 +23,10 @@
       });
     }
   </script>
-  <link rel="stylesheet" href="style.css?v=25">
+  <link rel="stylesheet" href="./style.css?v=25">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-  <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
-  <script type="text/javascript">
-      (function() { emailjs.init("zVF_B0qSjM3rriZca"); })();
-  </script>
+  
 </head>
 <body>
   
@@ -39,7 +36,7 @@
   <div id="authScreen" class="screen active">
     <div class="auth-container">
       <div class="glass-card auth-card">
-        <div class="auth-header">
+       <div class="auth-header" style="display: flex; flex-direction: column; align-items: center; text-align: center;">
           <div class="logo-box"><i class="fa-regular fa-comments"></i></div>
           <h2>Chit-Chat</h2><p>Connect securely, play instantly.</p>
         </div>
@@ -374,6 +371,6 @@
     </div>
   </div>
   
-  <script type="module" src="main.js"></script>
+  <script type="module" src="./main.js"></script>
 </body>
 </html>

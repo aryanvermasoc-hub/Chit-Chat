@@ -142,7 +142,19 @@ authActionBtn.addEventListener("click", async () => {
           if (!usernameSnapshot.empty) { alert("This username is already taken. Please choose a different one."); authActionBtn.innerText = "Create Account"; return; }
           generatedOTP = Math.floor(100000 + Math.random() * 900000).toString(); 
           pendingSignupData = { realEmail, password, username, fullName };
-          await emailjs.send("service_z5e6d5x", "template_fks6dsp", { to_name: fullName, to_email: realEmail, otp_code: generatedOTP });
+          const response = await fetch('/api/sendOtp', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+        to_name: fullName,
+        to_email: realEmail,
+        otp_code: generatedOTP
+    })
+});
+
+if (!response.ok) {
+    throw new Error("Failed to send OTP email.");
+}
           document.getElementById("otpModal").style.display = "flex"; 
           authActionBtn.innerText = "Create Account"; 
       } else {
