@@ -520,7 +520,8 @@ function loadMessages() {
       if (isMe) lastMyMsg = msg; if (msg.isExpired) continue;
       const pDoodleArea = document.getElementById("privateDoodleArea"); const isDoodleOpen = pDoodleArea && pDoodleArea.style.display === "flex";
       const activeGameArea = document.getElementById("activeGameArea"); const isGameOpen = activeGameArea && activeGameArea.style.display === "flex";
-      const isSidebarCoveringChat = window.innerWidth <= 992 && !sidebar.classList.contains("hidden"); const isChatCurrentlyVisible = activeChatState.style.display === "flex" && document.visibilityState === 'visible' && !isSidebarCoveringChat;
+const isSidebarCoveringChat = window.innerWidth <= 992 && sidebar.style.display !== "none";
+        const isChatCurrentlyVisible = activeChatState.style.display === "flex" && document.visibilityState === 'visible' && !isSidebarCoveringChat;
 
       if (!isMe && !msg.seenAt && !isDoodleOpen && !isGameOpen && isChatCurrentlyVisible) { const updateData = { seenAt: Date.now() }; if (msg.timerDuration) { updateData.expiresAt = Date.now() + msg.timerDuration; } updateDoc(doc(db, "chats", currentChatId, "messages", msgId), updateData).catch(e=>{}); }
       if (msg.expiresAt) {
