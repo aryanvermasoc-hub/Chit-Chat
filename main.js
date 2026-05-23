@@ -115,9 +115,12 @@ function timeAgo(ms) { if (!ms) return ""; const seconds = Math.floor((Date.now(
 
 window.showToast = function(title, message, avatarUrl) {
   const container = document.getElementById("toastContainer"); if(!container) return;
-  const imgUrl = avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(title)}&background=8b5cf6&color=fff`;
   const toast = document.createElement("div"); toast.className = "toast";
-  toast.innerHTML = `<img src="${imgUrl}" style="width: 40px; height: 40px; border-radius: 50%; object-fit: cover;"><div class="toast-content" style="display: flex; flex-direction: column; overflow: hidden;"><span style="font-weight: 600; font-size: 14px; margin-bottom: 2px;">${title}</span><span style="font-size: 12px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${message}</span></div>`;
+  // Profile pic sirf tab dikhao jab kisi user ka avatarUrl explicitly pass ho
+  const leftHtml = avatarUrl
+    ? `<img src="${avatarUrl}" style="width: 40px; height: 40px; border-radius: 50%; object-fit: cover; flex-shrink: 0;">`
+    : `<div class="toast-sys-icon"><i class="fa-solid fa-bell"></i></div>`;
+  toast.innerHTML = `${leftHtml}<div class="toast-content" style="display: flex; flex-direction: column; overflow: hidden;"><span style="font-weight: 600; font-size: 14px; margin-bottom: 2px;">${title}</span><span style="font-size: 12px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${message}</span></div>`;
   container.appendChild(toast); setTimeout(() => { toast.style.animation = "fadeOutToast 0.5s ease forwards"; setTimeout(() => { if(toast.parentElement) toast.remove(); }, 500); }, 4000);
 };
 
