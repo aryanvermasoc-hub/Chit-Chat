@@ -523,6 +523,8 @@ body.theme-light .chat-area { background: rgba(255, 255, 255, 0.6) !important; }
 /* 🚨 AGGRESSIVE FIX: Inputs, Bio, & Forms (Overrides HTML inline styles) 🚨 */
 body.theme-light input, 
 body.theme-light textarea,
+body.theme-light select,
+body.theme-light .difficulty-select,
 body.theme-light #settingsBio,
 body.theme-light #profileBioEdit,
 body.theme-light .input-group,
@@ -559,17 +561,20 @@ body.theme-light .news-feed-card,
 body.theme-light .meme-card, 
 body.theme-light .lb-rank-card, 
 body.theme-light .explore-tab,
-body.theme-light .challenge-bubble {
+body.theme-light .challenge-bubble,
+body.theme-light .game-select-btn,
+body.theme-light .game-header {
     background: #ffffff !important;
     border: 1px solid var(--glass-border) !important;
     color: var(--text-main) !important;
 }
+body.theme-light .game-select-btn i { color: var(--primary) !important; }
+body.theme-light .auth-tabs button.active { background: rgba(0,0,0,0.05) !important; }
 body.theme-light .explore-tab:hover { background: #f1f5f9 !important; }
 body.theme-light .explore-tab.active { background: rgba(99, 102, 241, 0.1) !important; color: var(--primary) !important; }
 body.theme-light .challenge-bubble h4, body.theme-light .meme-card h4 { color: var(--text-main) !important; }
 
-/* Preserve White Text ONLY on Primary Buttons & Sent Messages */
-body.theme-light .primary-btn:not(#settingsChangePfpBtn):not(#removeWallpaperBtn), 
+/* Preserve White Text ONLY on Sent Messages & Accept Buttons */
 body.theme-light .btn-accept, 
 body.theme-light .message-wrapper.sent .msg-bubble,
 body.theme-light .message-wrapper.sent .msg-bubble span {
@@ -607,24 +612,28 @@ body.theme-black .game-overlay-container {
     border-color: var(--glass-border) !important;
 }
 
-/* Invert Buttons for Visibility */
-body.theme-black .primary-btn, 
+/* Invert Buttons for Visibility (Excludes inline colored buttons) */
+body.theme-black .primary-btn:not([style*="background"]), 
 body.theme-black #chatToggleBtn, 
 body.theme-black .btn-accept {
     background: #ffffff !important;
     color: #000000 !important;
     font-weight: bold !important;
 }
-body.theme-black .primary-btn i { color: #000000 !important; }
+body.theme-black .primary-btn:not([style*="background"]) i { color: #000000 !important; }
 
 /* Darken Cards & Inputs */
 body.theme-black .game-card, 
+body.theme-black .game-select-btn,
 body.theme-black .input-group, 
 body.theme-black input, 
 body.theme-black textarea,
+body.theme-black select,
+body.theme-black .difficulty-select,
 body.theme-black #settingsBio { 
     background: #0a0a0a !important; 
     border-color: #222 !important; 
+    color: #ffffff !important;
 }
 /* =========================================================
    MOUSE-ONLY HOVER EFFECTS (Fixes sticky mobile buttons)
@@ -909,4 +918,66 @@ body.theme-black #settingsBio {
 .icon-btn:active {
   transform: scale(0.88);
   transition: transform 0.1s ease;
+}
+/* =========================================================
+   FIX: BROWSER AUTOFILL WHITE BOX ISSUE
+   ========================================================= */
+input:-webkit-autofill,
+input:-webkit-autofill:hover, 
+input:-webkit-autofill:focus, 
+input:-webkit-autofill:active {
+    /* Use a transition trick to prevent the background color from changing */
+    transition: background-color 5000s ease-in-out 0s !important;
+    
+    /* Keep the text color white for dark themes */
+    -webkit-text-fill-color: white !important;
+}
+
+/* Ensure Light Theme autofill text stays dark */
+body.theme-light input:-webkit-autofill,
+body.theme-light input:-webkit-autofill:hover, 
+body.theme-light input:-webkit-autofill:focus, 
+body.theme-light input:-webkit-autofill:active {
+    -webkit-text-fill-color: #0f172a !important;
+}
+/* =========================================================
+   SYSTEM NOTIFICATIONS (Centered, No Profile Pic)
+   ========================================================= */
+.system-notification {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  margin: 10px 0;
+  padding: 0 20px;
+}
+
+.system-notification .sys-text {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 500;
+  padding: 5px 14px;
+  border-radius: 14px;
+  text-align: center;
+  border: 1px solid var(--glass-border);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  max-width: 85%;
+  word-break: break-word;
+}
+
+/* System toast icon (bell) — replaces profile pic for non-message notifications */
+.toast-sys-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: rgba(139, 92, 246, 0.15);
+  border: 1px solid rgba(139, 92, 246, 0.3);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-shrink: 0;
+  color: var(--primary);
+  font-size: 16px;
 }
