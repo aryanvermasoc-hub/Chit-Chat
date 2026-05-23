@@ -262,48 +262,64 @@ async function loadNewsFeed() {
 
 function startMyProfileListener(uid) {
   if(myProfileUnsubscribe) myProfileUnsubscribe();
+  
+  // Note the 'async' keyword added here to handle any database updates safely
   myProfileUnsubscribe = onSnapshot(doc(db, "users", uid), async (docSnap) => {
     if (docSnap.exists()) {
       const data = docSnap.data();
+      
       if (myUserData && data.chatMeta) {
         for (let otherUid in data.chatMeta) {
-          let newMeta = data.chatMeta[otherUid]; let oldMeta = myUserData.chatMeta ? myUserData.chatMeta[otherUid] : null;
-          if (newMeta.unread && (!oldMeta || oldMeta.time !== newMeta.time)) {
-    
-    // Fix 1: Properly check if the mobile sidebar is open using its class
-    const isSidebarCovering = window.innerWidth <= 992 && !sidebar.classList.contains("hidden");
-    
-    // Fix 2: Check if Games or Reels are currently covering the screen
-    const isGameCovering = document.getElementById("activeGameArea").style.display === "flex";
-    const isReelsCovering = document.getElementById("reelsArea").style.display === "flex";
-    
-    // Chat is ONLY truly visible if it's open AND nothing else is covering it
-    const isChatVisible = activeChatState.style.display === "flex" && !isSidebarCovering && !isGameCovering && !isReelsCovering;
+          let newMeta = data.chatMeta[otherUid];
+          let oldMeta = myUserData.chatMeta ? myUserData.chatMeta[otherUid] : null;
 
-    if (currentChatId && targetUserUid === otherUid && isChatVisible) { 
-        updateDoc(doc(db, "users", uid), { [`chatMeta.${otherUid}.unread`]: false }); 
-    } 
-    else {
-        const sender = allUsers.find(u => u.id === otherUid);
-         const sName = sender ? (sender.fullName || sender.username) : "Someone"; const sAvatar = generateAvatar(sender, sName); let preview = newMeta.text;
-              if(preview === "🎮 GAME CHALLENGE" || preview === "🎨 DOODLE REQUEST") { showToast(`Challenge!`, `${sName} sent you a request.`, sAvatar); } 
-              else {
-                  if (preview.startsWith("E2EE:")) {
-                      try {
-                          const tempKey = await CryptoE2EE.getSharedKey(sender.publicKey);
-                          preview = await CryptoE2EE.decrypt(preview, tempKey); 
-                      } catch (cryptoErr) {
-                          preview = "🔒 Encrypted Message";
+          if (newMeta.unread && (!oldMeta || oldMeta.time !== newMeta.time)) {
+            try {
+                // 1. Bulletproof screen checks using direct queries
+                const sidebarEl = document.getElementById("sidebar");
+                const activeChatEl = document.getElementById("activeChatState");
+                const gameAreaEl = document.getElementById("activeGameArea");
+                const reelsAreaEl = document.getElementById("reelsArea");
+
+                const isSidebarCovering = window.innerWidth <= 992 && sidebarEl && !sidebarEl.classList.contains("hidden");
+                const isGameCovering = gameAreaEl && gameAreaEl.style.display === "flex";
+                const isReelsCovering = reelsAreaEl && reelsAreaEl.style.display === "flex";
+                
+                // Chat is ONLY visible if it is flex AND nothing is covering it
+                const isChatVisible = activeChatEl && activeChatEl.style.display === "flex" && !isSidebarCovering && !isGameCovering && !isReelsCovering;
+
+                if (currentChatId && targetUserUid === otherUid && isChatVisible) {
+                  // You are actively looking at the chat right now
+                  await updateDoc(doc(db, "users", uid), { [`chatMeta.${otherUid}.unread`]: false });
+                } else {
+                  // You are NOT looking at the chat -> SHOW THE TOAST
+                  const sender = allUsers.find(u => u.id === otherUid);
+                  const sName = sender ? (sender.fullName || sender.username) : "Someone";
+                  const sAvatar = generateAvatar(sender, sName);
+                  let preview = newMeta.text;
+
+                  if (preview === "🎮 GAME CHALLENGE" || preview === "🎨 DOODLE REQUEST") {
+                      showToast(`Challenge!`, `${sName} sent you a request.`, sAvatar);
+                  } else {
+                      // Safe fallback to prevent decryption crashes from breaking the toast
+                      if (preview.startsWith("E2EE:") || preview.startsWith("U2FsdGVkX1") || preview.startsWith("U2Fz")) {
+                          preview = "🔒 Secure Message"; 
                       }
+                      showToast(`New Message from ${sName}`, preview, sAvatar);
                   }
-                  showToast(`New Message from ${sName}`, preview, sAvatar);
-              }
+                }
+            } catch(err) {
+                console.error("Toast Notification Error Prevented:", err);
             }
           }
         }
       }
-      myUserData = data; const displayName = data.fullName || data.username;
-      document.getElementById("myName").innerText = displayName; document.getElementById("myUsername").innerText = `@${data.username}`; document.getElementById("myAvatar").src = generateAvatar(data, displayName);
+      
+      myUserData = data;
+      const displayName = data.fullName || data.username;
+      document.getElementById("myName").innerText = displayName;
+      document.getElementById("myUsername").innerText = `@${data.username}`;
+      document.getElementById("myAvatar").src = generateAvatar(data, displayName);
       if(allUsers.length > 0) renderSidebar();
     }
   });
