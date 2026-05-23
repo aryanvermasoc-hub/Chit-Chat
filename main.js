@@ -76,6 +76,14 @@ document.querySelectorAll('.game-card').forEach(card => card.style.cursor = 'poi
 bindPointerTap(homeGamesBtn, () => { switchSidebarView('games'); });
 if(openUsersListBtn) bindPointerTap(openUsersListBtn, () => { switchSidebarView('chats'); openUsersListBtn.style.color = "var(--primary)"; });
 
+// ADDED: Toggle listener for the Feed / Chats button
+bindPointerTap(chatToggleBtn, () => {
+    if (newsFeedContainer.style.display === "flex") {
+        switchSidebarView('chats');
+    } else {
+        switchSidebarView('feed');
+    }
+});
 
 const formatMentions = (text) => {
     if (!text) return text;
@@ -381,7 +389,7 @@ document.querySelector(".current-user").addEventListener("click", () => { if(aut
 if (backToUsersBtn) { 
     backToUsersBtn.addEventListener("click", () => { 
         if (window.innerWidth <= 992) { 
-            sidebar.style.display = "flex"; activeChatState.style.display = "none"; emptyChatState.style.display = "flex";
+            sidebar.style.display = "flex"; activeChatState.style.display = "none"; emptyChatState.style.display = "none";
              currentChatId = null; targetUserUid = null; isCurrentChatGroup = false; activeSharedKey = null;
             if (messagesUnsubscribe) { messagesUnsubscribe(); messagesUnsubscribe = null; }
             if (chatDocUnsubscribe) { chatDocUnsubscribe(); chatDocUnsubscribe = null; }
@@ -922,13 +930,28 @@ if (removeWallpaperBtn) { removeWallpaperBtn.addEventListener("click", async () 
 if (clearChatMeBtn) { clearChatMeBtn.addEventListener("click", async () => { if (!currentChatId) return; if (confirm("Are you sure you want to clear this chat for yourself? Messages will be hidden for you but remain for the other person.")) { clearChatMeBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Clearing...'; try { const msgsSnap = await getDocs(query(collection(db, "chats", currentChatId, "messages"))); const batch = writeBatch(db); msgsSnap.docs.forEach(docSnap => { batch.update(docSnap.ref, { deletedFor: arrayUnion(auth.currentUser.uid) }); }); await batch.commit(); document.getElementById("chatSettingsModal").style.display = "none"; showToast("Chat Cleared", "Messages have been hidden from your screen."); } catch (e) { alert("Error clearing chat."); } finally { clearChatMeBtn.innerHTML = '<i class="fa-solid fa-eraser"></i> Clear Chat for Me'; } } }); }
 
 window.addEventListener("popstate", (e) => {
-    const modals = ["profileModal", "chatSettingsModal", "groupSettingsModal", "msgOptionsModal", "gameSelectionModal", "infoModal", "appSettingsModal"]; let modalClosed = false;
-    modals.forEach(id => { const modal = document.getElementById(id); if (modal && modal.style.display === "flex") { modal.style.display = "none"; modalClosed = true; } });
+    let modalClosed = false;
+    
+    // 1. Dynamically close ANY open modal overlays (covers OTP, Profiles, Settings, etc.)
+    document.querySelectorAll('.modal-overlay').forEach(modal => { 
+        if (modal.style.display === "flex") { 
+            modal.style.display = "none"; 
+            modalClosed = true; 
+        } 
+    });
     if (modalClosed) { history.pushState(null, ""); return; }
+    
+    // 2. Close full-screen areas (Shared Whiteboard, Games, Explore Hub)
     if (document.getElementById("privateDoodleArea") && document.getElementById("privateDoodleArea").style.display === "flex") { document.getElementById("hideDoodleBtn").click(); history.pushState(null, ""); return; }
     if (document.getElementById("activeGameArea") && document.getElementById("activeGameArea").style.display === "flex") { document.getElementById("closeGameBtn").click(); history.pushState(null, ""); return; }
     if (document.getElementById("exploreArea") && document.getElementById("exploreArea").style.display === "flex") { document.getElementById("closeExploreBtn").click(); history.pushState(null, ""); return; }
-    if (window.innerWidth <= 992 && document.getElementById("activeChatState") && document.getElementById("activeChatState").style.display === "flex") { document.getElementById("backToUsersBtn").click(); history.pushState(null, ""); return; }
+    
+    // 3. Navigate out of chat area back to the user list (Mobile)
+    if (window.innerWidth <= 992 && document.getElementById("activeChatState") && document.getElementById("activeChatState").style.display === "flex") { 
+        document.getElementById("backToUsersBtn").click(); 
+        history.pushState(null, ""); 
+        return; 
+    }
 });
 
 window.setTheme = (themeName) => { document.body.className = ''; if (themeName !== 'default') { document.body.classList.add(themeName); } localStorage.setItem('chitchat_theme', themeName); };
@@ -1177,3 +1200,19 @@ chatInputs.forEach(input => {
         });
     }
 });
+// ==========================================
+// MOBILE WALLPAPER FIX
+// ==========================================
+function lockWallpaperHeight() {
+    const wallpaper = document.querySelector('.chat-wallpaper');
+    if (wallpaper) {
+        // Measure the physical screen size before any keyboard opens
+        const initialHeight = window.innerHeight;
+        
+        // Lock the wallpaper to exactly those pixels permanently
+        wallpaper.style.height = `${initialHeight}px`;
+    }
+}
+
+// Run this the exact moment the app loads
+window.addEventListener('DOMContentLoaded', lockWallpaperHeight);
