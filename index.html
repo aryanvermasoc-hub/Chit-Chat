@@ -17,18 +17,13 @@
   <link rel="apple-touch-icon" href="./icon-192.png">
 
 <script>
-    // Temporarily nuke the Service Worker to force a fresh load
+    // Stable Service Worker Registration
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.getRegistrations().then(function(registrations) {
-        for(let registration of registrations) {
-          registration.unregister();
-        }
-      }).then(() => {
-        // Re-register immediately after wiping
-        navigator.serviceWorker.register('sw.js');
-      });
+        window.addEventListener('load', () => {
+            navigator.serviceWorker.register('firebase-messaging-sw.js');
+        });
     }
-  </script>
+</script>
   <link rel="stylesheet" href="./style.css?v=25">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
