@@ -263,7 +263,6 @@ async function loadNewsFeed() {
 function startMyProfileListener(uid) {
   if(myProfileUnsubscribe) myProfileUnsubscribe();
   
-  // Note the 'async' keyword added here to handle any database updates safely
   myProfileUnsubscribe = onSnapshot(doc(db, "users", uid), async (docSnap) => {
     if (docSnap.exists()) {
       const data = docSnap.data();
@@ -275,7 +274,6 @@ function startMyProfileListener(uid) {
 
           if (newMeta.unread && (!oldMeta || oldMeta.time !== newMeta.time)) {
             try {
-                // 1. Bulletproof screen checks using direct queries
                 const sidebarEl = document.getElementById("sidebar");
                 const activeChatEl = document.getElementById("activeChatState");
                 const gameAreaEl = document.getElementById("activeGameArea");
@@ -285,31 +283,47 @@ function startMyProfileListener(uid) {
                 const isGameCovering = gameAreaEl && gameAreaEl.style.display === "flex";
                 const isReelsCovering = reelsAreaEl && reelsAreaEl.style.display === "flex";
                 
-                // Chat is ONLY visible if it is flex AND nothing is covering it
                 const isChatVisible = activeChatEl && activeChatEl.style.display === "flex" && !isSidebarCovering && !isGameCovering && !isReelsCovering;
 
                 if (currentChatId && targetUserUid === otherUid && isChatVisible) {
-                  // You are actively looking at the chat right now
+                  // You are looking at the chat -> Just mark as read
                   await updateDoc(doc(db, "users", uid), { [`chatMeta.${otherUid}.unread`]: false });
                 } else {
-                  // You are NOT looking at the chat -> SHOW THE TOAST
+                  // You are NOT looking at the chat -> SHOW NOTIFICATIONS
                   const sender = allUsers.find(u => u.id === otherUid);
                   const sName = sender ? (sender.fullName || sender.username) : "Someone";
                   const sAvatar = generateAvatar(sender, sName);
                   let preview = newMeta.text;
 
+                  // 1. Decrypt the message so it doesn't just say "Secure Message"
                   if (preview === "🎮 GAME CHALLENGE" || preview === "🎨 DOODLE REQUEST") {
-                      showToast(`Challenge!`, `${sName} sent you a request.`, sAvatar);
-                  } else {
-                      // Safe fallback to prevent decryption crashes from breaking the toast
-                      if (preview.startsWith("E2EE:") || preview.startsWith("U2FsdGVkX1") || preview.startsWith("U2Fz")) {
-                          preview = "🔒 Secure Message"; 
+                      preview = `${sName} sent you a request.`;
+                  } else if (preview.startsWith("E2EE:")) {
+                      try {
+                          const tempKey = await CryptoE2EE.getSharedKey(sender.publicKey);
+                          preview = await CryptoE2EE.decrypt(preview, tempKey); 
+                      } catch (cryptoErr) {
+                          preview = "🔒 Secure Message";
                       }
-                      showToast(`New Message from ${sName}`, preview, sAvatar);
+                  }
+                  
+                  // 2. Show the in-app HTML Toast
+                  showToast(`New Message from ${sName}`, preview, sAvatar);
+                  
+                  // 3. FORCE THE NATIVE ANDROID NOTIFICATION
+                  if (Notification.permission === 'granted' && 'serviceWorker' in navigator) {
+                      navigator.serviceWorker.ready.then((registration) => {
+                          registration.showNotification(`New message from ${sName}`, {
+                              body: preview,
+                              icon: sAvatar || './icon-192.png',
+                              badge: './icon-192.png',
+                              vibrate: [200, 100, 200] // Makes the phone buzz
+                          });
+                      });
                   }
                 }
             } catch(err) {
-                console.error("Toast Notification Error Prevented:", err);
+                console.error("Notification Error Prevented:", err);
             }
           }
         }
