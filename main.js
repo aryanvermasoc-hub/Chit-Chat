@@ -636,8 +636,8 @@ function listenToChatStatus(targetName) {
 window.openChat = async (targetUid, targetName, targetAvatar, isTargetOnline, targetLastSeen, targetPublicKey) => {
   isCurrentChatGroup = false; currentChatId = auth.currentUser.uid < targetUid ? `${auth.currentUser.uid}_${targetUid}` : `${targetUid}_${auth.currentUser.uid}`; targetUserUid = targetUid;
   document.getElementById("chatSettingsBtn").style.display = "none"; document.getElementById("chatDoodleBtn").style.display = "none"; if (ghostModeBtn) ghostModeBtn.style.display = "none"; document.getElementById("launchGameMenuBtn").style.display = "none"; 
-  document.getElementById("chatBox").innerHTML = ""; if(replyingToMsg) document.getElementById("cancelReplyBtn").click(); if (document.getElementById("privateDoodleArea")) document.getElementById("privateDoodleArea").style.display = "none";
-  const overlay = document.getElementById("chatStateOverlay"); if(overlay) { overlay.style.display = "none"; overlay.innerHTML = ""; }
+ document.getElementById("chatBox").innerHTML = ""; document.getElementById("chatBox").style.opacity = "0"; if(replyingToMsg) document.getElementById("cancelReplyBtn").click(); if (document.getElementById("privateDoodleArea")) document.getElementById("privateDoodleArea").style.display = "none";
+ const overlay = document.getElementById("chatStateOverlay"); if(overlay) { overlay.style.display = "none"; overlay.innerHTML = ""; }
   // Instantly apply cached wallpaper if it exists to prevent delay
   const cachedWallpaper = localStorage.getItem(`wp_${currentChatId}`);
   if (cachedWallpaper) {
@@ -681,7 +681,7 @@ window.openChat = async (targetUid, targetName, targetAvatar, isTargetOnline, ta
 window.openGroupChat = (groupId, groupName, memberCount) => {
   isCurrentChatGroup = true; currentChatId = groupId; targetUserUid = null; activeSharedKey = null; // No E2EE for groups in this version
   document.getElementById("launchGameMenuBtn").style.display = "none"; document.getElementById("chatSettingsBtn").style.display = "none"; document.getElementById("chatDoodleBtn").style.display = "none"; if (ghostModeBtn) ghostModeBtn.style.display = "none"; 
-  document.getElementById("chatBox").innerHTML = "";document.getElementById("chatWallpaper").style.backgroundImage = "none"; if(replyingToMsg) document.getElementById("cancelReplyBtn").click(); if(pDoodleUnsubscribe) { pDoodleUnsubscribe(); pDoodleUnsubscribe = null; }
+  document.getElementById("chatBox").innerHTML = ""; document.getElementById("chatBox").style.opacity = "0"; document.getElementById("chatWallpaper").style.backgroundImage = "none"; if(replyingToMsg) document.getElementById("cancelReplyBtn").click(); if(pDoodleUnsubscribe) { pDoodleUnsubscribe(); pDoodleUnsubscribe = null; }
   const overlay = document.getElementById("chatStateOverlay"); if(overlay) { overlay.style.display = "none"; overlay.innerHTML = ""; }
   const groupData = allGroups.find(g => g.id === groupId); const avatarToUse = groupData && groupData.avatarUrl ? groupData.avatarUrl : `https://ui-avatars.com/api/?name=${encodeURIComponent(groupName)}&background=8b5cf6&color=fff`;
   document.getElementById("chatTargetName").innerText = groupName; document.getElementById("chatTargetAvatar").src = avatarToUse; document.getElementById("chatTargetStatus").innerText = `${memberCount} members`;
@@ -701,8 +701,11 @@ function loadMessages() {
   if(window.msgTimeouts) window.msgTimeouts.forEach(clearTimeout); 
   window.msgTimeouts = [];
 
-  messagesUnsubscribe = onSnapshot(q, async (snapshot) => {
+messagesUnsubscribe = onSnapshot(q, async (snapshot) => {
     let lastMyMsgId = null;
+    let isInitialLoad = chatBox.children.length === 0; // Check if it's the first time loading the chat
+    let hasNewMessages = false; // Track if we need to scroll
+
     snapshot.docs.forEach(d => { if(d.data().sender === auth.currentUser.uid) lastMyMsgId = d.id; });
 
     // Process ONLY the messages that were added, modified, or removed
@@ -741,15 +744,13 @@ function loadMessages() {
 
       // Check if this message div already exists
       let div = document.getElementById(`msg_${msgId}`);
-      let isNew = false;
       if (!div) {
           div = document.createElement("div");
           div.id = `msg_${msgId}`;
           div.className = `message-wrapper ${isMe ? 'sent' : 'received'}`;
           chatBox.appendChild(div);
-          isNew = true;
+          hasNewMessages = true; // Mark that a new message was injected to the DOM
       }
-
       const timeStr = new Date(msg.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); 
       let contentHtml = "";
 
@@ -792,12 +793,28 @@ function loadMessages() {
       
       div.innerHTML = `${!isMe ? `<img src="${avatarSrc}" class="msg-avatar" data-uid="${msg.sender}">` : ''}<div style="display:flex; flex-direction:column; max-width: 100%;">${contentHtml}<div class="msg-time">${timeStr}${seenTickHtml}</div></div>`;
       
-      // Smooth scroll if it's a completely new message
-      if (isNew) {
-          chatBox.scrollTo({ top: chatBox.scrollHeight, behavior: 'smooth' });
-      }
-    }
+    } // <-- This brace ends the docChanges() loop
     
+    // 1. ENFORCE ABSOLUTE CHRONOLOGICAL ORDER
+    // This loops through the perfectly sorted Firebase docs and re-appends them in exact order.
+    snapshot.docs.forEach(doc => {
+        const el = document.getElementById(`msg_${doc.id}`);
+        if (el) chatBox.appendChild(el); // automatically forces DOM elements into their correct sorted position
+    });
+
+    // 2. SCROLL & REVEAL LOGIC (Fixes the Jitter)
+    if (isInitialLoad) {
+        chatBox.scrollTop = chatBox.scrollHeight; // Instant snap to bottom
+        
+        // Reveal gracefully AFTER snapping to bottom
+        setTimeout(() => { 
+            chatBox.style.transition = "opacity 0.2s ease-in-out"; 
+            chatBox.style.opacity = "1"; 
+        }, 50); 
+    } else if (hasNewMessages) {
+        chatBox.scrollTo({ top: chatBox.scrollHeight, behavior: 'smooth' }); // Smooth scroll for live incoming messages
+    }
+
     // Cleanup old ticks visually
     document.querySelectorAll('.fa-check-double, .fa-check').forEach(icon => {
         const parentMsg = icon.closest('.message-wrapper');
