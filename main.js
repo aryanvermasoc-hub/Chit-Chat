@@ -116,11 +116,15 @@ function timeAgo(ms) { if (!ms) return ""; const seconds = Math.floor((Date.now(
 window.showToast = function(title, message, avatarUrl) {
   const container = document.getElementById("toastContainer"); if(!container) return;
   const toast = document.createElement("div"); toast.className = "toast";
+
+  // Helper to safely escape text before inserting into HTML
+  const escHtml = (str) => String(str || "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+
   // Profile pic sirf tab dikhao jab kisi user ka avatarUrl explicitly pass ho
   const leftHtml = avatarUrl
-    ? `<img src="${avatarUrl}" style="width: 40px; height: 40px; border-radius: 50%; object-fit: cover; flex-shrink: 0;">`
+    ? `<img src="${escHtml(avatarUrl)}" style="width: 40px; height: 40px; border-radius: 50%; object-fit: cover; flex-shrink: 0;">`
     : `<div class="toast-sys-icon"><i class="fa-solid fa-bell"></i></div>`;
-  toast.innerHTML = `${leftHtml}<div class="toast-content" style="display: flex; flex-direction: column; overflow: hidden;"><span style="font-weight: 600; font-size: 14px; margin-bottom: 2px;">${title}</span><span style="font-size: 12px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${message}</span></div>`;
+  toast.innerHTML = `${leftHtml}<div class="toast-content" style="display: flex; flex-direction: column; overflow: hidden;"><span style="font-weight: 600; font-size: 14px; margin-bottom: 2px;">${escHtml(title)}</span><span style="font-size: 12px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${escHtml(message)}</span></div>`;
   container.appendChild(toast); setTimeout(() => { toast.style.animation = "fadeOutToast 0.5s ease forwards"; setTimeout(() => { if(toast.parentElement) toast.remove(); }, 500); }, 4000);
 };
 
@@ -229,10 +233,10 @@ onAuthStateChanged(auth, async (user) => {
         Notification.requestPermission().then(async (permission) => {
             if (permission === 'granted') {
                 try {
-                   const registration = await navigator.serviceWorker.register('firebase-messaging-sw.js');
-                    await navigator.serviceWorker.ready;
+                   const registration = await navigator.serviceWorker.ready;
                     
                     // YAHAN PAR MAINE AAPKI CORRECTED KEY DAAL DI HAI 👇
+                    if (!messaging) return;
                     const token = await getToken(messaging, { 
                         vapidKey: 'BBJgewscsRgCdrhz8e5MOgL1H_0S03ASN5m9w81HdhpUQdWQzzNdhQFp0XpxEHQn_tqkISTDETvtZHnmbYVfabI',
                         serviceWorkerRegistration: registration 
@@ -245,96 +249,87 @@ onAuthStateChanged(auth, async (user) => {
     }
     // --------------------------------
 
-    startMyProfileListener(user.uid); loadSidebarData(); loadNewsFeed(); 
-  } else {
-    authScreen.style.display = "flex"; appScreen.style.display = "none"; emptyChatState.style.display = "flex"; activeChatState.style.display = "none";
-    usernameInput.value = ""; passwordInput.value = ""; authActionBtn.innerText = isSignupMode ? "Create Account" : "Enter Chit-Chat"; myUserData = null;
-  }
-});
+    // START THE APP: Load sidebar data and listen to this user's profile
+    loadSidebarData();
+    startMyProfileListener(user.uid);
 
-async function loadNewsFeed() {
-  const container = document.getElementById("newsFeedContainer"); container.innerHTML = '<div style="text-align:center; padding: 40px;"><i class="fa-solid fa-spinner fa-spin"></i> Loading News...</div>';
-  try {
-    const res = await fetch(`https://dev.to/api/articles?per_page=15&page=${Math.floor(Math.random() * 5) + 1}&tag=programming`); const articles = await res.json(); container.innerHTML = '';
-    articles.forEach(article => { container.innerHTML += `<div class="news-feed-card"><h4>${article.title}</h4><p>${article.description || 'Tap to read...'}</p><a href="${article.url}" target="_blank" rel="noopener noreferrer">Read Article</a></div>`; });
-  } catch(e) { container.innerHTML = '<div style="text-align:center; color: #ff4757;">Failed to load news.</div>'; }
-}
-
-function startMyProfileListener(uid) {
+    function startMyProfileListener(uid) {
   if(myProfileUnsubscribe) myProfileUnsubscribe();
+  
+  // Ask for Android Native Notification permissions if not already granted
+  if ("Notification" in window && Notification.permission === "default") {
+      Notification.requestPermission();
+  }
   
   myProfileUnsubscribe = onSnapshot(doc(db, "users", uid), async (docSnap) => {
     if (docSnap.exists()) {
       const data = docSnap.data();
       
-      if (myUserData && data.chatMeta) {
+      // Use a stable previous snapshot to detect truly NEW messages
+      const prevChatMeta = myUserData ? (myUserData.chatMeta || {}) : null;
+
+      if (prevChatMeta !== null && data.chatMeta) {
         for (let otherUid in data.chatMeta) {
           let newMeta = data.chatMeta[otherUid];
-          let oldMeta = myUserData.chatMeta ? myUserData.chatMeta[otherUid] : null;
+          let oldMeta = prevChatMeta[otherUid] || null;
 
-          if (newMeta.unread && (!oldMeta || oldMeta.time !== newMeta.time)) {
-            try {
-                // 1. Check EVERY overlay screen to see what you are currently looking at
-                const activeChatEl = document.getElementById("activeChatState");
-                const gameAreaEl = document.getElementById("activeGameArea");
-                const exploreAreaEl = document.getElementById("exploreArea");
-                const doodleAreaEl = document.getElementById("privateDoodleArea");
-                const sidebarEl = document.getElementById("sidebar");
+          // Only fire if: flag is unread AND time changed = genuinely new message
+          const isGenuinelyNew = newMeta.unread && (!oldMeta || oldMeta.time !== newMeta.time);
+          if (!isGenuinelyNew) continue;
 
-                const isGameCovering = gameAreaEl && gameAreaEl.style.display === "flex";
-                const isExploreCovering = exploreAreaEl && exploreAreaEl.style.display === "flex";
-                const isDoodleCovering = doodleAreaEl && doodleAreaEl.style.display === "flex";
-                const isSidebarCovering = window.innerWidth <= 992 && sidebarEl && sidebarEl.style.display !== "none";
-                
-                // Chat is ONLY truly visible if it is open AND no other screens are blocking it
-                const isChatVisible = activeChatEl && activeChatEl.style.display === "flex" 
-                    && !isGameCovering && !isExploreCovering && !isDoodleCovering && !isSidebarCovering;
+          try {
+              const activeChatEl = document.getElementById("activeChatState");
+              const gameAreaEl = document.getElementById("activeGameArea");
+              const exploreAreaEl = document.getElementById("exploreArea");
+              const doodleAreaEl = document.getElementById("privateDoodleArea");
+              const sidebarEl = document.getElementById("sidebar");
 
-                if (currentChatId && targetUserUid === otherUid && isChatVisible) {
-                  // You are physically looking at their chat -> Just mark as read
-                  await updateDoc(doc(db, "users", uid), { [`chatMeta.${otherUid}.unread`]: false });
-                } else {
-                  // You are NOT looking at the chat -> SHOW ALL NOTIFICATIONS
-                  const sender = allUsers.find(u => u.id === otherUid);
-                  const sName = sender ? (sender.fullName || sender.username) : "Someone";
-                  const sAvatar = generateAvatar(sender, sName);
-                  let preview = newMeta.text;
+              const checkVisible = (el) => el && window.getComputedStyle(el).display !== "none";
+              const isGameCovering = checkVisible(gameAreaEl);
+              const isExploreCovering = checkVisible(exploreAreaEl);
+              const isDoodleCovering = checkVisible(doodleAreaEl);
+              const isSidebarCovering = window.innerWidth <= 992 && checkVisible(sidebarEl);
+              const isChatOpen = checkVisible(activeChatEl);
+              // NEW: Also checks if the phone screen is actually on and the app is in the foreground
+const isChatVisible = isChatOpen && !isGameCovering && !isExploreCovering && !isDoodleCovering && !isSidebarCovering && document.visibilityState === 'visible';
 
-                  // Safely decrypt the message
-                  if (preview === "🎮 GAME CHALLENGE" || preview === "🎨 DOODLE REQUEST") {
-                      preview = `${sName} sent you a request.`;
-                  } else if (preview.startsWith("E2EE:")) {
-                      try {
-                          if (sender && sender.publicKey) {
-                              const tempKey = await CryptoE2EE.getSharedKey(sender.publicKey);
-                              preview = await CryptoE2EE.decrypt(preview, tempKey); 
-                          } else {
-                              preview = "🔒 Secure Message";
-                          }
-                      } catch (cryptoErr) {
-                          preview = "🔒 Secure Message";
-                      }
-                  }
-                  
-                  // 2. Trigger the in-app HTML Toast (Slide down from top)
-                  showToast(`New Message from ${sName}`, preview, sAvatar);
-                  
-                  // 3. Trigger Native Android Phone Notification
-                  if (Notification.permission === 'granted' && 'serviceWorker' in navigator) {
-                      navigator.serviceWorker.ready.then((registration) => {
-                          registration.showNotification(`New message from ${sName}`, {
-                              body: preview,
-                              // CRITICAL: We MUST use a local icon here. Android blocks external URLs!
-                              icon: './icon-192.png', 
-                              badge: './icon-192.png',
-                              vibrate: [200, 100, 200] // Buzzes the phone
-                          });
-                      }).catch(e => console.log("SW notification blocked:", e));
-                  }
+              if (currentChatId && targetUserUid === otherUid && isChatVisible) {
+                // User is physically looking at this chat — mark as read silently
+                await updateDoc(doc(db, "users", uid), { [`chatMeta.${otherUid}.unread`]: false });
+              } else {
+                // Not looking at this chat — show notification
+                const sender = allUsers.find(u => u.id === otherUid);
+                const sName = sender ? (sender.fullName || sender.username) : "Someone";
+                const sAvatar = sender ? generateAvatar(sender, sName) : null;
+                let preview = newMeta.text || "New message";
+
+                // Handle special previews
+                if (preview === "🎮 GAME CHALLENGE" || preview === "🎨 DOODLE REQUEST") {
+                    preview = `${sName} sent you a request.`;
+                } else if (preview.startsWith("E2EE:")) {
+                    // Plain text is now stored; this handles legacy encrypted entries
+                    preview = "🔒 Secure Message";
                 }
-            } catch(err) {
-                console.error("Notification Safety Net Caught an Error:", err);
-            }
+
+                // 1. In-app toast notification
+                showToast(`💬 ${sName}`, preview, sAvatar);
+
+                // 2. Native device notification (when app is in background/minimized)
+                if (typeof Notification !== 'undefined' && Notification.permission === 'granted' && 'serviceWorker' in navigator) {
+                    navigator.serviceWorker.ready.then((registration) => {
+                        registration.showNotification(`New message from ${sName}`, {
+                            body: preview,
+                            icon: './icon-192.png',
+                            badge: './icon-192.png',
+                            vibrate: [200, 100, 200],
+                            tag: `msg_${otherUid}`,
+                            renotify: true
+                        });
+                    }).catch(e => console.log("SW notification error:", e));
+                }
+              }
+          } catch(err) {
+              console.error("Notification handler error:", err);
           }
         }
       }
@@ -667,7 +662,30 @@ async function sendMessage() {
   let encryptedText = text;
   if (!isCurrentChatGroup && activeSharedKey) encryptedText = await CryptoE2EE.encrypt(text, activeSharedKey);
   
-  if (!isCurrentChatGroup) { await setDoc(doc(db, "chats", currentChatId), { [`typing_${auth.currentUser.uid}`]: false }, { merge: true }); try { await setDoc(doc(db, "users", auth.currentUser.uid), { chatMeta: { [targetUserUid]: { time: Date.now(), text: `You: ${text}`, unread: false } } }, { merge: true }); await setDoc(doc(db, "users", targetUserUid), { chatMeta: { [auth.currentUser.uid]: { time: Date.now(), text: encryptedText, unread: true } } }, { merge: true }); } catch(err) {} }
+  if (!isCurrentChatGroup) {
+    await setDoc(doc(db, "chats", currentChatId), { [`typing_${auth.currentUser.uid}`]: false }, { merge: true });
+    try {
+      await setDoc(doc(db, "users", auth.currentUser.uid), { chatMeta: { [targetUserUid]: { time: Date.now(), text: `You: ${text}`, unread: false } } }, { merge: true });
+      await setDoc(doc(db, "users", targetUserUid), { chatMeta: { [auth.currentUser.uid]: { time: Date.now(), text: text, unread: true } } }, { merge: true });
+    } catch(err) {}
+  } else {
+    // Group chat: notify all other members so they get an in-app toast
+    try {
+      const group = allGroups.find(g => g.id === currentChatId);
+      if (group) {
+        const myName = document.getElementById("myName").innerText;
+        const batch = writeBatch(db);
+        group.members.forEach(memberId => {
+          if (memberId !== auth.currentUser.uid) {
+            batch.set(doc(db, "users", memberId), {
+              chatMeta: { [auth.currentUser.uid]: { time: Date.now(), text: `${myName}: ${text}`, unread: true, groupId: currentChatId, groupName: document.getElementById("chatTargetName").innerText } }
+            }, { merge: true });
+          }
+        });
+        await batch.commit();
+      }
+    } catch(err) { console.log("Group meta update error:", err); }
+  }
   const payload = { text: encryptedText, sender: auth.currentUser.uid, senderName: document.getElementById("myName").innerText, time: Date.now(), isEdited: false, isDeleted: false, isGameChallenge: false };
   if (window.isGhostModeActive) { payload.timerDuration = 10000; payload.isGhost = true; } else if (timerValue > 0) { payload.timerDuration = timerValue; }
   
@@ -1098,6 +1116,15 @@ document.querySelectorAll('.modal-overlay').forEach(modal => {
     modal.addEventListener('click', (e) => { if (e.target === modal) { modal.style.display = 'none'; } });
 });
 document.getElementById('toastContainer').style.zIndex = "9999";
+  } else {
+    // User is signed out — show auth screen
+    authScreen.style.display = "flex";
+    appScreen.style.display = "none";
+    if(myProfileUnsubscribe) { myProfileUnsubscribe(); myProfileUnsubscribe = null; }
+    if(messagesUnsubscribe) { messagesUnsubscribe(); messagesUnsubscribe = null; }
+    myUserData = null; currentChatId = null; targetUserUid = null;
+  }
+});
 // =========================================================
 // PWA INSTALLATION LOGIC
 // =========================================================
