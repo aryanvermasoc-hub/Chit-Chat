@@ -1,21 +1,28 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.0.0/firebase-app.js";
-import { getFirestore, collection, addDoc, onSnapshot, doc, setDoc, query, orderBy, getDoc, getDocs, deleteDoc, updateDoc, arrayUnion, arrayRemove, writeBatch, limit, where } from "https://www.gstatic.com/firebasejs/10.0.0/firebase-firestore.js";
-import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut, sendEmailVerification } from "https://www.gstatic.com/firebasejs/10.0.0/firebase-auth.js";
-// NEW: Import Messaging
-import { getMessaging } from "https://www.gstatic.com/firebasejs/10.0.0/firebase-messaging.js";
+import { getAuth } from "https://www.gstatic.com/firebasejs/10.0.0/firebase-auth.js";
+import { getFirestore } from "https://www.gstatic.com/firebasejs/10.0.0/firebase-firestore.js";
+import { getMessaging, isSupported } from "https://www.gstatic.com/firebasejs/10.0.0/firebase-messaging.js";
 
 const firebaseConfig = {
-  apiKey: "AIzaSyAc1esUcE7tXVRIXvknsUZCrRJR_PNhMzE", 
+  apiKey: "AIzaSyAc1esUcE7tXVRIXvknsUZCrRJR_PNhMzE",
   authDomain: "chat-373ed.firebaseapp.com",
-  databaseURL: "https://chat-373ed-default-rtdb.asia-southeast1.firebasedatabase.app",
-  projectId: "chat-373ed", 
-  storageBucket: "chat-373ed.firebasestorage.app",
-  messagingSenderId: "457068201028", 
+  projectId: "chat-373ed",
+  storageBucket: "chat-373ed.appspot.com",
+  messagingSenderId: "457068201028",
   appId: "1:457068201028:web:cf014c885371cf5c13e811"
 };
 
-export const app = initializeApp(firebaseConfig); 
-export const db = getFirestore(app); 
+// 1. Initialize Firebase App
+const app = initializeApp(firebaseConfig);
+
+// 2. Initialize and EXPORT Auth, Firestore (db), and Messaging
 export const auth = getAuth(app);
-// NEW: Export Messaging
-export const messaging = getMessaging(app);
+export const db = getFirestore(app);
+
+// Messaging needs a fallback for browsers that don't support it
+export let messaging = null;
+isSupported().then((supported) => {
+    if (supported) {
+        messaging = getMessaging(app);
+    }
+});

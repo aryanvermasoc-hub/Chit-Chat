@@ -119,20 +119,118 @@ const generateAvatar = (userObj, fallbackName) => {
 };
 function timeAgo(ms) { if (!ms) return ""; const seconds = Math.floor((Date.now() - ms) / 1000); if (seconds < 60) return "Just now"; const minutes = Math.floor(seconds / 60); if (minutes < 60) return `${minutes} min ago`; const hours = Math.floor(minutes / 60); if (hours < 24) return `${hours} hr ago`; return `${Math.floor(hours / 24)} days ago`; }
 
-window.showToast = function(title, message, avatarUrl) {
+window.showToast = function(title, message, avatarUrl, onClick) {
   const container = document.getElementById("toastContainer"); if(!container) return;
   const toast = document.createElement("div"); toast.className = "toast";
+  if (onClick) { toast.classList.add("toast-clickable"); toast.style.cursor = "pointer"; }
 
-  // Helper to safely escape text before inserting into HTML
   const escHtml = (str) => String(str || "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
 
-  // Profile pic sirf tab dikhao jab kisi user ka avatarUrl explicitly pass ho
   const leftHtml = avatarUrl
     ? `<img src="${escHtml(avatarUrl)}" style="width: 40px; height: 40px; border-radius: 50%; object-fit: cover; flex-shrink: 0;">`
     : `<div class="toast-sys-icon"><i class="fa-solid fa-bell"></i></div>`;
-  toast.innerHTML = `${leftHtml}<div class="toast-content" style="display: flex; flex-direction: column; overflow: hidden;"><span style="font-weight: 600; font-size: 14px; margin-bottom: 2px;">${escHtml(title)}</span><span style="font-size: 12px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${escHtml(message)}</span></div>`;
-  container.appendChild(toast); setTimeout(() => { toast.style.animation = "fadeOutToast 0.5s ease forwards"; setTimeout(() => { if(toast.parentElement) toast.remove(); }, 500); }, 4000);
+  toast.innerHTML = `${leftHtml}<div class="toast-content" style="display: flex; flex-direction: column; overflow: hidden; flex:1;"><span style="font-weight: 600; font-size: 14px; margin-bottom: 2px;">${escHtml(title)}</span><span style="font-size: 12px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${escHtml(message)}</span></div><button class="toast-close-btn" onclick="event.stopPropagation(); this.parentElement.remove();" title="Dismiss"><i class="fa-solid fa-xmark"></i></button>`;
+
+  if (onClick) { toast.addEventListener("click", () => { toast.remove(); onClick(); }); }
+  container.appendChild(toast);
+  setTimeout(() => { toast.style.animation = "fadeOutToast 0.5s ease forwards"; setTimeout(() => { if(toast.parentElement) toast.remove(); }, 500); }, 5000);
 };
+
+// ── IN-APP MESSAGE NOTIFICATION ENGINE ───────────────────────────────────────
+// Tracks the latest message time seen per chat to avoid notifying old messages
+const _notifSeenTimes = {};
+let _globalMsgListeners = {}; // chatId → unsubscribe fn
+
+// Call once after login. Watches ALL chats the user is part of for new messages.
+function startGlobalMessageNotifier(uid) {
+  // Clean up previous listeners on re-login
+  Object.values(_globalMsgListeners).forEach(unsub => unsub());
+  _globalMsgListeners = {};
+
+  // Watch the user's chatMeta — whenever a new chat appears or unread flag set,
+  // ensure we have a live listener on that chat's messages collection.
+  onSnapshot(doc(db, "users", uid), (snap) => {
+    if (!snap.exists()) return;
+    const chatMeta = snap.data().chatMeta || {};
+
+    Object.keys(chatMeta).forEach(otherUid => {
+      const chatId = uid < otherUid ? `${uid}_${otherUid}` : `${otherUid}_${uid}`;
+      if (_globalMsgListeners[chatId]) return; // already listening
+
+      // Seed the "last seen" time so we don't show notifications for history
+      _notifSeenTimes[chatId] = Date.now();
+
+      const q = query(
+        collection(db, "chats", chatId, "messages"),
+        orderBy("time", "desc"),
+        limit(1)
+      );
+      const unsub = onSnapshot(q, async (snapshot) => {
+        if (snapshot.empty) return;
+        const msgDoc = snapshot.docs[0];
+        const msg = msgDoc.data();
+
+        // Skip own messages, expired/deleted/system messages, and old messages
+        if (msg.sender === uid) return;
+        if (msg.isDeleted || msg.isExpired || msg.isGameChallenge || msg.isDoodleRequest) return;
+        if (!msg.time || msg.time <= (_notifSeenTimes[chatId] || 0)) return;
+
+        // Skip if user is already looking at this exact chat (and page is visible)
+        const isViewingThisChat = (
+          currentChatId === chatId &&
+          document.getElementById("activeChatState")?.style.display === "flex" &&
+          document.visibilityState === "visible" &&
+          !(window.innerWidth <= 992 && document.getElementById("sidebar")?.style.display !== "none")
+        );
+        if (isViewingThisChat) {
+          _notifSeenTimes[chatId] = msg.time;
+          return;
+        }
+
+        _notifSeenTimes[chatId] = msg.time;
+
+        // Build notification content
+        const sender = allUsers.find(u => u.id === msg.sender);
+        const sName = sender ? (sender.fullName || sender.username) : (msg.senderName || "Someone");
+        const sAvatar = sender ? generateAvatar(sender, sName) : null;
+
+        let preview = msg.text || "";
+        if (preview.startsWith("E2EE:")) preview = "🔒 Encrypted message";
+        else if (!preview && msg.imageUrl) preview = "📷 Sent an image";
+        else if (!preview) preview = "New message";
+        if (preview.length > 60) preview = preview.slice(0, 60) + "…";
+
+        // Show rich in-app notification with click-to-open
+        showToast(`💬 ${sName}`, preview, sAvatar, () => {
+          // Open the chat when notification is tapped
+          if (sender) {
+            openChat(sender.id, sName, generateAvatar(sender, sName), sender.isOnline, sender.lastSeen, sender.publicKey);
+            if (window.innerWidth <= 992) {
+              document.getElementById("sidebar").style.display = "none";
+            }
+          }
+        });
+
+        // Also fire native device notification if permission granted & app not focused
+        if (document.visibilityState !== "visible" && typeof Notification !== "undefined" && Notification.permission === "granted" && "serviceWorker" in navigator) {
+          navigator.serviceWorker.ready.then(reg => {
+            reg.showNotification(`💬 ${sName}`, {
+              body: preview,
+              icon: "./icon-192.png",
+              badge: "./icon-192.png",
+              vibrate: [150, 80, 150],
+              tag: `msg_${chatId}`,
+              renotify: true
+            });
+          }).catch(() => {});
+        }
+      });
+
+      _globalMsgListeners[chatId] = unsub;
+    });
+  });
+}
+// ─────────────────────────────────────────────────────────────────────────────
 
 const emailGroup = document.getElementById("emailGroup"); const confirmPasswordGroup = document.getElementById("confirmPasswordGroup");
 const toggleAuthMode = (signup) => { 
@@ -253,6 +351,7 @@ onAuthStateChanged(auth, async (user) => {
     // START THE APP: Load sidebar data and listen to this user's profile
     loadSidebarData();
     startMyProfileListener(user.uid);
+    startGlobalMessageNotifier(user.uid); // ← real-time in-app notifications
 
     function startMyProfileListener(uid) {
   if(myProfileUnsubscribe) myProfileUnsubscribe();
@@ -1135,6 +1234,9 @@ document.getElementById('toastContainer').style.zIndex = "9999";
     appScreen.style.display = "none";
     if(myProfileUnsubscribe) { myProfileUnsubscribe(); myProfileUnsubscribe = null; }
     if(messagesUnsubscribe) { messagesUnsubscribe(); messagesUnsubscribe = null; }
+    // Clean up all global message notification listeners
+    Object.values(_globalMsgListeners).forEach(unsub => unsub());
+    Object.keys(_globalMsgListeners).forEach(k => delete _globalMsgListeners[k]);
     myUserData = null; currentChatId = null; targetUserUid = null;
   }
 });
