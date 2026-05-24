@@ -71,6 +71,12 @@ function switchSidebarView(view) {
     else if (view === 'games') { gamesNavContainer.style.display = "flex"; chatToggleBtn.innerHTML = '<i class="fa-solid fa-fire"></i> Feed'; chatToggleBtn.style.color = "white"; homeGamesBtn.style.color = "var(--primary)"; if(openUsersListBtn) openUsersListBtn.style.color = "var(--text-muted)"; } 
     else if (view === 'feed') { newsFeedContainer.style.display = "flex"; chatToggleBtn.innerHTML = '<i class="fa-solid fa-fire"></i> Feed (Active)'; chatToggleBtn.style.color = "var(--accent)"; homeGamesBtn.style.color = "var(--text-muted)"; if(openUsersListBtn) openUsersListBtn.style.color = "var(--text-muted)"; }
 }
+// bindPointerTap must be defined here, before it is first called below
+function bindPointerTap(element, handler) {
+  if (!element || typeof handler !== 'function') return;
+  element.style.cursor = 'pointer'; // Forces iOS to recognize the element as clickable
+  element.addEventListener('click', handler);
+}
 // Force strict mobile browsers (iOS) to register game card taps
 document.querySelectorAll('.game-card').forEach(card => card.style.cursor = 'pointer');
 bindPointerTap(homeGamesBtn, () => { switchSidebarView('games'); });
@@ -128,11 +134,6 @@ window.showToast = function(title, message, avatarUrl) {
   container.appendChild(toast); setTimeout(() => { toast.style.animation = "fadeOutToast 0.5s ease forwards"; setTimeout(() => { if(toast.parentElement) toast.remove(); }, 500); }, 4000);
 };
 
-function bindPointerTap(element, handler) {
-  if (!element || typeof handler !== 'function') return;
-  element.style.cursor = 'pointer'; // Forces iOS to recognize the element as clickable
-  element.addEventListener('click', handler);
-}
 const emailGroup = document.getElementById("emailGroup"); const confirmPasswordGroup = document.getElementById("confirmPasswordGroup");
 const toggleAuthMode = (signup) => { 
   isSignupMode = signup; 
@@ -454,6 +455,7 @@ if (backToUsersBtn) {
             if (messagesUnsubscribe) { messagesUnsubscribe(); messagesUnsubscribe = null; }
             if (chatDocUnsubscribe) { chatDocUnsubscribe(); chatDocUnsubscribe = null; }
             if (chatMetaUnsubscribe) { chatMetaUnsubscribe(); chatMetaUnsubscribe = null; }
+            if (typingUnsubscribe) { typingUnsubscribe(); typingUnsubscribe = null; }
         } 
     }); 
 }
@@ -640,10 +642,11 @@ document.getElementById("cancelReplyBtn").addEventListener("click", () => { repl
 window.sendChatRequest = async () => { if (!currentChatId || !targetUserUid) return; try { await setDoc(doc(db, "chats", currentChatId), { status: 'pending', initiator: auth.currentUser.uid, createdAt: Date.now() }); await setDoc(doc(db, "users", targetUserUid), { chatMeta: { [auth.currentUser.uid]: { time: Date.now(), text: "👋 Connection Request", unread: true } } }, { merge: true }); showToast("Request Sent", "Waiting for approval."); } catch (error) { showToast("Error", "Failed to send request."); } };
 window.acceptChatRequest = async () => { if (!currentChatId) return; try { await updateDoc(doc(db, "chats", currentChatId), { status: 'accepted' }); showToast("Connected", "You can now chat!"); } catch (error) { showToast("Error", "Failed to accept request."); } };
 window.declineChatRequest = async () => { if (!currentChatId) return; try { await deleteDoc(doc(db, "chats", currentChatId)); showToast("Declined", "Request removed."); if (window.innerWidth <= 992) document.getElementById("backToUsersBtn").click(); } catch (error) { showToast("Error", "Failed to decline request."); } };
+let typingUnsubscribe = null;
 function listenToTyping() { 
-    if (chatMetaUnsubscribe) chatMetaUnsubscribe(); 
+    if (typingUnsubscribe) { typingUnsubscribe(); typingUnsubscribe = null; }
     if (isCurrentChatGroup) return; 
-    chatMetaUnsubscribe = onSnapshot(doc(db, "chats", currentChatId), (docSnap) => { 
+    typingUnsubscribe = onSnapshot(doc(db, "chats", currentChatId), (docSnap) => { 
         const targetUser = allUsers.find(u => u.id === targetUserUid);
         const statusEl = document.getElementById("chatTargetStatus");
         if (targetUser && canSeePrivacy(targetUser, 'privacyStatus')) {
@@ -655,7 +658,7 @@ msgInput.addEventListener("input", async () => { if(!currentChatId || isCurrentC
 
 async function sendMessage() {
   const text = msgInput.value.trim(); if (!text) return;
-  const timerValue = modalMsgTimerSelect ? parseInt(modalMsgTimerSelect.value) : 60000;
+  const timerValue = modalMsgTimerSelect ? parseInt(modalMsgTimerSelect.value) : 0;
   msgInput.value = ""; msgInput.focus(); if (!isCurrentChatGroup && currentChatStatus !== 'accepted') return;
   
   // Encrypt outbound payload via Web Crypto
@@ -712,7 +715,7 @@ fileInput.addEventListener("change", async (e) => {
         const formData = new FormData(); formData.append("file", file); formData.append("upload_preset", UPLOAD_PRESET); 
         const response = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`, { method: "POST", body: formData }); 
         const data = await response.json(); 
-        const timerValue = modalMsgTimerSelect ? parseInt(modalMsgTimerSelect.value) : 60000; 
+        const timerValue = modalMsgTimerSelect ? parseInt(modalMsgTimerSelect.value) : 0; 
         const optimizedUrl = data.secure_url.replace('/upload/', '/upload/q_auto,f_auto,w_600/'); 
         const payload = { text: "", imageUrl: optimizedUrl, imagePublicId: data.public_id, sender: auth.currentUser.uid, senderName: document.getElementById("myName").innerText, time: Date.now(), isEdited: false, isDeleted: false }; 
         if (timerValue > 0) payload.timerDuration = timerValue; 
@@ -755,7 +758,7 @@ document.querySelector(".chat-header").addEventListener("click", (e) => {
                         pendingReqDiv.innerHTML += `<div style="font-size: 13px; padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,0.05); display: flex; justify-content: space-between; align-items: center;"><span>${pName}</span><div><button onclick="approveMember('${group.id}', '${pendingId}')" style="background:#10b981; border:none; color:white; padding:4px 8px; border-radius:4px; font-size:11px; cursor:pointer; margin-right:5px;">Approve</button><button onclick="rejectMember('${group.id}', '${pendingId}')" style="background:#ef4444; border:none; color:white; padding:4px 8px; border-radius:4px; font-size:11px; cursor:pointer;">Reject</button></div></div>`;
                     });
                 } else { pendingReqDiv.style.display = "none"; }
-                deleteBtn.onclick = async () => { if (confirm(`Are you sure you want to delete ${group.name}?`)) { deleteBtn.innerHTML = "<i class='fa-solid fa-spinner fa-spin'></i> Deleting..."; const msgsSnap = await getDocs(query(collection(db, "chats", currentChatId, "messages"))); const batch = writeBatch(db); msgsSnap.docs.forEach(doc => batch.delete(doc.ref)); await batch.commit(); await deleteDoc(doc(db, "groups", currentChatId)); document.getElementById("groupSettingsModal").style.display = "none"; document.getElementById("backToUsersBtn").click(); showToast("Group Deleted", "Group permanently wiped."); } }; 
+                deleteBtn.onclick = async () => { if (confirm(`Are you sure you want to delete ${group.name}?`)) { deleteBtn.innerHTML = "<i class='fa-solid fa-spinner fa-spin'></i> Deleting..."; const msgsSnap = await getDocs(query(collection(db, "chats", currentChatId, "messages"))); const batch = writeBatch(db); msgsSnap.docs.forEach(msgDoc => batch.delete(msgDoc.ref)); await batch.commit(); await deleteDoc(doc(db, "groups", currentChatId)); document.getElementById("groupSettingsModal").style.display = "none"; document.getElementById("backToUsersBtn").click(); showToast("Group Deleted", "Group permanently wiped."); } }; 
             } else { deleteBtn.style.display = "none"; if (pendingReqDiv) pendingReqDiv.style.display = "none"; }
             document.getElementById("groupSettingsModal").style.display = "flex";
         }
@@ -769,7 +772,7 @@ bindPointerTap(launchGameMenuBtn, () => { gameSelectionModal.style.display = "fl
 bindPointerTap(closeGameSelectBtn, () => { gameSelectionModal.style.display = "none"; });
 document.querySelectorAll(".game-select-btn").forEach(btn => {
     bindPointerTap(btn, async () => {
-        const gameType = btn.getAttribute("data-game"); gameSelectionModal.style.display = "none"; const timerValue = modalMsgTimerSelect ? parseInt(modalMsgTimerSelect.value) : 60000;
+        const gameType = btn.getAttribute("data-game"); gameSelectionModal.style.display = "none"; const timerValue = modalMsgTimerSelect ? parseInt(modalMsgTimerSelect.value) : 0;
         if (gameType === 'doodle') {
             if (isCurrentChatGroup) { alert("Doodle is for 1v1 only!"); return; }
             await updateDoc(doc(db, "chats", currentChatId), { doodleReq: auth.currentUser.uid });
@@ -789,14 +792,13 @@ window.acceptGameChallenge = async (gameId, gameType) => { await updateDoc(doc(d
 closeGameBtn.addEventListener("click", () => { if(currentAnimationId) cancelAnimationFrame(currentAnimationId); if (singlePlayerMode) { singlePlayerMode = false; spTttActive = false; if (window.innerWidth <= 992) sidebar.style.display = "flex"; } else { if(gameUnsubscribe) gameUnsubscribe(); if(currentGameId) { updateDoc(doc(db, "games", currentGameId), { status: "abandoned" }); } } activeGameArea.style.display = "none"; currentGameId = null; isPlayingActionGame = false; if (currentChatId) { loadMessages(); } });
 function joinGameRoom(gameId, gameType) {
     currentGameId = gameId; isPlayingActionGame = false; singlePlayerMode = false; activeGameArea.style.display = "flex";
-    let gTitle = "Game"; if (gameType === 'tictactoe') gTitle = "Tic Tac Toe"; if (gameType === 'rps') gTitle = "Rock Paper Scissors"; if (gameType === 'jetfighter') gTitle = "Jet Fighter"; if (gameType === 'carracing') gTitle = "Car Racing"; if (gameType === 'ludo') gTitle = "Ludo Arena"; document.getElementById("activeGameTitle").innerText = gTitle;
+    let gTitle = "Game"; if (gameType === 'tictactoe') gTitle = "Tic Tac Toe"; if (gameType === 'rps') gTitle = "Rock Paper Scissors"; if (gameType === 'jetfighter') gTitle = "Jet Fighter"; if (gameType === 'carracing') gTitle = "Car Racing"; if (gameType === 'ludo') gTitle = "Ludo Arena"; if (gameType === 'cybertanks') gTitle = "Cyber Tanks (1v1)"; document.getElementById("activeGameTitle").innerText = gTitle;
     if(gameUnsubscribe) gameUnsubscribe();
     gameUnsubscribe = onSnapshot(doc(db, "games", gameId), (docSnap) => {
         if(!docSnap.exists()) return; const data = docSnap.data();
         if(data.status === "abandoned") { gameUIContainer.innerHTML = `<h3 style="color:var(--accent);">Opponent left the game.</h3>`; isPlayingActionGame = false; return; }
         if(data.status === "waiting") { gameUIContainer.innerHTML = `<h3>Waiting for opponent... <i class="fa-solid fa-spinner fa-spin"></i></h3>`; isPlayingActionGame = false; return; }
         if (data.type === 'tictactoe') renderTicTacToe(data, gameId); if (data.type === 'rps') renderRPS(data, gameId); if (data.type === 'jetfighter') renderActionGame(data, gameId, 'jetfighter'); if (data.type === 'carracing') renderActionGame(data, gameId, 'carracing'); if (data.type === 'ludo') renderLudo(data, gameId);
-        if (gameType === 'cybertanks') gTitle = "Cyber Tanks (1v1)";
         if (data.type === 'cybertanks') renderActionGame(data, gameId, 'cybertanks');
     });
 }
@@ -897,7 +899,7 @@ chatDoodleBtn.addEventListener("click", async () => {
     else {
         if (isCurrentChatGroup) { alert("Doodle is for 1v1 only!"); return; }
         await updateDoc(doc(db, "chats", currentChatId), { doodleReq: auth.currentUser.uid });
-        const timerValue = modalMsgTimerSelect ? parseInt(modalMsgTimerSelect.value) : 60000;
+        const timerValue = modalMsgTimerSelect ? parseInt(modalMsgTimerSelect.value) : 0;
         const payload = { sender: auth.currentUser.uid, time: Date.now(), isDoodleRequest: true, isDeleted: false }; if (timerValue > 0) payload.timerDuration = timerValue;
         await addDoc(collection(db, "chats", currentChatId, "messages"), payload); await setDoc(doc(db, "users", targetUserUid), { chatMeta: { [auth.currentUser.uid]: { time: Date.now(), text: "🎨 DOODLE REQUEST", unread: true } } }, { merge: true });
         showToast("Request Sent", "Doodle request sent to friend.");
@@ -946,7 +948,11 @@ exploreTabs.forEach(tab => {
         const target = tab.getAttribute("data-target"); document.getElementById(target).classList.add("active");
         if (target === "exploreLounge") initGlobalLounge();
         if (target === "exploreLeaderboard") initLeaderboard();
-        if (target === "exploreMemes") initMemesFeed();
+        if (target === "exploreMemes") {
+            // Clean up lounge listener when leaving it
+            if (globalChatUnsubscribe) { globalChatUnsubscribe(); globalChatUnsubscribe = null; }
+            initMemesFeed();
+        }
     });
 });
 
@@ -986,7 +992,14 @@ async function sendGlobalMessage() {
 sendGlobalBtn.addEventListener("click", sendGlobalMessage); globalMsgInput.addEventListener("keypress", (e) => { if(e.key === "Enter") { e.preventDefault(); sendGlobalMessage(); } });
 
 const lbGameSelect = document.getElementById("lbGameSelect"); const leaderboardList = document.getElementById("leaderboardList");
-async function initLeaderboard() { lbGameSelect.addEventListener("change", fetchLeaderboard); fetchLeaderboard(); }
+let leaderboardInitialized = false;
+async function initLeaderboard() { 
+    if (!leaderboardInitialized) {
+        lbGameSelect.addEventListener("change", fetchLeaderboard);
+        leaderboardInitialized = true;
+    }
+    fetchLeaderboard(); 
+}
 async function fetchLeaderboard() {
     leaderboardList.innerHTML = '<div style="text-align:center; padding: 20px;"><i class="fa-solid fa-spinner fa-spin"></i> Fetching scores...</div>'; const game = lbGameSelect.value;
     try {
