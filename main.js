@@ -69,7 +69,38 @@ function switchSidebarView(view) {
     newsFeedContainer.style.display = "none"; chatListContainer.style.display = "none"; gamesNavContainer.style.display = "none";
     if (view === 'chats') { chatListContainer.style.display = "flex"; chatToggleBtn.innerHTML = '<i class="fa-solid fa-message"></i> Chats'; chatToggleBtn.style.color = "white"; homeGamesBtn.style.color = "var(--text-muted)"; if(openUsersListBtn) openUsersListBtn.style.color = "var(--text-muted)"; } 
     else if (view === 'games') { gamesNavContainer.style.display = "flex"; chatToggleBtn.innerHTML = '<i class="fa-solid fa-fire"></i> Feed'; chatToggleBtn.style.color = "white"; homeGamesBtn.style.color = "var(--primary)"; if(openUsersListBtn) openUsersListBtn.style.color = "var(--text-muted)"; } 
-    else if (view === 'feed') { newsFeedContainer.style.display = "flex"; chatToggleBtn.innerHTML = '<i class="fa-solid fa-fire"></i> Feed (Active)'; chatToggleBtn.style.color = "var(--accent)"; homeGamesBtn.style.color = "var(--text-muted)"; if(openUsersListBtn) openUsersListBtn.style.color = "var(--text-muted)"; }
+    else if (view === 'feed') { newsFeedContainer.style.display = "flex"; chatToggleBtn.innerHTML = '<i class="fa-solid fa-fire"></i> Feed (Active)'; chatToggleBtn.style.color = "var(--accent)"; homeGamesBtn.style.color = "var(--text-muted)"; if(openUsersListBtn) openUsersListBtn.style.color = "var(--text-muted)"; renderActiveFeed(); }
+}
+
+async function renderActiveFeed() {
+    newsFeedContainer.innerHTML = '<div style="padding: 30px; text-align: center; color: var(--primary);"><i class="fa-solid fa-spinner fa-spin fa-2x"></i><p style="margin-top:10px; font-size:12px; color:var(--text-muted);">Fetching Latest Tech News...</p></div>';
+
+    try {
+        const res = await fetch("https://dev.to/api/articles?tag=programming&per_page=15");
+        const articles = await res.json();
+        newsFeedContainer.innerHTML = "";
+
+        const header = document.createElement("div");
+        header.style.cssText = "padding: 5px 0 10px 0; font-size: 13px; color: var(--text-muted); font-weight: 600; letter-spacing: 0.5px;";
+        header.innerHTML = '<i class="fa-solid fa-newspaper" style="color:var(--primary); font-size:12px; margin-right:6px;"></i> LATEST TECH NEWS';
+        newsFeedContainer.appendChild(header);
+
+        articles.forEach(article => {
+            const card = document.createElement("div");
+            card.className = "news-feed-card";
+            card.innerHTML = `
+                <h4 style="font-size: 14px; margin-bottom: 5px; color: var(--text-main);">${article.title}</h4>
+                <p style="font-size: 11px; color: var(--text-muted); margin-bottom: 12px;">By ${article.user.name} • ${article.reading_time_minutes} min read</p>
+                <div style="display: flex; gap: 10px; align-items: center;">
+                    <a href="${article.url}" target="_blank" style="font-size: 11px; background: rgba(139, 92, 246, 0.15); padding: 6px 12px; border-radius: 6px; color: var(--primary); text-decoration: none;">Read Article <i class="fa-solid fa-arrow-up-right-from-square" style="font-size: 9px; margin-left: 3px;"></i></a>
+                    <span style="font-size: 11px; color: var(--text-muted);"><i class="fa-solid fa-heart" style="color:var(--accent);"></i> ${article.public_reactions_count}</span>
+                </div>
+            `;
+            newsFeedContainer.appendChild(card);
+        });
+    } catch (err) {
+        newsFeedContainer.innerHTML = '<div style="padding: 20px; text-align: center; color: #ef4444;"><i class="fa-solid fa-triangle-exclamation fa-2x"></i><p style="margin-top:10px; font-size:12px;">Failed to load news.</p></div>';
+    }
 }
 // bindPointerTap must be defined here, before it is first called below
 function bindPointerTap(element, handler) {
@@ -619,6 +650,9 @@ window.openChat = async (targetUid, targetName, targetAvatar, isTargetOnline, ta
 
   emptyChatState.style.display = "none"; 
   activeChatState.style.display = "flex"; 
+  // Suppress viewport-locking during transition to prevent jitter
+  _lockViewportSuppressed = true;
+  setTimeout(() => { _lockViewportSuppressed = false; }, 350);
   if(window.innerWidth <= 992) { sidebar.style.display = "none"; history.pushState({ page: "chat" }, ""); }
 
   // 1. FIRE THESE INSTANTLY so the wallpaper and typing status load immediately without waiting
@@ -651,52 +685,86 @@ window.openGroupChat = (groupId, groupName, memberCount) => {
   const overlay = document.getElementById("chatStateOverlay"); if(overlay) { overlay.style.display = "none"; overlay.innerHTML = ""; }
   const groupData = allGroups.find(g => g.id === groupId); const avatarToUse = groupData && groupData.avatarUrl ? groupData.avatarUrl : `https://ui-avatars.com/api/?name=${encodeURIComponent(groupName)}&background=8b5cf6&color=fff`;
   document.getElementById("chatTargetName").innerText = groupName; document.getElementById("chatTargetAvatar").src = avatarToUse; document.getElementById("chatTargetStatus").innerText = `${memberCount} members`;
-  emptyChatState.style.display = "none"; activeChatState.style.display = "flex"; if(window.innerWidth <= 992) { sidebar.style.display = "none"; history.pushState({ page: "chat" }, ""); }
+  emptyChatState.style.display = "none"; activeChatState.style.display = "flex"; 
+  _lockViewportSuppressed = true;
+  setTimeout(() => { _lockViewportSuppressed = false; }, 350);
+  if(window.innerWidth <= 992) { sidebar.style.display = "none"; history.pushState({ page: "chat" }, ""); }
   loadMessages(); listenToChatStatus(groupName); 
 }
 
 function loadMessages() {
   if (messagesUnsubscribe) messagesUnsubscribe(); 
   const q = query(collection(db, "chats", currentChatId, "messages"), orderBy("time", "asc"));
-  messagesUnsubscribe = onSnapshot(q, async (snapshot) => {
-    chatBox.innerHTML = ""; let lastMyMsg = null; if(window.msgTimeouts) window.msgTimeouts.forEach(clearTimeout); window.msgTimeouts = []; const fragment = document.createDocumentFragment(); let lastMyMsgId = null;
-    snapshot.forEach(d => { if(d.data().sender === auth.currentUser.uid) lastMyMsgId = d.id; });
-    
-    // We must handle decryption asynchronously line by line
-    const docsArray = snapshot.docs;
-    for(let i=0; i<docsArray.length; i++) {
-      const docSnap = docsArray[i];
-      const msg = docSnap.data(); const msgId = docSnap.id; const isMe = msg.sender === auth.currentUser.uid;
-      if (isMe) lastMyMsg = msg; if (msg.isExpired) continue;
-      const pDoodleArea = document.getElementById("privateDoodleArea"); const isDoodleOpen = pDoodleArea && pDoodleArea.style.display === "flex";
-      const activeGameArea = document.getElementById("activeGameArea"); const isGameOpen = activeGameArea && activeGameArea.style.display === "flex";
-const isSidebarCoveringChat = window.innerWidth <= 992 && sidebar.style.display !== "none";
-        const isChatCurrentlyVisible = activeChatState.style.display === "flex" && document.visibilityState === 'visible' && !isSidebarCoveringChat;
+  
+  // Clear only once when opening the chat
+  chatBox.innerHTML = ""; 
+  if(window.msgTimeouts) window.msgTimeouts.forEach(clearTimeout); 
+  window.msgTimeouts = [];
 
-      if (!isMe && !msg.seenAt && !isDoodleOpen && !isGameOpen && isChatCurrentlyVisible) { const updateData = { seenAt: Date.now() }; if (msg.timerDuration) { updateData.expiresAt = Date.now() + msg.timerDuration; } updateDoc(doc(db, "chats", currentChatId, "messages", msgId), updateData).catch(e=>{}); }
+  messagesUnsubscribe = onSnapshot(q, async (snapshot) => {
+    let lastMyMsgId = null;
+    snapshot.docs.forEach(d => { if(d.data().sender === auth.currentUser.uid) lastMyMsgId = d.id; });
+
+    // Process ONLY the messages that were added, modified, or removed
+    for (const change of snapshot.docChanges()) {
+      const msg = change.doc.data(); 
+      const msgId = change.doc.id; 
+      const isMe = msg.sender === auth.currentUser.uid;
+
+      if (change.type === "removed") {
+          const el = document.getElementById(`msg_${msgId}`);
+          if(el) el.remove();
+          continue;
+      }
+
       if (msg.expiresAt) {
           const timeLeft = msg.expiresAt - Date.now();
           const wipeMessage = async () => {
               if (msg.imagePublicId) { try { await updateDoc(doc(db, "chats", currentChatId, "messages", msgId), { text: "🚫 Image Expired", imageUrl: null, isExpired: true }); } catch(e) {} } 
               else { try { await deleteDoc(doc(db, "chats", currentChatId, "messages", msgId)); } catch(e) { await updateDoc(doc(db, "chats", currentChatId, "messages", msgId), { text: "", expiresAt: null, isExpired: true }); } }
-              if (!isCurrentChatGroup) { try { const expiredMeta = { time: Date.now(), text: "🚫 Message Expired", unread: false }; await setDoc(doc(db, "users", auth.currentUser.uid), { chatMeta: { [targetUserUid]: expiredMeta } }, { merge: true }); await setDoc(doc(db, "users", targetUserUid), { chatMeta: { [auth.currentUser.uid]: expiredMeta } }, { merge: true }); } catch(err) {} }
           };
-          if (timeLeft <= 0) { wipeMessage(); continue; } else { const timerId = setTimeout(() => { wipeMessage(); }, timeLeft); window.msgTimeouts.push(timerId); }
+          if (timeLeft <= 0) { wipeMessage(); continue; } else { window.msgTimeouts.push(setTimeout(wipeMessage, timeLeft)); }
       }
       if (msg.deletedFor && msg.deletedFor.includes(auth.currentUser.uid)) continue;
 
-      const timeStr = new Date(msg.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); const div = document.createElement("div"); div.className = `message-wrapper ${isMe ? 'sent' : 'received'}`; let contentHtml = "";
+      const pDoodleArea = document.getElementById("privateDoodleArea"); const isDoodleOpen = pDoodleArea && pDoodleArea.style.display === "flex";
+      const activeGameArea = document.getElementById("activeGameArea"); const isGameOpen = activeGameArea && activeGameArea.style.display === "flex";
+      const isSidebarCoveringChat = window.innerWidth <= 992 && sidebar.style.display !== "none";
+      const isChatCurrentlyVisible = activeChatState.style.display === "flex" && document.visibilityState === 'visible' && !isSidebarCoveringChat;
+
+      // Send read receipt if we're looking at the chat
+      if (!isMe && !msg.seenAt && !isDoodleOpen && !isGameOpen && isChatCurrentlyVisible) { 
+          const updateData = { seenAt: Date.now() }; 
+          if (msg.timerDuration) { updateData.expiresAt = Date.now() + msg.timerDuration; } 
+          updateDoc(doc(db, "chats", currentChatId, "messages", msgId), updateData).catch(e=>{}); 
+      }
+
+      // Check if this message div already exists
+      let div = document.getElementById(`msg_${msgId}`);
+      let isNew = false;
+      if (!div) {
+          div = document.createElement("div");
+          div.id = `msg_${msgId}`;
+          div.className = `message-wrapper ${isMe ? 'sent' : 'received'}`;
+          chatBox.appendChild(div);
+          isNew = true;
+      }
+
+      const timeStr = new Date(msg.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); 
+      let contentHtml = "";
 
       if (msg.isDoodleRequest) {
           if (isMe) { contentHtml = `<div class="challenge-bubble" onclick="event.stopPropagation();"><h4>🎨 Doodle Request Sent</h4><p>Waiting for opponent to accept...</p></div>`; }
           else { contentHtml = `<div class="challenge-bubble" onclick="event.stopPropagation();"><h4>🎨 Shared Whiteboard</h4><p>Wants to draw with you!</p><div class="challenge-actions"><button class="btn-accept" onclick="acceptDoodle()">Accept</button></div></div>`; }
       } else if (msg.isGameChallenge) {
          const gameNames = { "ludo": "Ludo Arena", "tictactoe": "Tic Tac Toe", "rps": "Rock Paper Scissors", "jetfighter": "Jet Fighter", "carracing": "Car Racing", "cybertanks": "Cyber Tanks (1v1)" };
-          if (isMe) { contentHtml = `<div class="challenge-bubble" onclick="event.stopPropagation();"><h4>🎮 Challenge Sent</h4><p>Waiting for opponent to accept ${gameNames[msg.gameType] || 'a Game'}...</p></div>`; } 
+          if (isMe) { 
+              // FIXED: Sender now has an Enter Game button so they can join/re-join the waiting room!
+              contentHtml = `<div class="challenge-bubble" onclick="event.stopPropagation();"><h4>🎮 Challenge Sent</h4><p>Waiting for opponent to accept ${gameNames[msg.gameType] || 'a Game'}...</p><div class="challenge-actions"><button class="btn-accept" style="background:var(--primary);" onclick="window.joinGameRoom('${msg.gameId}', '${msg.gameType}')">Enter Game Room</button></div></div>`; 
+          } 
           else { contentHtml = `<div class="challenge-bubble" onclick="event.stopPropagation();"><h4>🎮 Game Request</h4><p>Wants to play <b>${gameNames[msg.gameType] || 'a Game'}</b></p><div class="challenge-actions"><button class="btn-accept" onclick="acceptGameChallenge('${msg.gameId}', '${msg.gameType}')">Accept</button></div></div>`; }
       } else if (msg.isDeleted) { contentHtml = `<div class="msg-bubble msg-deleted"><i class="fa-solid fa-ban"></i> This message was deleted</div>`; } 
       else {
-        // E2EE Decryption
         let decryptedText = msg.text;
         if (msg.text && msg.text.startsWith("E2EE:")) decryptedText = await CryptoE2EE.decrypt(msg.text, activeSharedKey);
         if (!decryptedText && !msg.imageUrl) continue;
@@ -714,15 +782,30 @@ const isSidebarCoveringChat = window.innerWidth <= 992 && sidebar.style.display 
       }
       
       let avatarSrc = document.getElementById('chatTargetAvatar').src;
-if (!isMe) {
-    const senderUser = allUsers.find(u => u.id === msg.sender);
-    if (senderUser) avatarSrc = generateAvatar(senderUser, msg.senderName);
-}
-      let seenTickHtml = (isMe && msgId === lastMyMsgId && msg.seenAt) ? `<i class="fa-solid fa-check-double" style="color: #3b82f6; margin-left: 5px; font-size: 11px;"></i>` : '';
+      if (!isMe) {
+          const senderUser = allUsers.find(u => u.id === msg.sender);
+          if (senderUser) avatarSrc = generateAvatar(senderUser, msg.senderName);
+      }
+      
+      // WhatsApp style: Only show the tick on the absolute LAST message sent by me
+      let seenTickHtml = (isMe && msgId === lastMyMsgId && msg.seenAt) ? `<i class="fa-solid fa-check-double" style="color: #3b82f6; margin-left: 5px; font-size: 11px;"></i>` : (isMe && msgId === lastMyMsgId ? `<i class="fa-solid fa-check" style="color: var(--text-muted); margin-left: 5px; font-size: 11px;"></i>` : '');
+      
       div.innerHTML = `${!isMe ? `<img src="${avatarSrc}" class="msg-avatar" data-uid="${msg.sender}">` : ''}<div style="display:flex; flex-direction:column; max-width: 100%;">${contentHtml}<div class="msg-time">${timeStr}${seenTickHtml}</div></div>`;
-      fragment.appendChild(div);
+      
+      // Smooth scroll if it's a completely new message
+      if (isNew) {
+          chatBox.scrollTo({ top: chatBox.scrollHeight, behavior: 'smooth' });
+      }
     }
-    chatBox.appendChild(fragment); chatBox.scrollTop = chatBox.scrollHeight;
+    
+    // Cleanup old ticks visually
+    document.querySelectorAll('.fa-check-double, .fa-check').forEach(icon => {
+        const parentMsg = icon.closest('.message-wrapper');
+        if (parentMsg && parentMsg.id !== `msg_${lastMyMsgId}`) {
+            icon.remove();
+        }
+    });
+
   });
 }
 
@@ -758,7 +841,7 @@ msgInput.addEventListener("input", async () => { if(!currentChatId || isCurrentC
 async function sendMessage() {
   const text = msgInput.value.trim(); if (!text) return;
   const timerValue = modalMsgTimerSelect ? parseInt(modalMsgTimerSelect.value) : 0;
-  msgInput.value = ""; msgInput.focus(); if (!isCurrentChatGroup && currentChatStatus !== 'accepted') return;
+  msgInput.value = ""; msgInput.style.height = "20px"; msgInput.focus(); if (!isCurrentChatGroup && currentChatStatus !== 'accepted') return;
   
   // Encrypt outbound payload via Web Crypto
   let encryptedText = text;
@@ -799,6 +882,11 @@ async function sendMessage() {
   try { await addDoc(collection(db, "chats", currentChatId, "messages"), payload); } catch (e) { showToast("Error", "Message failed to send."); }
 }
 sendBtn.addEventListener("click", sendMessage); msgInput.addEventListener("keypress", (e) => { if (e.key === "Enter") { e.preventDefault(); sendMessage(); } });
+// Auto-resize textarea as user types
+msgInput.addEventListener("input", () => {
+    msgInput.style.height = "20px";
+    msgInput.style.height = Math.min(msgInput.scrollHeight, 100) + "px";
+});
 searchInput.addEventListener("input", (e) => { 
     const term = e.target.value.toLowerCase(); let hasVisible = false;
     document.querySelectorAll(".user-item").forEach(item => { const match = item.innerText.toLowerCase().includes(term); item.style.display = match ? "flex" : "none"; if (match) hasVisible = true; }); 
@@ -889,18 +977,23 @@ document.querySelectorAll(".game-select-btn").forEach(btn => {
 });
 window.acceptGameChallenge = async (gameId, gameType) => { await updateDoc(doc(db, "games", gameId), { status: "playing" }); joinGameRoom(gameId, gameType); };
 closeGameBtn.addEventListener("click", () => { if(currentAnimationId) cancelAnimationFrame(currentAnimationId); if (singlePlayerMode) { singlePlayerMode = false; spTttActive = false; if (window.innerWidth <= 992) sidebar.style.display = "flex"; } else { if(gameUnsubscribe) gameUnsubscribe(); if(currentGameId) { updateDoc(doc(db, "games", currentGameId), { status: "abandoned" }); } } activeGameArea.style.display = "none"; currentGameId = null; isPlayingActionGame = false; if (currentChatId) { loadMessages(); } });
-function joinGameRoom(gameId, gameType) {
+window.joinGameRoom = function(gameId, gameType) {
     currentGameId = gameId; isPlayingActionGame = false; singlePlayerMode = false; activeGameArea.style.display = "flex";
+    if (window.innerWidth <= 992) sidebar.style.display = "none";
     let gTitle = "Game"; if (gameType === 'tictactoe') gTitle = "Tic Tac Toe"; if (gameType === 'rps') gTitle = "Rock Paper Scissors"; if (gameType === 'jetfighter') gTitle = "Jet Fighter"; if (gameType === 'carracing') gTitle = "Car Racing"; if (gameType === 'ludo') gTitle = "Ludo Arena"; if (gameType === 'cybertanks') gTitle = "Cyber Tanks (1v1)"; document.getElementById("activeGameTitle").innerText = gTitle;
     if(gameUnsubscribe) gameUnsubscribe();
     gameUnsubscribe = onSnapshot(doc(db, "games", gameId), (docSnap) => {
         if(!docSnap.exists()) return; const data = docSnap.data();
         if(data.status === "abandoned") { gameUIContainer.innerHTML = `<h3 style="color:var(--accent);">Opponent left the game.</h3>`; isPlayingActionGame = false; return; }
         if(data.status === "waiting") { gameUIContainer.innerHTML = `<h3>Waiting for opponent... <i class="fa-solid fa-spinner fa-spin"></i></h3>`; isPlayingActionGame = false; return; }
+        if (data.status === "playing" && !isPlayingActionGame && (data.type === 'jetfighter' || data.type === 'carracing' || data.type === 'cybertanks')) {
+            const myScore = data.player1 === auth.currentUser.uid ? data.p1Score : data.p2Score;
+            if (myScore === null || myScore === undefined) isPlayingActionGame = false;
+        }
         if (data.type === 'tictactoe') renderTicTacToe(data, gameId); if (data.type === 'rps') renderRPS(data, gameId); if (data.type === 'jetfighter') renderActionGame(data, gameId, 'jetfighter'); if (data.type === 'carracing') renderActionGame(data, gameId, 'carracing'); if (data.type === 'ludo') renderLudo(data, gameId);
         if (data.type === 'cybertanks') renderActionGame(data, gameId, 'cybertanks');
     });
-}
+};
 const ludoPath = [ {x:30,y:130}, {x:50,y:130}, {x:70,y:130}, {x:90,y:130}, {x:110,y:130}, {x:130,y:110}, {x:130,y:90}, {x:130,y:70}, {x:130,y:50}, {x:130,y:30}, {x:130,y:10}, {x:150,y:10}, {x:170,y:10}, {x:170,y:30}, {x:170,y:50}, {x:170,y:70}, {x:170,y:90}, {x:170,y:110}, {x:190,y:130}, {x:210,y:130}, {x:230,y:130}, {x:250,y:130}, {x:270,y:130}, {x:290,y:130}, {x:290,y:150}, {x:290,y:170}, {x:270,y:170}, {x:250,y:170}, {x:230,y:170}, {x:210,y:170}, {x:190,y:170}, {x:170,y:190}, {x:170,y:210}, {x:170,y:230}, {x:170,y:250}, {x:170,y:270}, {x:170,y:290}, {x:150,y:290}, {x:130,y:290}, {x:130,y:270}, {x:130,y:250}, {x:130,y:230}, {x:130,y:210}, {x:130,y:190}, {x:110,y:170}, {x:90,y:170}, {x:70,y:170}, {x:50,y:170}, {x:30,y:170}, {x:10,y:170}, {x:10,y:150}, {x:10,y:130}, {x:30,y:150}, {x:50,y:150}, {x:70,y:150}, {x:90,y:150}, {x:110,y:150}, {x:270,y:150}, {x:250,y:150}, {x:230,y:150}, {x:210,y:150}, {x:190,y:150} ]; const ludoBases = { p1: [{x:40,y:40}, {x:80,y:40}, {x:40,y:80}, {x:80,y:80}], p2: [{x:220,y:220}, {x:260,y:220}, {x:220,y:260}, {x:260,y:260}] };
 function renderLudo(data, gameId) {
     const isPlayer1 = data.player1 === auth.currentUser.uid; const isMyTurn = data.turn === auth.currentUser.uid; const myRole = isPlayer1 ? 'p1' : 'p2'; const diceIcons = ['🎲', '⚀', '⚁', '⚂', '⚃', '⚄', '⚅']; let currentDice = data.diceValue ? diceIcons[data.diceValue] : '🎲';
@@ -1386,7 +1479,10 @@ if (updateAppBtn) {
 // MOBILE KEYBOARD VIEWPORT FIX (ANDROID & IOS)
 // =========================================================
 
+let _lockViewportSuppressed = false;
+let _lockViewportTimer = null;
 function lockViewport() {
+    if (_lockViewportSuppressed) return;
     if (window.visualViewport) {
         const h = window.visualViewport.height;
         
