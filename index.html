@@ -17,10 +17,21 @@
   <link rel="apple-touch-icon" href="./icon-192.png">
 
 <script>
-    // Stable Service Worker Registration
+    // Service Worker Registration with auto-update support
     if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
-            navigator.serviceWorker.register('firebase-messaging-sw.js');
+            navigator.serviceWorker.register('firebase-messaging-sw.js').then(reg => {
+                reg.addEventListener('updatefound', () => {
+                    const newWorker = reg.installing;
+                    if (newWorker) {
+                        newWorker.addEventListener('statechange', () => {
+                            if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                                newWorker.postMessage({ type: 'SKIP_WAITING' });
+                            }
+                        });
+                    }
+                });
+            }).catch(err => console.warn('SW registration failed:', err));
         });
     }
 </script>
@@ -237,6 +248,7 @@
       <div style="display: flex; flex-direction: column; gap: 15px; text-align: left;">
         <div><label style="font-size: 13px; color: var(--text-muted);">Disappearing Messages</label>
           <select id="modalMsgTimerSelect" class="difficulty-select" style="width: 100%; margin-top: 5px;">
+            <option value="0">🔕 Off (No Timer)</option>
             <option value="60000">⏱️ 1 Min</option>
             <option value="3600000">⏱️ 1 Hour</option>
             <option value="86400000">⏱️ 1 Day</option>
@@ -374,6 +386,5 @@
     </div>
   </div>
   
-  <script type="module" src="./main.js?v=999"></script>
-</body>
+ <script type="module" src="./main.js?v=999"></script>
 </html>
