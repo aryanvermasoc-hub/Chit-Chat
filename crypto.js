@@ -49,14 +49,14 @@ export const CryptoE2EE = {
             const privKeyJwk = await SecureKeyStore.getKey("chitchat_private_key");
             if (!privKeyJwk || !peerPublicKeyJwk) return null;
             
-            const privateKey = await window.crypto.subtle.importKey("jwk", privKeyJwk, { name: "ECDH", namedCurve: "P-256" }, true, ["deriveKey", "deriveBits"]);
-            const publicKey = await window.crypto.subtle.importKey("jwk", peerPublicKeyJwk, { name: "ECDH", namedCurve: "P-256" }, true, []);
+            const privateKey = await window.crypto.subtle.importKey("jwk", privKeyJwk, { name: "ECDH", namedCurve: "P-256" }, false, ["deriveKey", "deriveBits"]);
+            const publicKey = await window.crypto.subtle.importKey("jwk", peerPublicKeyJwk, { name: "ECDH", namedCurve: "P-256" }, false, []);
             
             return await window.crypto.subtle.deriveKey(
                 { name: "ECDH", public: publicKey },
                 privateKey,
                 { name: "AES-GCM", length: 256 },
-                true, ["encrypt", "decrypt"]
+                false, ["encrypt", "decrypt"]
             );
         } catch(e) { return null; }
     },
