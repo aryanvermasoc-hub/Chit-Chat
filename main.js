@@ -532,16 +532,7 @@ async function renderSidebar() {
       const avatarUrl = generateAvatar(user, displayName);
       const isOnline = (user.isOnline && canSeePrivacy(user, 'privacyStatus')) ? "online" : "";
       const meta = myUserData?.chatMeta?.[user.id]; const unreadStyle = meta?.unread ? "font-weight:700; color:var(--primary);" : "";
-      let previewText = meta?.text ? meta.text : `@${user.username}`;
-     // Decrypt Sidebar items gracefully
-      if (previewText.startsWith("E2EE:")) {
-        try {
-            const tempKey = await CryptoE2EE.getSharedKey(user.publicKey);
-            previewText = await CryptoE2EE.decrypt(previewText, tempKey);
-        } catch (cryptoErr) {
-            previewText = "🔒 Encrypted Message";
-        }
-      }
+      const previewText = `@${user.username}`;
       const userCard = document.createElement("div"); userCard.className = "user-item";
       userCard.innerHTML = `<div class="avatar-wrapper"><img src="${avatarUrl}" class="avatar"><div class="status-dot ${isOnline}"></div></div><div class="user-meta"><span class="name" style="${unreadStyle}">${displayName}</span><span class="handle" style="${unreadStyle}">${previewText}</span></div>${meta?.unread ? '<div style="width:10px; height:10px; background:var(--primary); border-radius:50%; flex-shrink:0;"></div>' : ''}`;
       bindPointerTap(userCard, () => { if(meta?.unread) updateDoc(doc(db, "users", auth.currentUser.uid), { [`chatMeta.${user.id}.unread`]: false }); openChat(user.id, displayName, avatarUrl, user.isOnline, user.lastSeen, user.publicKey); });
@@ -636,7 +627,7 @@ function listenToChatStatus(targetName) {
 window.openChat = async (targetUid, targetName, targetAvatar, isTargetOnline, targetLastSeen, targetPublicKey) => {
   isCurrentChatGroup = false; currentChatId = auth.currentUser.uid < targetUid ? `${auth.currentUser.uid}_${targetUid}` : `${targetUid}_${auth.currentUser.uid}`; targetUserUid = targetUid;
   document.getElementById("chatSettingsBtn").style.display = "none"; document.getElementById("chatDoodleBtn").style.display = "none"; if (ghostModeBtn) ghostModeBtn.style.display = "none"; document.getElementById("launchGameMenuBtn").style.display = "none"; 
- document.getElementById("chatBox").innerHTML = ""; document.getElementById("chatBox").style.opacity = "0"; if(replyingToMsg) document.getElementById("cancelReplyBtn").click(); if (document.getElementById("privateDoodleArea")) document.getElementById("privateDoodleArea").style.display = "none";
+ chatBox.style.transition = "none"; chatBox.style.visibility = "hidden"; chatBox.style.opacity = "0"; chatBox.innerHTML = ""; if(replyingToMsg) document.getElementById("cancelReplyBtn").click(); if (document.getElementById("privateDoodleArea")) document.getElementById("privateDoodleArea").style.display = "none";
  const overlay = document.getElementById("chatStateOverlay"); if(overlay) { overlay.style.display = "none"; overlay.innerHTML = ""; }
   // Instantly apply cached wallpaper if it exists to prevent delay
   const cachedWallpaper = localStorage.getItem(`wp_${currentChatId}`);
@@ -681,7 +672,7 @@ window.openChat = async (targetUid, targetName, targetAvatar, isTargetOnline, ta
 window.openGroupChat = (groupId, groupName, memberCount) => {
   isCurrentChatGroup = true; currentChatId = groupId; targetUserUid = null; activeSharedKey = null; // No E2EE for groups in this version
   document.getElementById("launchGameMenuBtn").style.display = "none"; document.getElementById("chatSettingsBtn").style.display = "none"; document.getElementById("chatDoodleBtn").style.display = "none"; if (ghostModeBtn) ghostModeBtn.style.display = "none"; 
-  document.getElementById("chatBox").innerHTML = ""; document.getElementById("chatBox").style.opacity = "0"; document.getElementById("chatWallpaper").style.backgroundImage = "none"; if(replyingToMsg) document.getElementById("cancelReplyBtn").click(); if(pDoodleUnsubscribe) { pDoodleUnsubscribe(); pDoodleUnsubscribe = null; }
+  chatBox.style.transition = "none"; chatBox.style.visibility = "hidden"; chatBox.style.opacity = "0"; chatBox.innerHTML = ""; document.getElementById("chatWallpaper").style.backgroundImage = "none"; if(replyingToMsg) document.getElementById("cancelReplyBtn").click(); if(pDoodleUnsubscribe) { pDoodleUnsubscribe(); pDoodleUnsubscribe = null; }
   const overlay = document.getElementById("chatStateOverlay"); if(overlay) { overlay.style.display = "none"; overlay.innerHTML = ""; }
   const groupData = allGroups.find(g => g.id === groupId); const avatarToUse = groupData && groupData.avatarUrl ? groupData.avatarUrl : `https://ui-avatars.com/api/?name=${encodeURIComponent(groupName)}&background=8b5cf6&color=fff`;
   document.getElementById("chatTargetName").innerText = groupName; document.getElementById("chatTargetAvatar").src = avatarToUse; document.getElementById("chatTargetStatus").innerText = `${memberCount} members`;
@@ -697,13 +688,27 @@ function loadMessages() {
   const q = query(collection(db, "chats", currentChatId, "messages"), orderBy("time", "asc"));
   
   // Clear only once when opening the chat
+  chatBox.style.transition = "none";
+  chatBox.style.visibility = "hidden";
+  chatBox.style.opacity = "0";
   chatBox.innerHTML = ""; 
   if(window.msgTimeouts) window.msgTimeouts.forEach(clearTimeout); 
   window.msgTimeouts = [];
+  let isFirstSnapshotForChat = true;
+
+  const snapChatToBottom = () => {
+      chatBox.style.scrollBehavior = "auto";
+      chatBox.scrollTop = chatBox.scrollHeight;
+      requestAnimationFrame(() => {
+          chatBox.scrollTop = chatBox.scrollHeight;
+          setTimeout(() => { chatBox.scrollTop = chatBox.scrollHeight; }, 80);
+          setTimeout(() => { chatBox.scrollTop = chatBox.scrollHeight; }, 250);
+      });
+  };
 
 messagesUnsubscribe = onSnapshot(q, async (snapshot) => {
     let lastMyMsgId = null;
-    let isInitialLoad = chatBox.children.length === 0; // Check if it's the first time loading the chat
+    let isInitialLoad = isFirstSnapshotForChat;
     let hasNewMessages = false; // Track if we need to scroll
 
     snapshot.docs.forEach(d => { if(d.data().sender === auth.currentUser.uid) lastMyMsgId = d.id; });
@@ -792,6 +797,9 @@ messagesUnsubscribe = onSnapshot(q, async (snapshot) => {
       let seenTickHtml = (isMe && msgId === lastMyMsgId && msg.seenAt) ? `<i class="fa-solid fa-check-double" style="color: #3b82f6; margin-left: 5px; font-size: 11px;"></i>` : (isMe && msgId === lastMyMsgId ? `<i class="fa-solid fa-check" style="color: var(--text-muted); margin-left: 5px; font-size: 11px;"></i>` : '');
       
       div.innerHTML = `${!isMe ? `<img src="${avatarSrc}" class="msg-avatar" data-uid="${msg.sender}">` : ''}<div style="display:flex; flex-direction:column; max-width: 100%;">${contentHtml}<div class="msg-time">${timeStr}${seenTickHtml}</div></div>`;
+      if (isInitialLoad) {
+          div.querySelectorAll("img").forEach(img => img.addEventListener("load", snapChatToBottom, { once: true }));
+      }
       
     } // <-- This brace ends the docChanges() loop
     
@@ -804,16 +812,18 @@ messagesUnsubscribe = onSnapshot(q, async (snapshot) => {
 
     // 2. SCROLL & REVEAL LOGIC (Fixes the Jitter)
     if (isInitialLoad) {
-        chatBox.scrollTop = chatBox.scrollHeight; // Instant snap to bottom
+        snapChatToBottom(); // Instant snap to the newest message when opening a chat
         
-        // Reveal gracefully AFTER snapping to bottom
         setTimeout(() => { 
-            chatBox.style.transition = "opacity 0.2s ease-in-out"; 
-            chatBox.style.opacity = "1"; 
-        }, 50); 
+            chatBox.style.visibility = "visible";
+            chatBox.style.opacity = "1";
+            chatBox.style.transition = "";
+        }, 120); 
     } else if (hasNewMessages) {
+        chatBox.style.scrollBehavior = "";
         chatBox.scrollTo({ top: chatBox.scrollHeight, behavior: 'smooth' }); // Smooth scroll for live incoming messages
     }
+    isFirstSnapshotForChat = false;
 
     // Cleanup old ticks visually
     document.querySelectorAll('.fa-check-double, .fa-check').forEach(icon => {
