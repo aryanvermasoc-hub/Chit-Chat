@@ -30,6 +30,7 @@ let singlePlayerMode = false; let currentAnimationId = null; let currentSpDiffic
 let activeMsgId = null; let activeMsgText = ""; let activeMsgSender = ""; let activeMsgContext = 'chat'; 
 let pDoodleUnsubscribe = null; window.msgTimeouts = []; let generatedOTP = null; let pendingSignupData = null;
 let activeSharedKey = null; // Holds the dynamically generated E2EE key for 1v1 chats
+let messageLoadSeq = 0;
 
 window.changeSpDifficulty = (val) => { currentSpDifficulty = val; };
 
@@ -149,6 +150,22 @@ const generateAvatar = (userObj, fallbackName) => {
     return defaultAvatar;
 };
 function timeAgo(ms) { if (!ms) return ""; const seconds = Math.floor((Date.now() - ms) / 1000); if (seconds < 60) return "Just now"; const minutes = Math.floor(seconds / 60); if (minutes < 60) return `${minutes} min ago`; const hours = Math.floor(minutes / 60); if (hours < 24) return `${hours} hr ago`; return `${Math.floor(hours / 24)} days ago`; }
+
+function showChatLoadingIndicator() {
+  let loader = document.getElementById("chatLoadingOverlay");
+  if (!loader) {
+      loader = document.createElement("div");
+      loader.id = "chatLoadingOverlay";
+      loader.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i><span>Loading messages...</span>';
+      activeChatState.appendChild(loader);
+  }
+  loader.style.display = "flex";
+}
+
+function hideChatLoadingIndicator() {
+  const loader = document.getElementById("chatLoadingOverlay");
+  if (loader) loader.style.display = "none";
+}
 
 window.showToast = function(title, message, avatarUrl, onClick) {
   const container = document.getElementById("toastContainer"); if(!container) return;
@@ -628,6 +645,7 @@ window.openChat = async (targetUid, targetName, targetAvatar, isTargetOnline, ta
   isCurrentChatGroup = false; currentChatId = auth.currentUser.uid < targetUid ? `${auth.currentUser.uid}_${targetUid}` : `${targetUid}_${auth.currentUser.uid}`; targetUserUid = targetUid;
   document.getElementById("chatSettingsBtn").style.display = "none"; document.getElementById("chatDoodleBtn").style.display = "none"; if (ghostModeBtn) ghostModeBtn.style.display = "none"; document.getElementById("launchGameMenuBtn").style.display = "none"; 
  chatBox.style.transition = "none"; chatBox.style.visibility = "hidden"; chatBox.style.opacity = "0"; chatBox.innerHTML = ""; if(replyingToMsg) document.getElementById("cancelReplyBtn").click(); if (document.getElementById("privateDoodleArea")) document.getElementById("privateDoodleArea").style.display = "none";
+ showChatLoadingIndicator();
  const overlay = document.getElementById("chatStateOverlay"); if(overlay) { overlay.style.display = "none"; overlay.innerHTML = ""; }
   // Instantly apply cached wallpaper if it exists to prevent delay
   const cachedWallpaper = localStorage.getItem(`wp_${currentChatId}`);
@@ -673,6 +691,7 @@ window.openGroupChat = (groupId, groupName, memberCount) => {
   isCurrentChatGroup = true; currentChatId = groupId; targetUserUid = null; activeSharedKey = null; // No E2EE for groups in this version
   document.getElementById("launchGameMenuBtn").style.display = "none"; document.getElementById("chatSettingsBtn").style.display = "none"; document.getElementById("chatDoodleBtn").style.display = "none"; if (ghostModeBtn) ghostModeBtn.style.display = "none"; 
   chatBox.style.transition = "none"; chatBox.style.visibility = "hidden"; chatBox.style.opacity = "0"; chatBox.innerHTML = ""; document.getElementById("chatWallpaper").style.backgroundImage = "none"; if(replyingToMsg) document.getElementById("cancelReplyBtn").click(); if(pDoodleUnsubscribe) { pDoodleUnsubscribe(); pDoodleUnsubscribe = null; }
+  showChatLoadingIndicator();
   const overlay = document.getElementById("chatStateOverlay"); if(overlay) { overlay.style.display = "none"; overlay.innerHTML = ""; }
   const groupData = allGroups.find(g => g.id === groupId); const avatarToUse = groupData && groupData.avatarUrl ? groupData.avatarUrl : `https://ui-avatars.com/api/?name=${encodeURIComponent(groupName)}&background=8b5cf6&color=fff`;
   document.getElementById("chatTargetName").innerText = groupName; document.getElementById("chatTargetAvatar").src = avatarToUse; document.getElementById("chatTargetStatus").innerText = `${memberCount} members`;
@@ -685,9 +704,13 @@ window.openGroupChat = (groupId, groupName, memberCount) => {
 
 function loadMessages() {
   if (messagesUnsubscribe) messagesUnsubscribe(); 
-  const q = query(collection(db, "chats", currentChatId, "messages"), orderBy("time", "asc"));
+  const chatIdForLoad = currentChatId;
+  const loadToken = ++messageLoadSeq;
+  const isActiveMessageLoad = () => loadToken === messageLoadSeq && currentChatId === chatIdForLoad;
+  const q = query(collection(db, "chats", chatIdForLoad, "messages"), orderBy("time", "asc"));
   
   // Clear only once when opening the chat
+  showChatLoadingIndicator();
   chatBox.style.transition = "none";
   chatBox.style.visibility = "hidden";
   chatBox.style.opacity = "0";
@@ -697,19 +720,47 @@ function loadMessages() {
   let isFirstSnapshotForChat = true;
 
   const snapChatToBottom = () => {
+      if (!isActiveMessageLoad()) return;
       chatBox.style.scrollBehavior = "auto";
       chatBox.scrollTop = chatBox.scrollHeight;
       requestAnimationFrame(() => {
+          if (!isActiveMessageLoad()) return;
           chatBox.scrollTop = chatBox.scrollHeight;
-          setTimeout(() => { chatBox.scrollTop = chatBox.scrollHeight; }, 80);
-          setTimeout(() => { chatBox.scrollTop = chatBox.scrollHeight; }, 250);
+          setTimeout(() => { if (isActiveMessageLoad()) chatBox.scrollTop = chatBox.scrollHeight; }, 80);
+          setTimeout(() => { if (isActiveMessageLoad()) chatBox.scrollTop = chatBox.scrollHeight; }, 250);
       });
   };
 
+  const waitForInitialChatLayout = () => new Promise(resolve => {
+      const pendingImages = [...chatBox.querySelectorAll("img")].filter(img => !img.complete);
+      let settled = false;
+      const finish = () => {
+          if (settled) return;
+          settled = true;
+          requestAnimationFrame(() => requestAnimationFrame(resolve));
+      };
+      if (pendingImages.length === 0) {
+          finish();
+          return;
+      }
+      let remaining = pendingImages.length;
+      const done = () => {
+          remaining -= 1;
+          if (remaining <= 0) finish();
+      };
+      pendingImages.forEach(img => {
+          img.addEventListener("load", done, { once: true });
+          img.addEventListener("error", done, { once: true });
+      });
+      setTimeout(finish, 1800);
+  });
+
 messagesUnsubscribe = onSnapshot(q, async (snapshot) => {
+    if (!isActiveMessageLoad()) return;
     let lastMyMsgId = null;
     let isInitialLoad = isFirstSnapshotForChat;
     let hasNewMessages = false; // Track if we need to scroll
+    const pendingReadReceipts = [];
 
     snapshot.docs.forEach(d => { if(d.data().sender === auth.currentUser.uid) lastMyMsgId = d.id; });
 
@@ -728,8 +779,8 @@ messagesUnsubscribe = onSnapshot(q, async (snapshot) => {
       if (msg.expiresAt) {
           const timeLeft = msg.expiresAt - Date.now();
           const wipeMessage = async () => {
-              if (msg.imagePublicId) { try { await updateDoc(doc(db, "chats", currentChatId, "messages", msgId), { text: "🚫 Image Expired", imageUrl: null, isExpired: true }); } catch(e) {} } 
-              else { try { await deleteDoc(doc(db, "chats", currentChatId, "messages", msgId)); } catch(e) { await updateDoc(doc(db, "chats", currentChatId, "messages", msgId), { text: "", expiresAt: null, isExpired: true }); } }
+              if (msg.imagePublicId) { try { await updateDoc(doc(db, "chats", chatIdForLoad, "messages", msgId), { text: "🚫 Image Expired", imageUrl: null, isExpired: true }); } catch(e) {} } 
+              else { try { await deleteDoc(doc(db, "chats", chatIdForLoad, "messages", msgId)); } catch(e) { await updateDoc(doc(db, "chats", chatIdForLoad, "messages", msgId), { text: "", expiresAt: null, isExpired: true }); } }
           };
           if (timeLeft <= 0) { wipeMessage(); continue; } else { window.msgTimeouts.push(setTimeout(wipeMessage, timeLeft)); }
       }
@@ -744,7 +795,8 @@ messagesUnsubscribe = onSnapshot(q, async (snapshot) => {
       if (!isMe && !msg.seenAt && !isDoodleOpen && !isGameOpen && isChatCurrentlyVisible) { 
           const updateData = { seenAt: Date.now() }; 
           if (msg.timerDuration) { updateData.expiresAt = Date.now() + msg.timerDuration; } 
-          updateDoc(doc(db, "chats", currentChatId, "messages", msgId), updateData).catch(e=>{}); 
+          if (isInitialLoad) pendingReadReceipts.push({ msgId, updateData });
+          else updateDoc(doc(db, "chats", chatIdForLoad, "messages", msgId), updateData).catch(e=>{}); 
       }
 
       // Check if this message div already exists
@@ -773,10 +825,12 @@ messagesUnsubscribe = onSnapshot(q, async (snapshot) => {
       else {
         let decryptedText = msg.text;
         if (msg.text && msg.text.startsWith("E2EE:")) decryptedText = await CryptoE2EE.decrypt(msg.text, activeSharedKey);
+        if (!isActiveMessageLoad()) return;
         if (!decryptedText && !msg.imageUrl) continue;
         
         let decReplyText = msg.replyToText;
         if (msg.replyToText && msg.replyToText.startsWith("E2EE:")) decReplyText = await CryptoE2EE.decrypt(msg.replyToText, activeSharedKey);
+        if (!isActiveMessageLoad()) return;
         
         let replyHtml = msg.replyToText ? `<div class="replied-msg-box" onclick="event.stopPropagation();"><b>${msg.replyToName}</b><div class="preview-text">${decReplyText}</div></div>` : "";
         let imgHtml = msg.imageUrl ? `<img src="${msg.imageUrl}" style="max-width:100%; border-radius:12px; margin-bottom:8px; cursor:pointer;" onclick="event.stopPropagation(); window.open('${msg.imageUrl}')" />` : "";
@@ -813,12 +867,20 @@ messagesUnsubscribe = onSnapshot(q, async (snapshot) => {
     // 2. SCROLL & REVEAL LOGIC (Fixes the Jitter)
     if (isInitialLoad) {
         snapChatToBottom(); // Instant snap to the newest message when opening a chat
+        await waitForInitialChatLayout();
+        if (!isActiveMessageLoad()) return;
+        snapChatToBottom();
         
         setTimeout(() => { 
+            if (!isActiveMessageLoad()) return;
+            hideChatLoadingIndicator();
             chatBox.style.visibility = "visible";
             chatBox.style.opacity = "1";
             chatBox.style.transition = "";
-        }, 120); 
+            pendingReadReceipts.forEach(({ msgId, updateData }) => {
+                updateDoc(doc(db, "chats", chatIdForLoad, "messages", msgId), updateData).catch(e=>{});
+            });
+        }, 50); 
     } else if (hasNewMessages) {
         chatBox.style.scrollBehavior = "";
         chatBox.scrollTo({ top: chatBox.scrollHeight, behavior: 'smooth' }); // Smooth scroll for live incoming messages
