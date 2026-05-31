@@ -533,9 +533,25 @@ async function renderSidebar() {
     });
   }
 
-  // --- BUILD USERS into a fragment — all awaits happen BEFORE touching the live DOM ---
+// --- FIX: HYBRID SORTING + CLEAN UNREAD STATE ---
+  const myLiveDoc = allUsers.find(u => u.id === auth.currentUser.uid) || myUserData;
+
+  // --- BUILD USERS into a fragment ---
   let sortedUsers = [...allUsers].filter(u => u.id !== auth.currentUser.uid);
-  sortedUsers.sort((a, b) => { let timeA = myUserData?.chatMeta?.[a.id]?.time || 0; let timeB = myUserData?.chatMeta?.[b.id]?.time || 0; return timeB - timeA; });
+  
+  // 1. SORTING: Cross-reference both documents. This mathematically guarantees the user snaps 
+  // to the top instantly, entirely bypassing any Firebase sync delays between collections.
+  sortedUsers.sort((a, b) => { 
+      let aTimeMine = myLiveDoc?.chatMeta?.[a.id]?.time || 0;
+      let aTimeTheirs = a.chatMeta?.[auth.currentUser.uid]?.time || 0;
+      let timeA = Math.max(aTimeMine, aTimeTheirs);
+
+      let bTimeMine = myLiveDoc?.chatMeta?.[b.id]?.time || 0;
+      let bTimeTheirs = b.chatMeta?.[auth.currentUser.uid]?.time || 0;
+      let timeB = Math.max(bTimeMine, bTimeTheirs);
+
+      return timeB - timeA; 
+  });
 
   const userFrag = document.createDocumentFragment();
   if (sortedUsers.length === 0) {
@@ -548,16 +564,41 @@ async function renderSidebar() {
       const displayName = user.fullName || user.username;
       const avatarUrl = generateAvatar(user, displayName);
       const isOnline = (user.isOnline && canSeePrivacy(user, 'privacyStatus')) ? "online" : "";
-      const meta = myUserData?.chatMeta?.[user.id]; const unreadStyle = meta?.unread ? "font-weight:700; color:var(--primary);" : "";
-      const previewText = `@${user.username}`;
+      
+      let meta = myLiveDoc?.chatMeta?.[user.id] || {}; 
+      let theirMeta = user.chatMeta?.[auth.currentUser.uid] || {};
+      
+      // 2. UNREAD & PREVIEW: Strictly trust YOUR document for the unread boolean.
+      // This permanently prevents the "stuck highlight" bug when you open a chat.
+      let previewText = meta.text || `@${user.username}`;
+      let isUnread = meta.unread === true; 
+
+      // Fallback: If their doc has a newer message preview but yours hasn't synced yet, 
+      // safely update the text preview only.
+      if (theirMeta.time > (meta.time || 0) && theirMeta.text) {
+          previewText = theirMeta.text;
+          if (previewText.startsWith("You: ")) previewText = previewText.substring(5);
+      }
+
+      const unreadStyle = isUnread ? "font-weight:700; color:var(--primary);" : "";
+      
+      if (previewText.startsWith("E2EE:")) previewText = "🔒 Encrypted message";
+      if (previewText === "🎮 GAME CHALLENGE") previewText = "🎮 Sent a game challenge";
+      if (previewText === "🎨 DOODLE REQUEST") previewText = "🎨 Sent a doodle request";
+
       const userCard = document.createElement("div"); userCard.className = "user-item";
-      userCard.innerHTML = `<div class="avatar-wrapper"><img src="${avatarUrl}" class="avatar"><div class="status-dot ${isOnline}"></div></div><div class="user-meta"><span class="name" style="${unreadStyle}">${displayName}</span><span class="handle" style="${unreadStyle}">${previewText}</span></div>${meta?.unread ? '<div style="width:10px; height:10px; background:var(--primary); border-radius:50%; flex-shrink:0;"></div>' : ''}`;
-      bindPointerTap(userCard, () => { if(meta?.unread) updateDoc(doc(db, "users", auth.currentUser.uid), { [`chatMeta.${user.id}.unread`]: false }); openChat(user.id, displayName, avatarUrl, user.isOnline, user.lastSeen, user.publicKey); });
+      userCard.innerHTML = `<div class="avatar-wrapper"><img src="${avatarUrl}" class="avatar"><div class="status-dot ${isOnline}"></div></div><div class="user-meta"><span class="name" style="${unreadStyle}">${displayName}</span><span class="handle" style="${unreadStyle}">${previewText}</span></div>${isUnread ? '<div style="width:10px; height:10px; background:var(--primary); border-radius:50%; flex-shrink:0;"></div>' : ''}`;
+      
+      bindPointerTap(userCard, () => { 
+          if(isUnread) updateDoc(doc(db, "users", auth.currentUser.uid), { [`chatMeta.${user.id}.unread`]: false }); 
+          openChat(user.id, displayName, avatarUrl, user.isOnline, user.lastSeen, user.publicKey); 
+      });
+      
       userFrag.appendChild(userCard);
     }
   }
 
-  // --- ATOMIC DOM SWAP — only now do we clear and repopulate the live DOM ---
+  // --- ATOMIC DOM SWAP ---
   if(groupsListEl) { groupsListEl.innerHTML = ""; groupsListEl.appendChild(groupFrag); }
   usersListEl.innerHTML = ""; usersListEl.appendChild(userFrag);
 }
