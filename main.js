@@ -1,7 +1,7 @@
 import { db, auth, messaging } from './firebase.js';
 import { CryptoE2EE } from './crypto.js';
 import { getToken } from "https://www.gstatic.com/firebasejs/10.0.0/firebase-messaging.js";
-import { collection, addDoc, onSnapshot, doc, setDoc, query, orderBy, getDoc, getDocs, deleteDoc, updateDoc, arrayUnion, arrayRemove, writeBatch, limit, where } from "https://www.gstatic.com/firebasejs/10.0.0/firebase-firestore.js";
+import { collection, addDoc, onSnapshot, doc, setDoc, query, orderBy, getDoc, getDocs, deleteDoc, updateDoc, arrayUnion, arrayRemove, writeBatch, limit, where, increment } from "https://www.gstatic.com/firebasejs/10.0.0/firebase-firestore.js";
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.0.0/firebase-auth.js";
 // Safe History API to prevent crashes during local mobile testing
 const originalPushState = history.pushState;
@@ -156,7 +156,8 @@ function showChatLoadingIndicator() {
   if (!loader) {
       loader = document.createElement("div");
       loader.id = "chatLoadingOverlay";
-      loader.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i><span>Loading messages...</span>';
+      loader.className = "chat-loading-overlay";
+      loader.innerHTML = '<i class="fa-solid fa-spinner fa-spin fa-2x"></i><span>Loading...</span>';
       activeChatState.appendChild(loader);
   }
   loader.style.display = "flex";
@@ -516,7 +517,10 @@ const isChatVisible = isChatOpen && !isGameCovering && !isExploreCovering && !is
 
               if (currentChatId && targetUserUid === otherUid && isChatVisible) {
                 // User is physically looking at this chat — mark as read silently
-                await updateDoc(doc(db, "users", uid), { [`chatMeta.${otherUid}.unread`]: false });
+                await updateDoc(doc(db, "users", uid), { 
+                    [`chatMeta.${otherUid}.unread`]: false,
+                    [`chatMeta.${otherUid}.unreadCount`]: 0 
+                });
               } else {
                 // Not looking at this chat — show notification
                 const sender = allUsers.find(u => u.id === otherUid);
@@ -586,94 +590,65 @@ function loadSidebarData() {
 document.getElementById("showUsersTab").addEventListener("click", () => { document.getElementById("showUsersTab").classList.add("active"); document.getElementById("showGroupsTab").classList.remove("active"); document.getElementById("usersList").style.display = "block"; document.getElementById("groupsList").style.display = "none"; });
 document.getElementById("showGroupsTab").addEventListener("click", () => { document.getElementById("showGroupsTab").classList.add("active"); document.getElementById("showUsersTab").classList.remove("active"); document.getElementById("groupsList").style.display = "block"; document.getElementById("usersList").style.display = "none"; });
 
-async function renderSidebar() {
-  const usersListEl = document.getElementById("usersList"); const groupsListEl = document.getElementById("groupsList");
-
-  // --- BUILD GROUPS into a fragment first (no DOM touch yet) ---
-  const groupFrag = document.createDocumentFragment();
-  let myGroups = allGroups.filter(g => g.members.includes(auth.currentUser.uid));
-  if (myGroups.length === 0) {
-    const empty = document.createElement("div");
-    empty.style.cssText = "padding: 20px; text-align: center; color: var(--text-muted); font-size: 13px;";
-    empty.innerHTML = '<i class="fa-solid fa-users" style="font-size: 24px; margin-bottom: 10px; opacity: 0.5;"></i><br>You are not in any groups yet.';
-    groupFrag.appendChild(empty);
-  } else {
-    myGroups.forEach(group => {
-      const groupCard = document.createElement("div"); groupCard.className = "user-item";
-      groupCard.innerHTML = `<div class="avatar-wrapper"><div class="avatar" style="background:var(--primary); display:flex; justify-content:center; align-items:center; color:white; font-weight:bold; font-size:18px;">${group.name.charAt(0)}</div></div><div class="user-meta"><span class="name">${group.name}</span><span class="handle">${group.members.length} members</span></div>`;
-      bindPointerTap(groupCard, () => openGroupChat(group.id, group.name, group.members.length));
-      groupFrag.appendChild(groupCard);
-    });
-  }
-
-// --- FIX: HYBRID SORTING + CLEAN UNREAD STATE ---
-  const myLiveDoc = allUsers.find(u => u.id === auth.currentUser.uid) || myUserData;
-
-  // --- BUILD USERS into a fragment ---
-  let sortedUsers = [...allUsers].filter(u => u.id !== auth.currentUser.uid);
-  
-  // 1. SORTING: Cross-reference both documents. This mathematically guarantees the user snaps 
-  // to the top instantly, entirely bypassing any Firebase sync delays between collections.
-  sortedUsers.sort((a, b) => { 
-      let aTimeMine = myLiveDoc?.chatMeta?.[a.id]?.time || 0;
-      let aTimeTheirs = a.chatMeta?.[auth.currentUser.uid]?.time || 0;
-      let timeA = Math.max(aTimeMine, aTimeTheirs);
-
-      let bTimeMine = myLiveDoc?.chatMeta?.[b.id]?.time || 0;
-      let bTimeTheirs = b.chatMeta?.[auth.currentUser.uid]?.time || 0;
-      let timeB = Math.max(bTimeMine, bTimeTheirs);
-
-      return timeB - timeA; 
+function renderSidebar() {
+  usersList.innerHTML = "";
+  allGroups.forEach(group => {
+    if (!group.members.includes(auth.currentUser.uid)) return; 
+    const groupCard = document.createElement("div");
+    groupCard.className = "user-item";
+    groupCard.innerHTML = `<div class="avatar-wrapper"><div class="avatar" style="background:var(--primary); display:flex; justify-content:center; align-items:center; color:white; font-weight:bold; font-size:18px;">${group.name.charAt(0)}</div></div><div class="user-meta"><span class="name">${group.name}</span><span class="handle">${group.members.length} members</span></div>`;
+    groupCard.onclick = () => openGroupChat(group.id, group.name, group.members.length);
+    usersList.appendChild(groupCard);
   });
 
-  const userFrag = document.createDocumentFragment();
-  if (sortedUsers.length === 0) {
-    const empty = document.createElement("div");
-    empty.style.cssText = "padding: 20px; text-align: center; color: var(--text-muted); font-size: 13px;";
-    empty.innerText = "No users found.";
-    userFrag.appendChild(empty);
-  } else {
-    for (const user of sortedUsers) {
-      const displayName = user.fullName || user.username;
-      const avatarUrl = generateAvatar(user, displayName);
-      const isOnline = (user.isOnline && canSeePrivacy(user, 'privacyStatus')) ? "online" : "";
-      
-      let meta = myLiveDoc?.chatMeta?.[user.id] || {}; 
-      let theirMeta = user.chatMeta?.[auth.currentUser.uid] || {};
-      
-      // 2. UNREAD & PREVIEW: Strictly trust YOUR document for the unread boolean.
-      // This permanently prevents the "stuck highlight" bug when you open a chat.
-      let previewText = meta.text || `@${user.username}`;
-      let isUnread = meta.unread === true; 
+  let sortedUsers = [...allUsers].filter(u => u.id !== auth.currentUser.uid);
+  sortedUsers.sort((a, b) => {
+    let timeA = myUserData?.chatMeta?.[a.id]?.time || 0;
+    let timeB = myUserData?.chatMeta?.[b.id]?.time || 0;
+    return timeB - timeA; 
+  });
 
-      // Fallback: If their doc has a newer message preview but yours hasn't synced yet, 
-      // safely update the text preview only.
-      if (theirMeta.time > (meta.time || 0) && theirMeta.text) {
-          previewText = theirMeta.text;
-          if (previewText.startsWith("You: ")) previewText = previewText.substring(5);
-      }
-
-      const unreadStyle = isUnread ? "font-weight:700; color:var(--primary);" : "";
-      
-      if (previewText.startsWith("E2EE:")) previewText = "🔒 Encrypted message";
-      if (previewText === "🎮 GAME CHALLENGE") previewText = "🎮 Sent a game challenge";
-      if (previewText === "🎨 DOODLE REQUEST") previewText = "🎨 Sent a doodle request";
-
-      const userCard = document.createElement("div"); userCard.className = "user-item";
-      userCard.innerHTML = `<div class="avatar-wrapper"><img src="${avatarUrl}" class="avatar"><div class="status-dot ${isOnline}"></div></div><div class="user-meta"><span class="name" style="${unreadStyle}">${displayName}</span><span class="handle" style="${unreadStyle}">${previewText}</span></div>${isUnread ? '<div style="width:10px; height:10px; background:var(--primary); border-radius:50%; flex-shrink:0;"></div>' : ''}`;
-      
-      bindPointerTap(userCard, () => { 
-          if(isUnread) updateDoc(doc(db, "users", auth.currentUser.uid), { [`chatMeta.${user.id}.unread`]: false }); 
-          openChat(user.id, displayName, avatarUrl, user.isOnline, user.lastSeen, user.publicKey); 
-      });
-      
-      userFrag.appendChild(userCard);
+  sortedUsers.forEach((user) => {
+    const displayName = user.fullName || user.username;
+    const avatarUrl = generateAvatar(user, displayName);
+    const isOnline = user.isOnline ? "online" : "";
+    const meta = myUserData?.chatMeta?.[user.id] || {};
+    
+    let unreadCount = meta.unreadCount || (meta.unread ? 1 : 0);
+    let isUnread = unreadCount > 0;
+    let timeDisplay = meta.time ? timeAgo(meta.time) : '';
+    
+    let previewText = meta.text ? meta.text : `@${user.username}`;
+    if (previewText.startsWith("U2FsdGVkX1") || previewText.startsWith("U2Fz")) {
+        const pChatId = auth.currentUser.uid < user.id ? `${auth.currentUser.uid}_${user.id}` : `${user.id}_${auth.currentUser.uid}`;
+        previewText = decryptMessage(previewText, pChatId) || "🔒 Encrypted Message";
     }
-  }
 
-  // --- ATOMIC DOM SWAP ---
-  if(groupsListEl) { groupsListEl.innerHTML = ""; groupsListEl.appendChild(groupFrag); }
-  usersListEl.innerHTML = ""; usersListEl.appendChild(userFrag);
+    const nameStyle = isUnread ? "font-weight:700; color:var(--text-main);" : "color:var(--text-main);";
+    const handleStyle = isUnread ? "font-weight:600; color:var(--text-main);" : "color:var(--text-muted);";
+    const timeStyle = isUnread ? "font-weight:700; color:var(--primary);" : "color:var(--text-muted);";
+
+    const userCard = document.createElement("div");
+    userCard.className = "user-item";
+    userCard.innerHTML = `
+      <div class="avatar-wrapper"><img src="${avatarUrl}" class="avatar"><div class="status-dot ${isOnline}"></div></div>
+      <div class="user-meta" style="flex:1;">
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+              <span class="name" style="${nameStyle}">${displayName}</span>
+              <span class="time-meta" style="${timeStyle}; font-size:10px;">${timeDisplay}</span>
+          </div>
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-top:2px;">
+              <span class="handle" style="${handleStyle}; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:85%;">${previewText}</span>
+              ${isUnread ? `<div class="unread-badge">${unreadCount > 99 ? '99+' : unreadCount}</div>` : ''}
+          </div>
+      </div>`;
+
+    userCard.onclick = () => {
+      if(isUnread) updateDoc(doc(db, "users", auth.currentUser.uid), { [`chatMeta.${user.id}.unread`]: false, [`chatMeta.${user.id}.unreadCount`]: 0 });
+      openChat(user.id, displayName, avatarUrl, user.isOnline, user.lastSeen);
+    }
+    usersList.appendChild(userCard);
+  });
 }
 
 const createGroupBtn = document.getElementById("createGroupBtn");
@@ -1053,8 +1028,8 @@ async function sendMessage() {
   if (!isCurrentChatGroup) {
     await setDoc(doc(db, "chats", currentChatId), { [`typing_${auth.currentUser.uid}`]: false }, { merge: true });
     try {
-      await setDoc(doc(db, "users", auth.currentUser.uid), { chatMeta: { [targetUserUid]: { time: Date.now(), text: `You: ${text}`, unread: false } } }, { merge: true });
-      await setDoc(doc(db, "users", targetUserUid), { chatMeta: { [auth.currentUser.uid]: { time: Date.now(), text: text, unread: true } } }, { merge: true });
+      await setDoc(doc(db, "users", auth.currentUser.uid), { chatMeta: { [targetUserUid]: { time: Date.now(), text: `You: ${text}`, unread: false, unreadCount: 0 } } }, { merge: true });
+      await setDoc(doc(db, "users", targetUserUid), { chatMeta: { [auth.currentUser.uid]: { time: Date.now(), text: text, unread: true, unreadCount: increment(1) } } }, { merge: true });
     } catch(err) {}
   } else {
     // Group chat: notify all other members so they get an in-app toast
@@ -1118,11 +1093,11 @@ fileInput.addEventListener("change", async (e) => {
         // 1. Save the actual message
         await addDoc(collection(db, "chats", currentChatId, "messages"), payload); 
 
-        // 2. NEW: Update the metadata so the notification actually triggers!
+      // 2. NEW: Update the metadata so the notification actually triggers!
         if (!isCurrentChatGroup) {
             try {
-                await setDoc(doc(db, "users", auth.currentUser.uid), { chatMeta: { [targetUserUid]: { time: Date.now(), text: `You sent an image 📷`, unread: false } } }, { merge: true });
-                await setDoc(doc(db, "users", targetUserUid), { chatMeta: { [auth.currentUser.uid]: { time: Date.now(), text: `Sent an image 📷`, unread: true } } }, { merge: true });
+                await setDoc(doc(db, "users", auth.currentUser.uid), { chatMeta: { [targetUserUid]: { time: Date.now(), text: `You sent an image 📷`, unread: false, unreadCount: 0 } } }, { merge: true });
+                await setDoc(doc(db, "users", targetUserUid), { chatMeta: { [auth.currentUser.uid]: { time: Date.now(), text: `Sent an image 📷`, unread: true, unreadCount: increment(1) } } }, { merge: true });
             } catch(err) {}
         }
     } catch (err) { 
