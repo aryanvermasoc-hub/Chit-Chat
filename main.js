@@ -1484,50 +1484,61 @@ window.addEventListener("popstate", (e) => {
 window.setTheme = (themeName) => { document.body.className = ''; if (themeName !== 'default') { document.body.classList.add(themeName); } localStorage.setItem('chitchat_theme', themeName); };
 const savedTheme = localStorage.getItem('chitchat_theme'); if (savedTheme) window.setTheme(savedTheme);
 
-document.getElementById("appSettingsBtn")?.addEventListener("click", () => {
-    if(myUserData) {
-        document.getElementById("settingsFullName").value = myUserData.fullName || "";
-        document.getElementById("settingsUsername").value = myUserData.username || "";
-        document.getElementById("settingsBio").value = myUserData.bio || "";
-        document.getElementById("settingsStatusPrivacy").value = myUserData.privacyStatus || "everyone";
-        document.getElementById("settingsPfpPrivacy").value = myUserData.privacyPfp || "everyone";
-    }
-    document.getElementById("appSettingsModal").style.display = "flex";
-});
-document.getElementById("settingsSaveProfileBtn")?.addEventListener("click", async () => {
-    const newName = document.getElementById("settingsFullName").value.trim();
-    const newUsername = document.getElementById("settingsUsername").value.trim().toLowerCase();
-    const newBio = document.getElementById("settingsBio").value.trim();
-    if (!newName || !newUsername) { alert("Display Name and Username cannot be empty."); return; }
-    const btn = document.getElementById("settingsSaveProfileBtn"); btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Saving...';
-    try {
-        if (newUsername !== myUserData.username) {
-            const usernameQuery = query(collection(db, "users"), where("username", "==", newUsername), limit(1));
-            const usernameSnapshot = await getDocs(usernameQuery);
-            if (!usernameSnapshot.empty) { alert("This username is already taken by another user."); btn.innerHTML = 'Save Profile'; return; }
+const appSettingsBtnEl = document.getElementById("appSettingsBtn");
+if (appSettingsBtnEl) {
+    appSettingsBtnEl.onclick = () => {
+        if(myUserData) {
+            document.getElementById("settingsFullName").value = myUserData.fullName || "";
+            document.getElementById("settingsUsername").value = myUserData.username || "";
+            document.getElementById("settingsBio").value = myUserData.bio || "";
+            document.getElementById("settingsStatusPrivacy").value = myUserData.privacyStatus || "everyone";
+            document.getElementById("settingsPfpPrivacy").value = myUserData.privacyPfp || "everyone";
         }
-        await updateDoc(doc(db, "users", auth.currentUser.uid), { fullName: newName, username: newUsername, bio: newBio, privacyStatus: document.getElementById("settingsStatusPrivacy").value, privacyPfp: document.getElementById("settingsPfpPrivacy").value });
-        showToast("Profile Updated", "Your details were saved successfully.");
-        document.getElementById("appSettingsModal").style.display = "none";
-    } catch(e) { showToast("Error", "Failed to update profile."); } finally { btn.innerHTML = 'Save Profile'; }
-});
+        document.getElementById("appSettingsModal").style.display = "flex";
+    };
+}
+const settingsSaveProfileBtnEl = document.getElementById("settingsSaveProfileBtn");
+if (settingsSaveProfileBtnEl) {
+    settingsSaveProfileBtnEl.onclick = async () => {
+        const newName = document.getElementById("settingsFullName").value.trim();
+        const newUsername = document.getElementById("settingsUsername").value.trim().toLowerCase();
+        const newBio = document.getElementById("settingsBio").value.trim();
+        if (!newName || !newUsername) { alert("Display Name and Username cannot be empty."); return; }
+        const btn = document.getElementById("settingsSaveProfileBtn"); btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Saving...';
+        try {
+            if (newUsername !== myUserData.username) {
+                const usernameQuery = query(collection(db, "users"), where("username", "==", newUsername), limit(1));
+                const usernameSnapshot = await getDocs(usernameQuery);
+                if (!usernameSnapshot.empty) { alert("This username is already taken by another user."); btn.innerHTML = 'Save Profile'; return; }
+            }
+            await updateDoc(doc(db, "users", auth.currentUser.uid), { fullName: newName, username: newUsername, bio: newBio, privacyStatus: document.getElementById("settingsStatusPrivacy").value, privacyPfp: document.getElementById("settingsPfpPrivacy").value });
+            showToast("Profile Updated", "Your details were saved successfully.");
+            document.getElementById("appSettingsModal").style.display = "none";
+        } catch(e) { showToast("Error", "Failed to update profile."); } finally { btn.innerHTML = 'Save Profile'; }
+    };
+}
 const settingsPfpInput = document.getElementById("settingsPfpInput");
-document.getElementById("settingsChangePfpBtn")?.addEventListener("click", () => settingsPfpInput.click());
-settingsPfpInput?.addEventListener("change", async (e) => {
-    const file = e.target.files[0]; if (!file) return;if (file.size > 5000000) { 
-        alert("File is too large! Please choose an image under 5MB."); 
-        settingsPfpInput.value = ""; 
-        return; 
-    }
-     const btn = document.getElementById("settingsChangePfpBtn");
-    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Uploading...'; btn.disabled = true;
-    try {
-        const formData = new FormData(); formData.append("file", file); formData.append("upload_preset", UPLOAD_PRESET); 
-        const response = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`, { method: "POST", body: formData }); 
-        const data = await response.json(); await updateDoc(doc(db, "users", auth.currentUser.uid), { avatarUrl: data.secure_url }); 
-        showToast("Avatar Updated", "New profile picture set!");
-    } catch(err) { showToast("Error", "Failed to upload avatar."); } finally { btn.innerHTML = '<i class="fa-solid fa-camera"></i> Update Avatar'; btn.disabled = false; settingsPfpInput.value = ""; }
-});
+const settingsChangePfpBtnEl = document.getElementById("settingsChangePfpBtn");
+if (settingsChangePfpBtnEl) {
+    settingsChangePfpBtnEl.onclick = () => settingsPfpInput.click();
+}
+if (settingsPfpInput) {
+    settingsPfpInput.onchange = async (e) => {
+        const file = e.target.files[0]; if (!file) return;if (file.size > 5000000) { 
+            alert("File is too large! Please choose an image under 5MB."); 
+            settingsPfpInput.value = ""; 
+            return; 
+        }
+         const btn = document.getElementById("settingsChangePfpBtn");
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Uploading...'; btn.disabled = true;
+        try {
+            const formData = new FormData(); formData.append("file", file); formData.append("upload_preset", UPLOAD_PRESET); 
+            const response = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`, { method: "POST", body: formData }); 
+            const data = await response.json(); await updateDoc(doc(db, "users", auth.currentUser.uid), { avatarUrl: data.secure_url }); 
+            showToast("Avatar Updated", "New profile picture set!");
+        } catch(err) { showToast("Error", "Failed to upload avatar."); } finally { btn.innerHTML = '<i class="fa-solid fa-camera"></i> Update Avatar'; btn.disabled = false; settingsPfpInput.value = ""; }
+    };
+}
 
 window.approveMember = async (groupId, memberId) => { try { await updateDoc(doc(db, "groups", groupId), { members: arrayUnion(memberId), pendingMembers: arrayRemove(memberId) }); showToast("Approved", "User has been added to the group."); document.getElementById("groupSettingsModal").style.display = "none"; } catch (e) { alert("Error approving member."); } };
 window.rejectMember = async (groupId, memberId) => { try { await updateDoc(doc(db, "groups", groupId), { pendingMembers: arrayRemove(memberId) }); showToast("Rejected", "Request deleted."); document.getElementById("groupSettingsModal").style.display = "none"; } catch (e) { alert("Error rejecting member."); } };
