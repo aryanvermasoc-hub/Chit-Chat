@@ -1,0 +1,12 @@
+# Security
+.env
+.env.local
+
+# Dependencies
+node_modules/
+
+# OS generated files
+.DS_Store
+Thumbs.db
+.vercel
+.env*

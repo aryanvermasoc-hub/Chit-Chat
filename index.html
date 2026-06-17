@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, interactive-widget=resizes-content">
+  <title>Chit-Chat | Premium Messaging & Games</title>
+  <script>
+  // If the user visits the old GitHub link, redirect them to Vercel automatically
+  if (window.location.hostname === "aryanvermasoc-hub.github.io") {
+      window.location.replace("https://chit-chat-beige-three.vercel.app/");
+  }
+</script>
+  <link rel="manifest" href="./manifest.json">
+  <meta name="theme-color" content="#8b5cf6">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="apple-touch-icon" href="./icon-192.png">
+
+<script>
+    // Service Worker Registration with auto-update support
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+            navigator.serviceWorker.register('firebase-messaging-sw.js').then(reg => {
+                reg.addEventListener('updatefound', () => {
+                    const newWorker = reg.installing;
+                    if (newWorker) {
+                        newWorker.addEventListener('statechange', () => {
+                            if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                                newWorker.postMessage({ type: 'SKIP_WAITING' });
+                            }
+                        });
+                    }
+                });
+            }).catch(err => console.warn('SW registration failed:', err));
+        });
+    }
+</script>
+  <link rel="stylesheet" href="./style.css?v=25">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+</head>
+<body>
+  
+  <div id="toastContainer" class="toast-container"></div>
+  <div class="ambient-bg"><div class="blob blob-1"></div><div class="blob blob-2"></div></div>
+
+  <div id="authScreen" class="screen active">
+    <div class="auth-container">
+      <div class="glass-card auth-card">
+       <div class="auth-header" style="display: flex; flex-direction: column; align-items: center; text-align: center;">
+          <div class="logo-box"><i class="fa-regular fa-comments"></i></div>
+          <h2>Chit-Chat</h2><p>Connect securely, play instantly.</p>
+        </div>
+        <div class="auth-tabs">
+          <button id="tabLogin" class="active">Login</button>
+          <button id="tabSignup">Sign Up</button>
+        </div>
+        <form id="authForm" onsubmit="return false;">
+          <div class="input-group" id="nameGroup" style="display: none;"><i class="fa-regular fa-user"></i><input type="text" id="fullName" placeholder="Display Name"></div>
+          <div class="input-group" id="emailGroup" style="display: none;"><i class="fa-solid fa-envelope"></i><input type="email" id="emailInput" placeholder="Enter Email Address"></div>
+          <div class="input-group"><i class="fa-solid fa-at"></i><input type="text" id="username" placeholder="Username"></div>
+          <div class="input-group"><i class="fa-solid fa-lock"></i><input type="password" id="password" placeholder="Password"></div>
+          <div class="input-group" id="confirmPasswordGroup" style="display: none;"><i class="fa-solid fa-lock"></i><input type="password" id="confirmPassword" placeholder="Confirm Password"></div>
+          <button id="authActionBtn" class="primary-btn glow-btn">Enter Chit-Chat</button>
+        </form>
+       <div class="auth-footer">
+          Developed by <a href="https://aryanvermasoc-hub.github.io/My-Info-ARYAN-VERMA/" target="_blank" rel="noopener noreferrer" class="developer-name" style="text-decoration: none;">Aryan Verma<i class="fa-solid fa-arrow-up-right-from-square" style="font-size: 11px; margin-left: 3px;"></i></a>
+        </div>
+      </div> 
+    </div>
+  </div>
+
+  <div id="appScreen" class="screen app-layout" style="display: none;">
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <div class="current-user" title="View My Profile">
+          <img id="myAvatar" src="" alt="Me" class="avatar">
+          <div class="user-meta"><span id="myName" class="name">Loading...</span><span id="myUsername" class="handle">@...</span></div>
+        </div> 
+        <button id="chatToggleBtn" class="primary-btn" style="padding: 6px 14px; font-size: 12px; width: auto; border-radius: 20px; box-shadow: 0 4px 10px rgba(139,92,246,0.3);"><i class="fa-solid fa-message"></i> Chats</button>
+      </div>
+      <div id="newsFeedContainer" class="users-list" style="display: none; flex-direction: column; gap: 15px; padding: 15px; overflow-y: auto;"></div>
+      <div id="gamesNavContainer" class="users-list" style="display: flex; flex-direction: column; gap: 15px; padding: 15px; overflow-y: auto;">
+        <div class="games-header-banner"><h3>Arcade Zone</h3><p>Play Solo or Challenge Friends!</p></div>
+        <div class="game-card" onclick="showToast('Not Available', 'Ludo multiplayer only for now! Challenge a friend from chat.')">
+            <div class="game-icon" style="color: #ef4444;"><i class="fa-solid fa-dice-four"></i></div>
+            <div class="game-info"><h4>Ludo Arena</h4><span>2 Players • Real-time</span></div>
+        </div>
+        <div class="game-card" onclick="showToast('Not Available', 'Cyber Tanks is a 1v1 duel! Open a chat with a friend and click the Gamepad icon to challenge them.')">
+            <div class="game-icon" style="color: #ef4444;"><i class="fa-solid fa-crosshairs"></i></div>
+            <div class="game-info"><h4>Cyber Tanks</h4><span>1v1 • Real-time</span></div>
+        </div>
+        <div class="game-card" onclick="startSinglePlayer('flappybird')">
+            <div class="game-icon" style="color: #f59e0b;"><i class="fa-solid fa-kiwi-bird"></i></div>
+            <div class="game-info"><h4>Flappy Bird</h4><span>Solo • High Score</span></div>
+        </div>
+        <div class="game-card" onclick="startSinglePlayer('tictactoe')">
+            <div class="game-icon"><i class="fa-solid fa-table-cells"></i></div>
+            <div class="game-info"><h4>Tic Tac Toe</h4><span>Vs Computer</span></div>
+        </div>
+        <div class="game-card" onclick="startSinglePlayer('rps')">
+            <div class="game-icon"><i class="fa-solid fa-hand-scissors"></i></div>
+            <div class="game-info"><h4>Rock Paper Scissors</h4><span>Vs Computer</span></div>
+        </div>
+        <div class="game-card" onclick="startSinglePlayer('jetfighter')">
+            <div class="game-icon"><i class="fa-solid fa-jet-fighter"></i></div>
+            <div class="game-info"><h4>Jet Fighter</h4><span>Solo • High Score</span></div>
+        </div>
+        <div class="game-card" onclick="startSinglePlayer('carracing')">
+            <div class="game-icon"><i class="fa-solid fa-car"></i></div>
+            <div class="game-info"><h4>Car Racing</h4><span>Solo • High Score</span></div>
+        </div>
+      </div>
+
+      <div id="chatListContainer" style="display: none; flex-direction: column; flex: 1; overflow: hidden;">
+        <div style="padding: 15px 15px 0 15px;"><button id="createGroupBtn" class="primary-btn glow-btn" style="width: 100%; margin-bottom: 10px; background: rgba(139, 92, 246, 0.2); color: var(--text-main); border: 1px solid var(--primary);"><i class="fa-solid fa-users"></i> Create New Group</button></div>
+        <div class="search-container" style="padding-top: 5px;"><i class="fa-solid fa-magnifying-glass search-icon"></i><input type="text" id="searchInput" placeholder="Search connections..."></div>
+        <div class="sidebar-tabs" style="display: flex; gap: 10px; padding: 10px 15px; border-bottom: 1px solid var(--glass-border);">
+          <button id="showUsersTab" class="tab-btn active" style="flex:1;">Chats</button><button id="showGroupsTab" class="tab-btn" style="flex:1;">Groups</button>
+        </div>
+        <div class="users-list" id="usersList"></div>
+        <div class="users-list" id="groupsList" style="display: none;"></div>
+      </div>
+
+      <div class="sidebar-footer">
+        <button id="homeGamesBtn" class="nav-btn" style="color: var(--primary);"><i class="fa-solid fa-gamepad"></i><span>Games</span></button>
+        <button id="openUsersListBtn" class="nav-btn"><i class="fa-solid fa-user-group"></i><span>People</span></button>
+        <button id="exploreBtn" class="nav-btn"><div class="custom-reels-logo" style="background: linear-gradient(45deg, #10b981, #3b82f6); -webkit-background-clip: text; background-clip: text;"><i class="fa-solid fa-compass"></i></div><span class="reels-brand-name">Explore</span></button>
+        <button id="appInfoBtn" class="nav-btn" onclick="document.getElementById('infoModal').style.display='flex'"><i class="fa-solid fa-circle-info"></i><span>Info</span></button>
+        
+        
+        <button id="appSettingsBtn" class="nav-btn"><i class="fa-solid fa-gear"></i><span>Settings</span></button>
+      </div>
+    </aside>
+
+    <main class="chat-area" id="mainArea">
+      <div id="exploreArea" class="explore-container" style="display: none;">
+        <div class="explore-header glass-panel"><button id="closeExploreBtn" class="icon-btn"><i class="fa-solid fa-chevron-left"></i></button><h3 style="margin-left: 10px;">Community Hub</h3></div>
+        <div class="explore-tabs">
+            <button class="explore-tab active" data-target="exploreMemes"><i class="fa-solid fa-face-laugh-squint"></i> Memes</button>
+            <button class="explore-tab" data-target="exploreLounge"><i class="fa-solid fa-earth-americas"></i> Lounge</button>
+            <button class="explore-tab" data-target="exploreLeaderboard"><i class="fa-solid fa-trophy"></i> Top 50</button>
+        </div>
+        <div id="exploreMemes" class="explore-section active">
+            <div style="display: flex; justify-content: center; margin-bottom: 15px;">
+                <div class="auth-tabs" style="width: 100%; max-width: 300px; margin-bottom: 0;">
+                    <button id="memeSafeBtn" class="active" style="font-size:12px;">Below 18 (Funny)</button>
+                    <button id="memeDankBtn" style="font-size:12px; color: #ef4444;">18+ (Dank)</button>
+                </div>
+            </div>
+            <div id="memesWrapper" style="display: flex; flex-direction: column; gap: 20px; align-items: center; padding-bottom: 20px;">
+                <div style="color:var(--primary); padding: 20px;"><i class="fa-solid fa-spinner fa-spin fa-2x"></i></div>
+            </div>
+        </div> 
+        <div id="exploreLounge" class="explore-section" style="padding: 0; overflow: hidden;">
+            <div id="globalChatBox" style="flex: 1; overflow-y: auto; padding: 15px 20px; display: flex; flex-direction: column; gap: 15px;"></div>
+            <div class="chat-input-wrapper glass-panel" style="margin-top: 0; border-radius: 0; border-left: none; border-right: none; border-bottom: none; flex-shrink: 0;">
+  <div class="input-pill">
+    <textarea id="globalMsgInput" rows="1" placeholder="Type a public message..." autocorrect="off" autocapitalize="off" spellcheck="false" style="background: transparent !important; border: none !important; color: white !important; resize: none; overflow: hidden; height: 20px; padding: 0; margin: 0; outline: none; flex: 1; font-family: inherit; font-size: 14px; line-height: 20px; box-shadow: none !important;"></textarea>
+  </div>
+  <button id="sendGlobalBtn" class="primary-btn circle-btn"><i class="fa-solid fa-paper-plane"></i></button>
+</div>
+        </div>
+        <div id="exploreLeaderboard" class="explore-section">
+            <div style="text-align: center; margin-bottom: 20px;">
+                <select id="lbGameSelect" class="difficulty-select" style="width: 100%; max-width: 300px;">
+                    <option value="carracing">Car Racing</option>
+                    <option value="jetfighter">Jet Fighter</option>
+                    <option value="flappybird">Flappy Bird</option> 
+                </select>
+            </div>
+            <div id="leaderboardList" class="leaderboard-wrapper" style="display: flex; flex-direction: column; gap: 10px; overflow-y: auto; max-height: 400px;"></div>
+        </div>
+      </div> 
+      <div id="activeGameArea" class="game-overlay-container" style="display: none;">
+        <div class="game-header"><button id="closeGameBtn" class="icon-btn"><i class="fa-solid fa-chevron-left"></i> Leave Game</button><span id="activeGameTitle">Game Name</span><div id="gameStatusIndicator" class="game-status">Live</div></div>
+        <div id="gameUIContainer" class="game-ui-wrapper"></div>
+      </div>
+      <div id="privateDoodleArea" class="game-overlay-container" style="display: none; background: rgba(10,10,15,0.95); z-index: 60;">
+        <div class="game-header" style="background: rgba(0,0,0,0.8);">
+            <button id="hideDoodleBtn" class="icon-btn"><i class="fa-solid fa-chevron-down"></i> Hide Board</button>
+            <span style="font-weight: bold; color: #10b981;"><i class="fa-solid fa-palette"></i> Shared Whiteboard</span>
+            <button id="disconnectDoodleBtn" class="icon-btn" style="color:#ef4444; border: 1px solid rgba(239,68,68,0.3); border-radius: 8px; padding: 5px 10px;" title="Stop & Erase Doodle"><i class="fa-solid fa-power-off"></i> Disconnect</button>
+        </div>
+        <div style="padding:10px 15px; display:flex; gap:10px; justify-content:center; align-items: center; background: rgba(0,0,0,0.4); border-bottom: 1px solid var(--glass-border); flex-wrap: wrap;">
+            <input type="color" id="pDoodleColor" value="#8b5cf6" style="cursor: pointer; width: 40px; height: 40px; border: none; border-radius: 8px; background: transparent; padding: 0;">
+            <div style="display: flex; flex-direction: column; align-items: center; gap: 3px;">
+                <label for="pDoodleSize" style="font-size: 10px; color: var(--text-muted); font-weight: bold;">Size</label>
+                <input type="range" id="pDoodleSize" min="1" max="20" value="3" style="width: 80px; accent-color: var(--primary);">
+            </div>
+            <button id="undoPDoodleBtn" class="primary-btn" style="background: rgba(59, 130, 246, 0.2); color: #3b82f6; border: 1px solid #3b82f6; width: auto; padding: 8px 12px;"><i class="fa-solid fa-rotate-left"></i> Undo</button>
+            <button id="clearPDoodleBtn" class="primary-btn" style="background: rgba(239, 68, 68, 0.2); color: #ef4444; border: 1px solid #ef4444; width: auto; padding: 8px 12px;"><i class="fa-solid fa-trash"></i> Wipe</button>
+        </div>
+        <div style="flex:1; display:flex; justify-content:center; align-items:center; padding: 20px;">
+            <canvas id="pDoodleCanvas" width="350" height="450" style="background: #fff; border-radius: 12px; cursor: crosshair; touch-action: none; max-width: 100%; max-height: 100%; box-shadow: 0 10px 30px rgba(0,0,0,0.5);"></canvas>
+        </div>
+      </div>
+      <div id="emptyChatState" class="empty-state">
+        <div class="empty-icon"><i class="fa-solid fa-gamepad"></i></div>
+        <h3>Arcade & Chat</h3>
+        <p>Select a conversation to chat or challenge your friends for a quick game.</p>
+      </div>
+      <div id="activeChatState" style="display: none; height: 100%; flex-direction: column; position: relative;">
+  <div id="chatWallpaper" class="chat-wallpaper"></div>
+  
+  <header class="chat-header glass-panel" style="z-index: 1;">
+          <div style="display: flex; align-items: center; gap: 10px; overflow: hidden; flex: 1;">
+              <button id="backToUsersBtn" class="mobile-back-btn icon-btn"><i class="fa-solid fa-chevron-left"></i></button>
+              <div class="chat-target-info" style="flex: 1; min-width: 0;">
+                <img id="chatTargetAvatar" src="" class="avatar">
+                <div class="user-meta" style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                  <span id="chatTargetName" class="name" style="max-width: 100%; font-size: 15px;">User Name</span>
+                  <span id="typingIndicator" class="typing-text" style="display:none;">typing...</span>
+                  <span id="chatTargetStatus" class="chat-meta-subtitle">Offline</span>
+                </div>
+              </div>
+          </div>
+          <div style="display: flex; align-items: center; gap: 2px; flex-shrink: 0; margin-left: 10px;">
+            <button id="ghostModeBtn" class="icon-btn" title="Ghost Mode (10s disappearing)" style="color: #64748b; font-size: 18px; padding: 6px; display: none; transition: 0.3s;"><i class="fa-solid fa-ghost"></i></button>
+            <button id="chatDoodleBtn" class="icon-btn" title="Shared Whiteboard" style="color: #10b981; font-size: 18px; padding: 6px; position:relative; display:none;"><i class="fa-solid fa-palette"></i><span id="doodleBadge" style="display:none; position:absolute; top:2px; right:2px; width:8px; height:8px; background:#ef4444; border-radius:50%; box-shadow: 0 0 5px #ef4444;"></span></button>
+            <button id="launchGameMenuBtn" class="icon-btn" title="Challenge to Game" style="color: var(--accent); font-size: 18px; padding: 6px;"><i class="fa-solid fa-gamepad"></i></button>
+            <button id="chatSettingsBtn" class="icon-btn" title="Chat Settings" style="color: var(--text-muted); font-size: 18px; padding: 6px;"><i class="fa-solid fa-ellipsis-vertical"></i></button>
+          </div>
+        </header>
+        <div class="messages-container" id="chatBox"></div>
+        <div id="replyPreviewContainer" class="reply-preview-container">
+          <div class="preview-content"><span id="replyPreviewName" style="font-size: 13px; font-weight: bold; color: var(--primary); margin-bottom: 3px;">Replying to...</span><span id="replyPreviewText" style="font-size: 12px; color: var(--text-muted); display: -webkit-box; -webkit-line-clamp: 1; line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; text-overflow: ellipsis; white-space: normal; word-break: break-word;">Message</span></div>
+          <button id="cancelReplyBtn" class="icon-btn" style="margin-left: 10px;"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div id="chatStateOverlay" class="glass-panel" style="display:none; padding: 20px; text-align: center; border-top: 1px solid var(--glass-border); flex-shrink: 0; flex-direction: column; align-items: center; justify-content: center; background: rgba(0,0,0,0.4);"></div>
+        <div class="chat-input-wrapper glass-panel">
+  <button class="icon-btn"><i class="fa-solid fa-paperclip"></i></button>
+  <div class="input-pill">
+    <textarea id="msg" rows="1" placeholder="Type a message..." autocorrect="off" autocapitalize="off" spellcheck="false" style="background: transparent !important; border: none !important; color: white !important; resize: none; overflow: hidden; height: 20px; padding: 0; margin: 0; outline: none; flex: 1; font-family: inherit; font-size: 14px; line-height: 20px; box-shadow: none !important;"></textarea>
+  </div>
+  <button id="sendBtn" class="primary-btn circle-btn"><i class="fa-solid fa-paper-plane"></i></button>
+</div>
+      </div>
+    </main>
+  </div>
+  <div id="msgOptionsModal" class="modal-overlay" style="display: none;">
+    <div class="modal-content" style="padding: 25px;"><div class="modal-header"><h3>Message Options</h3><button onclick="closeMsgOptions()" class="icon-btn"><i class="fa-solid fa-xmark"></i></button></div><div id="msgOptionsList" style="display: flex; flex-direction: column; gap: 12px; margin-top: 15px;"></div></div>
+  </div>
+  <div id="chatSettingsModal" class="modal-overlay" style="display: none;">
+    <div class="modal-content">
+      <div class="modal-header"><h3>Chat Settings</h3><button onclick="document.getElementById('chatSettingsModal').style.display='none'" class="icon-btn"><i class="fa-solid fa-xmark"></i></button></div>
+      <div style="display: flex; flex-direction: column; gap: 15px; text-align: left;">
+        <div><label style="font-size: 13px; color: var(--text-muted);">Disappearing Messages</label>
+          <select id="modalMsgTimerSelect" class="difficulty-select" style="width: 100%; margin-top: 5px;">
+            <option value="0">🔕 Off (No Timer)</option>
+            <option value="60000">⏱️ 1 Min</option>
+            <option value="3600000">⏱️ 1 Hour</option>
+            <option value="86400000">⏱️ 1 Day</option>
+          </select>
+        </div>
+        <button id="changeWallpaperBtn" class="primary-btn" style="background: rgba(139, 92, 246, 0.2); border: 1px solid var(--primary); color: var(--text-main);"><i class="fa-regular fa-image"></i> Change Wallpaper</button>
+        <input type="file" id="wallpaperInput" style="display: none;" accept="image/*">
+        <button id="removeWallpaperBtn" class="primary-btn" style="background: rgba(100, 116, 139, 0.2); border: 1px solid #64748b; color: #cbd5e1;"><i class="fa-solid fa-rotate-left"></i> Default Wallpaper</button>
+        <button id="clearChatMeBtn" class="primary-btn" style="background: rgba(245, 158, 11, 0.2); border: 1px solid #f59e0b; color: #f59e0b;"><i class="fa-solid fa-eraser"></i> Clear Chat for Me</button>
+      </div>
+    </div>
+  </div>
+  <div id="gameSelectionModal" class="modal-overlay" style="display: none;">
+    <div class="modal-content">
+      <div class="modal-header"><h3>Challenge Friend</h3><button id="closeGameSelectBtn" class="icon-btn"><i class="fa-solid fa-xmark"></i></button></div>
+      <div class="game-select-grid">
+          <button class="game-select-btn" data-game="ludo"><i class="fa-solid fa-dice-four" style="color: #ef4444;"></i><span>Ludo Arena</span></button>
+          <button class="game-select-btn" data-game="tictactoe"><i class="fa-solid fa-table-cells"></i><span>Tic Tac Toe</span></button>
+          <button class="game-select-btn" data-game="rps"><i class="fa-solid fa-hand-scissors"></i><span>Rock Paper Scissors</span></button>
+          <button class="game-select-btn" data-game="jetfighter"><i class="fa-solid fa-jet-fighter"></i><span>Jet Fighter</span></button>
+          <button class="game-select-btn" data-game="carracing"><i class="fa-solid fa-car"></i><span>Car Racing</span></button>
+          <button class="game-select-btn" data-game="cybertanks"><i class="fa-solid fa-crosshairs" style="color: #ef4444;"></i><span>Cyber Tanks (1v1)</span></button>
+      </div>
+    </div>
+  </div>
+  <div id="profileModal" class="modal-overlay" style="display: none;">
+    <div class="modal-content profile-content">
+      <button id="closeProfileBtn" class="icon-btn close-modal-corner"><i class="fa-solid fa-xmark"></i></button>
+      <div class="profile-header">
+        <div style="position: relative; display: inline-block;">
+            <img id="profileAvatar" src="" class="profile-avatar-large">
+            <input type="file" id="profileAvatarInput" style="display: none;" accept="image/*">
+            <button id="editAvatarBtn" style="display:none; position:absolute; bottom:10px; right:0; background:var(--primary); color:white; border-radius:50%; width:35px; height:35px; border:none; cursor:pointer;"><i class="fa-solid fa-camera"></i></button>
+        </div>
+        <h2 id="profileName">Name</h2>
+        <p id="profileHandle" class="text-muted">@user</p>
+      </div>
+      <div class="bio-section"><p id="profileBioDisplay">Hey there! I am using Chit-Chat.</p><textarea id="profileBioEdit" style="display:none;"></textarea></div>
+      <div style="color:var(--text-muted); font-size:12px; margin-top:10px;"><i class="fa-solid fa-calendar-days"></i> <span id="profileJoinDate">Joined: ...</span></div>
+      <div class="profile-actions"><button id="editProfileBtn" class="primary-btn" style="display:none;">Edit Profile</button><button id="saveProfileBtn" class="primary-btn" style="display:none;">Save Changes</button></div>
+    </div>
+  </div>
+  <div id="infoModal" class="modal-overlay" style="display: none;" onclick="if(event.target === this) this.style.display='none'">
+    <div class="modal-content">
+      <div class="modal-header"><h3>About Chit-Chat</h3><button class="icon-btn" onclick="document.getElementById('infoModal').style.display='none'"><i class="fa-solid fa-xmark"></i></button></div>
+      <p style="color: var(--text-muted); font-size: 14px; margin-bottom: 25px; line-height: 1.5;">Experience real-time, secure E2EE messaging and instant gaming. Connect instantly with friends, challenge them to games, and explore tech news in a premium environment.</p>
+      <a href="https://aryanvermasoc-hub.github.io/My-Info-ARYAN-VERMA/" target="_blank" rel="noopener noreferrer" class="primary-btn glow-btn" style="text-decoration: none;">Owner's Info <i class="fa-solid fa-arrow-up-right-from-square" style="margin-left: 5px;"></i></a>
+    </div>
+  </div>
+ <div id="appSettingsModal" class="modal-overlay" style="display: none; z-index: 1000; background: var(--bg-base); align-items: flex-start;">
+    <div class="modal-content" style="width: 100%; max-width: 100%; height: 100%; border-radius: 0; border: none; overflow-y: auto; text-align: left; padding: 0;">
+      
+      <div class="explore-header glass-panel" style="display: flex; align-items: center; gap: 15px; padding: 15px 20px; position: sticky; top: 0; z-index: 10; border-bottom: 1px solid var(--glass-border);">
+        <button onclick="document.getElementById('appSettingsModal').style.display='none'" class="icon-btn" style="color: var(--text-main);"><i class="fa-solid fa-arrow-left"></i></button>
+        <h3 style="margin: 0; font-size: 18px;"><i class="fa-solid fa-gear"></i> App Settings</h3>
+      </div>
+
+      <div style="padding: 25px; max-width: 600px; margin: 0 auto; width: 100%;">
+        
+        <h4 style="color: var(--primary); margin-bottom: 12px; font-size: 14px;">UI Themes</h4>
+        <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 35px;">
+            <button class="theme-btn" onclick="setTheme('default')" style="background: #8b5cf6;">Purple</button>
+            <button class="theme-btn" onclick="setTheme('theme-ocean')" style="background: #0ea5e9;">Ocean</button>
+            <button class="theme-btn" onclick="setTheme('theme-forest')" style="background: #10b981;">Forest</button>
+            <button class="theme-btn" onclick="setTheme('theme-sunset')" style="background: #f97316;">Sunset</button>
+            <button class="theme-btn" onclick="setTheme('theme-light')" style="background: #f8fafc; color: #0f172a; border: 1px solid #cbd5e1;">White</button>
+            <button class="theme-btn" onclick="setTheme('theme-black')" style="background: #000000; border: 1px solid #333;">Black</button>
+        </div>
+
+        <h4 style="color: var(--primary); margin-bottom: 12px; font-size: 14px;">Edit Profile</h4>
+        <div class="input-group" style="margin-bottom: 10px;"><i class="fa-solid fa-font"></i><input type="text" id="settingsFullName" placeholder="Display Name"></div>
+        <div class="input-group" style="margin-bottom: 10px;"><i class="fa-solid fa-at"></i><input type="text" id="settingsUsername" placeholder="Username"></div>
+        <textarea id="settingsBio" style="width: 100%; height: 60px; background: rgba(0,0,0,0.2); color: white; border: 1px solid var(--glass-border); border-radius: 12px; padding: 12px; font-size: 13px; outline: none; resize: none; margin-bottom: 15px; font-family: 'Inter', sans-serif;" placeholder="Your Bio..."></textarea>
+        
+        <div style="display: flex; gap: 10px; margin-bottom: 15px;">
+            <div style="flex: 1;"><label style="font-size: 11px; color: var(--text-muted); margin-bottom: 5px; display: block;">Active Status</label><select id="settingsStatusPrivacy" class="difficulty-select" style="width: 100%; margin-bottom: 0;"><option value="everyone">Everyone</option><option value="friends">Friends Only</option><option value="none">Nobody</option></select></div>
+            <div style="flex: 1;"><label style="font-size: 11px; color: var(--text-muted); margin-bottom: 5px; display: block;">Profile Picture</label><select id="settingsPfpPrivacy" class="difficulty-select" style="width: 100%; margin-bottom: 0;"><option value="everyone">Everyone</option><option value="friends">Friends Only</option><option value="none">Nobody</option></select></div>
+        </div>
+        
+        <div style="display: flex; gap: 10px; margin-bottom: 35px;">
+            <button id="settingsChangePfpBtn" class="primary-btn" style="flex: 1; background: rgba(255,255,255,0.1);"><i class="fa-solid fa-camera"></i> Update Avatar</button>
+            <button id="settingsSaveProfileBtn" class="primary-btn glow-btn" style="flex: 1;">Save Profile</button>
+        </div>
+        <input type="file" id="settingsPfpInput" style="display: none;" accept="image/*">
+
+        <div style="border-top: 1px solid var(--glass-border); padding-top: 25px; display: flex; flex-direction: column; gap: 12px;">
+            
+            <button id="updateAppBtn" class="primary-btn" style="background: rgba(59, 130, 246, 0.15); border: 1px solid #3b82f6; color: #3b82f6;">
+                <i class="fa-solid fa-arrows-rotate"></i> Check for Updates
+            </button>
+
+            <button id="installAppBtn" class="primary-btn" style="display: none; background: rgba(16, 185, 129, 0.15); border: 1px solid #10b981; color: #10b981;">
+                <i class="fa-solid fa-download"></i> Install Chit-Chat App
+            </button>
+            <button id="settingsLogoutBtn" class="primary-btn" style="background: rgba(239, 68, 68, 0.15); border: 1px solid #ef4444; color: #ef4444;">
+                <i class="fa-solid fa-right-from-bracket"></i> Disconnect / Logout
+            </button>
+        </div>
+
+      </div>
+    </div>
+  </div>
+  <div id="groupSettingsModal" class="modal-overlay" style="display: none;">
+    <div class="modal-content profile-content">
+      <button onclick="document.getElementById('groupSettingsModal').style.display='none'" class="icon-btn close-modal-corner"><i class="fa-solid fa-xmark"></i></button>
+      <div class="profile-header"><div style="position: relative; display: inline-block;"><img id="groupSettingsAvatar" src="" class="profile-avatar-large"><button onclick="triggerGroupAvatarUpload()" style="position:absolute; bottom:10px; right:0; background:var(--primary); color:white; border-radius:50%; width:35px; height:35px; border:none; cursor:pointer;"><i class="fa-solid fa-camera"></i></button></div><h2 id="groupSettingsName">Group Name</h2><p class="text-muted"><span id="groupMemberCount">0</span> Members</p></div>
+      <div id="groupMembersList" style="margin-top: 15px; max-height: 150px; overflow-y: auto; text-align: left; background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px;"></div>
+      <div id="groupPendingRequests" style="margin-top: 15px; display: none; max-height: 150px; overflow-y: auto; text-align: left; background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px;"></div>
+      <div class="profile-actions"><button id="addGroupMemberBtn" onclick="triggerAddGroupMember()" class="primary-btn" style="background: #3b82f6;"><i class="fa-solid fa-user-plus"></i> Add New Member</button><button id="deleteGroupBtn" class="primary-btn" style="background: #ef4444; display: none; margin-top: 10px;"><i class="fa-solid fa-trash"></i> Delete Group</button></div>
+    </div>
+  </div>
+  <div id="otpModal" class="modal-overlay" style="display: none; z-index: 100;">
+    <div class="modal-content" style="max-width: 350px; text-align: center; padding: 30px;">
+      <div class="modal-header" style="justify-content: center; border-bottom: none; padding-bottom: 0;"><h3><i class="fa-solid fa-shield-halved" style="color: var(--primary);"></i> Verify Email</h3></div>
+      <p style="color: var(--text-muted); font-size: 13px; margin: 15px 0;">We sent a 6-digit code to your email. Enter it below to secure your account.</p>
+      <div class="input-group" style="margin-bottom: 20px;"><i class="fa-solid fa-key"></i><input type="number" id="otpInput" placeholder="Enter 6-digit OTP" style="letter-spacing: 5px; font-weight: bold; text-align: center;"></div>
+      <button id="verifyOtpBtn" class="primary-btn glow-btn">Verify & Create Account</button>
+      <button onclick="document.getElementById('otpModal').style.display='none'" class="icon-btn" style="margin-top: 15px; font-size: 14px;">Cancel</button>
+    </div>
+  </div>
+  <div id="missingEmailModal" class="modal-overlay" style="display: none; z-index: 105; background: rgba(0,0,0,0.85);">
+    <div class="modal-content" style="max-width: 400px; text-align: center; padding: 30px; border: 1px solid #ef4444; box-shadow: 0 0 20px rgba(239, 68, 68, 0.2);">
+      <div class="modal-header" style="justify-content: center; border-bottom: none; padding-bottom: 0;"><h3 style="color: #ef4444;"><i class="fa-solid fa-triangle-exclamation"></i> Action Required</h3></div>
+      <p style="color: var(--text-muted); font-size: 14px; margin: 15px 0; line-height: 1.5;">Your account is missing a recovery email. To ensure you never lose access to your Chit-Chat account, please link an email address now.</p>
+      <div id="updateEmailStep1">
+        <div class="input-group" style="margin-bottom: 15px;"><i class="fa-solid fa-envelope"></i><input type="email" id="updateEmailInput" placeholder="Enter your email"></div>
+        <button id="sendUpdateOtpBtn" class="primary-btn glow-btn" style="background: #ef4444;">Send Verification Code</button>
+        <button onclick="document.getElementById('missingEmailModal').style.display='none'" class="icon-btn" style="margin-top: 15px; font-size: 13px;">I'll do this later</button>
+      </div>
+      <div id="updateEmailStep2" style="display: none;">
+        <p style="color: #10b981; font-size: 13px; margin-bottom: 15px;">OTP sent! Please check your inbox.</p>
+        <div class="input-group" style="margin-bottom: 15px;"><i class="fa-solid fa-key"></i><input type="number" id="updateOtpInput" placeholder="Enter 6-digit OTP" style="letter-spacing: 5px; font-weight: bold; text-align: center;"></div>
+        <button id="verifyUpdateOtpBtn" class="primary-btn glow-btn" style="background: #10b981;">Verify & Secure Account</button>
+      </div>
+    </div>
+  </div>
+  
+ <script type="module" src="./main.js?v=999"></script>
+</html>

@@ -1,0 +1,10 @@
+{
+  "name": "chit-chat",
+  "version": "1.0.0",
+  "scripts": {
+    "start": "node api/sendOtp.js"
+  },
+  "dependencies": {
+    "nodemailer": "^6.9.13"
+  }
+}
