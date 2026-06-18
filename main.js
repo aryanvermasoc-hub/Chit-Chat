@@ -641,7 +641,7 @@ function renderSidebar() {
     const meta = myUserData?.chatMeta?.[group.id] || {};
     let unreadCount = meta.unreadCount || (meta.unread ? 1 : 0);
     let isUnread = unreadCount > 0;
-    let timeDisplay = meta.time ? timeAgo(meta.time) : 'No messages yet';
+    let timeDisplay = meta.time ? `Last talk: ${timeAgo(meta.time)}` : 'No messages yet';
     let previewText = meta.text || `${group.members.length} members`;
 
     const nameStyle = isUnread ? "font-weight:700; color:var(--text-main);" : "color:var(--text-main);";
@@ -653,8 +653,8 @@ function renderSidebar() {
       <div class="avatar-wrapper"><img src="${avatarUrl}" class="avatar"></div>
       <div class="user-meta" style="flex:1;">
           <div style="display:flex; justify-content:space-between; align-items:center;">
-              <span class="name" style="${nameStyle}">${group.name}</span>
-              <span class="time-meta" style="${timeStyle}; font-size:10px;">${timeDisplay}</span>
+              <span class="name" style="${nameStyle} white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:55%;">${group.name}</span>
+              <span class="time-meta" style="${timeStyle}; font-size:10px; white-space:nowrap; flex-shrink:0;">${timeDisplay}</span>
           </div>
           <div style="display:flex; justify-content:space-between; align-items:center; margin-top:2px;">
               <span class="handle" style="${handleStyle}; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:85%;">${previewText}</span>
@@ -685,7 +685,7 @@ function renderSidebar() {
     
     let unreadCount = meta.unreadCount || (meta.unread ? 1 : 0);
     let isUnread = unreadCount > 0;
-    let timeDisplay = meta.time ? timeAgo(meta.time) : 'No messages yet';
+    let timeDisplay = meta.time ? `Last talk: ${timeAgo(meta.time)}` : 'No messages yet';
     
     let previewText = meta.text ? meta.text : `@${user.username}`;
     if (previewText.startsWith("U2FsdGVkX1") || previewText.startsWith("U2Fz")) {
@@ -703,8 +703,8 @@ function renderSidebar() {
       <div class="avatar-wrapper"><img src="${avatarUrl}" class="avatar"><div class="status-dot ${isOnline}"></div></div>
       <div class="user-meta" style="flex:1;">
           <div style="display:flex; justify-content:space-between; align-items:center;">
-              <span class="name" style="${nameStyle}">${displayName}</span>
-              <span class="time-meta" style="${timeStyle}; font-size:10px;">${timeDisplay}</span>
+              <span class="name" style="${nameStyle} white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:55%;">${displayName}</span>
+              <span class="time-meta" style="${timeStyle}; font-size:10px; white-space:nowrap; flex-shrink:0;">${timeDisplay}</span>
           </div>
           <div style="display:flex; justify-content:space-between; align-items:center; margin-top:2px;">
               <span class="handle" style="${handleStyle}; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:85%;">${previewText}</span>
