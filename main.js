@@ -42,7 +42,7 @@ const tabLogin = document.getElementById("tabLogin"); const tabSignup = document
 const nameGroup = document.getElementById("nameGroup"); const fullNameInput = document.getElementById("fullName");
 const usernameInput = document.getElementById("username"); const passwordInput = document.getElementById("password");
 const authActionBtn = document.getElementById("authActionBtn"); const sidebar = document.getElementById("sidebar");
-const usersList = document.getElementById("usersList"); const searchInput = document.getElementById("searchInput");
+const usersList = document.getElementById("usersList"); const groupsList = document.getElementById("groupsList"); const searchInput = document.getElementById("searchInput");
 const activeChatState = document.getElementById("activeChatState"); const emptyChatState = document.getElementById("emptyChatState");
 const chatBox = document.getElementById("chatBox"); const msgInput = document.getElementById("msg"); const sendBtn = document.getElementById("sendBtn");
 const backToUsersBtn = document.getElementById("backToUsersBtn"); const chatToggleBtn = document.getElementById("chatToggleBtn"); const homeGamesBtn = document.getElementById("homeGamesBtn");
@@ -149,7 +149,7 @@ const generateAvatar = (userObj, fallbackName) => {
     if (userObj && userObj.avatarUrl) { if (canSeePrivacy(userObj, 'privacyPfp')) return userObj.avatarUrl; }
     return defaultAvatar;
 };
-function timeAgo(ms) { if (!ms) return ""; const seconds = Math.floor((Date.now() - ms) / 1000); if (seconds < 60) return "Just now"; const minutes = Math.floor(seconds / 60); if (minutes < 60) return `${minutes} min ago`; const hours = Math.floor(minutes / 60); if (hours < 24) return `${hours} hr ago`; return `${Math.floor(hours / 24)} days ago`; }
+function timeAgo(ms) { if (!ms) return ""; const seconds = Math.floor((Date.now() - ms) / 1000); if (seconds < 60) return "Just now"; const minutes = Math.floor(seconds / 60); if (minutes < 60) return `${minutes} min ago`; const hours = Math.floor(minutes / 60); if (hours < 24) return `${hours} hr ago`; const days = Math.floor(hours / 24); if (days === 1) return "Yesterday"; return `${days} days ago`; }
 
 function showChatLoadingIndicator() {
   let loader = document.getElementById("chatLoadingOverlay");
@@ -239,9 +239,17 @@ function startGlobalMessageNotifier(uid) {
         _notifSeenTimes[chatId] = msg.time;
 
         // Build notification content
-        const sender = allUsers.find(u => u.id === msg.sender);
-        const sName = sender ? (sender.fullName || sender.username) : (msg.senderName || "Someone");
-        const sAvatar = sender ? generateAvatar(sender, sName) : null;
+        let sName = "Someone";
+        let sAvatar = null;
+        if (isGroup) {
+            sName = `${msg.senderName} in ${meta.groupName || "Group"}`;
+            const groupData = allGroups.find(g => g.id === chatId);
+            sAvatar = groupData?.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(meta.groupName || "Group")}&background=8b5cf6&color=fff`;
+        } else {
+            const sender = allUsers.find(u => u.id === msg.sender);
+            sName = sender ? (sender.fullName || sender.username) : (msg.senderName || "Someone");
+            sAvatar = sender ? generateAvatar(sender, sName) : null;
+        }
 
         let preview = msg.text || "";
         if (preview.startsWith("E2EE:")) preview = "🔒 Encrypted message";
@@ -252,11 +260,19 @@ function startGlobalMessageNotifier(uid) {
         // Show rich in-app notification with click-to-open
         showToast(`💬 ${sName}`, preview, sAvatar, () => {
           // Open the chat when notification is tapped
-          if (sender) {
-            openChat(sender.id, sName, generateAvatar(sender, sName), sender.isOnline, sender.lastSeen, sender.publicKey);
-            if (window.innerWidth <= 992) {
-              document.getElementById("sidebar").style.display = "none";
+          if (isGroup) {
+            const groupData = allGroups.find(g => g.id === chatId);
+            if (groupData) {
+                openGroupChat(groupData.id, groupData.name, groupData.members.length);
             }
+          } else {
+            const sender = allUsers.find(u => u.id === msg.sender);
+            if (sender) {
+              openChat(sender.id, sName, generateAvatar(sender, sName), sender.isOnline, sender.lastSeen, sender.publicKey);
+            }
+          }
+          if (window.innerWidth <= 992) {
+            document.getElementById("sidebar").style.display = "none";
           }
         });
 
@@ -513,9 +529,9 @@ onAuthStateChanged(auth, async (user) => {
               const isSidebarCovering = window.innerWidth <= 992 && checkVisible(sidebarEl);
               const isChatOpen = checkVisible(activeChatEl);
               // NEW: Also checks if the phone screen is actually on and the app is in the foreground
-const isChatVisible = isChatOpen && !isGameCovering && !isExploreCovering && !isDoodleCovering && !isSidebarCovering && document.visibilityState === 'visible';
+              const isChatVisible = isChatOpen && !isGameCovering && !isExploreCovering && !isDoodleCovering && !isSidebarCovering && document.visibilityState === 'visible';
 
-              if (currentChatId && targetUserUid === otherUid && isChatVisible) {
+              if (currentChatId && ((!newMeta.isGroup && targetUserUid === otherUid) || (newMeta.isGroup && currentChatId === otherUid)) && isChatVisible) {
                 // User is physically looking at this chat — mark as read silently
                 await updateDoc(doc(db, "users", uid), { 
                     [`chatMeta.${otherUid}.unread`]: false,
@@ -523,9 +539,17 @@ const isChatVisible = isChatOpen && !isGameCovering && !isExploreCovering && !is
                 });
               } else {
                 // Not looking at this chat — show notification
-                const sender = allUsers.find(u => u.id === otherUid);
-                const sName = sender ? (sender.fullName || sender.username) : "Someone";
-                const sAvatar = sender ? generateAvatar(sender, sName) : null;
+                let sName = "Someone";
+                let sAvatar = null;
+                if (newMeta.isGroup) {
+                    sName = newMeta.groupName || "Group Chat";
+                    const gData = allGroups.find(g => g.id === otherUid);
+                    sAvatar = gData?.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(sName)}&background=8b5cf6&color=fff`;
+                } else {
+                    const sender = allUsers.find(u => u.id === otherUid);
+                    sName = sender ? (sender.fullName || sender.username) : "Someone";
+                    sAvatar = sender ? generateAvatar(sender, sName) : null;
+                }
                 let preview = newMeta.text || "New message";
 
                 // Handle special previews
@@ -574,7 +598,16 @@ function loadSidebarData() {
       renderSidebar(); 
       if (targetUserUid && !isCurrentChatGroup) {
           const tUser = allUsers.find(u => u.id === targetUserUid);
-          if (tUser) document.getElementById("chatTargetAvatar").src = generateAvatar(tUser, tUser.fullName || tUser.username);
+          if (tUser) {
+              document.getElementById("chatTargetAvatar").src = generateAvatar(tUser, tUser.fullName || tUser.username);
+              const statusEl = document.getElementById("chatTargetStatus");
+              if (statusEl && !statusEl.innerText.includes("typing")) {
+                  if (canSeePrivacy(tUser, 'privacyStatus')) {
+                      if (tUser.isOnline) { statusEl.innerText = "Online"; statusEl.classList.add("online"); } 
+                      else { statusEl.innerText = `Last seen: ${timeAgo(tUser.lastSeen)}`; statusEl.classList.remove("online"); }
+                  } else { statusEl.innerText = "Offline"; statusEl.classList.remove("online"); }
+              }
+          }
       }
       
       // NEW: Instantly update all visible chat bubbles on the screen
@@ -587,18 +620,53 @@ function loadSidebarData() {
   onSnapshot(collection(db, "groups"), (snapshot) => { allGroups = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })); renderSidebar(); });
 }
 
-document.getElementById("showUsersTab").addEventListener("click", () => { document.getElementById("showUsersTab").classList.add("active"); document.getElementById("showGroupsTab").classList.remove("active"); document.getElementById("usersList").style.display = "block"; document.getElementById("groupsList").style.display = "none"; });
-document.getElementById("showGroupsTab").addEventListener("click", () => { document.getElementById("showGroupsTab").classList.add("active"); document.getElementById("showUsersTab").classList.remove("active"); document.getElementById("groupsList").style.display = "block"; document.getElementById("usersList").style.display = "none"; });
+document.getElementById("showUsersTab").addEventListener("click", () => { document.getElementById("showUsersTab").classList.add("active"); document.getElementById("showGroupsTab").classList.remove("active"); document.getElementById("usersList").style.display = "block"; document.getElementById("groupsList").style.display = "none"; searchInput.dispatchEvent(new Event('input')); });
+document.getElementById("showGroupsTab").addEventListener("click", () => { document.getElementById("showGroupsTab").classList.add("active"); document.getElementById("showUsersTab").classList.remove("active"); document.getElementById("groupsList").style.display = "block"; document.getElementById("usersList").style.display = "none"; searchInput.dispatchEvent(new Event('input')); });
 
 function renderSidebar() {
   usersList.innerHTML = "";
-  allGroups.forEach(group => {
-    if (!group.members.includes(auth.currentUser.uid)) return; 
+  groupsList.innerHTML = "";
+
+  let sortedGroups = [...allGroups].filter(g => g.members.includes(auth.currentUser.uid));
+  sortedGroups.sort((a, b) => {
+    let timeA = myUserData?.chatMeta?.[a.id]?.time || 0;
+    let timeB = myUserData?.chatMeta?.[b.id]?.time || 0;
+    return timeB - timeA;
+  });
+
+  sortedGroups.forEach(group => {
     const groupCard = document.createElement("div");
     groupCard.className = "user-item";
-    groupCard.innerHTML = `<div class="avatar-wrapper"><div class="avatar" style="background:var(--primary); display:flex; justify-content:center; align-items:center; color:white; font-weight:bold; font-size:18px;">${group.name.charAt(0)}</div></div><div class="user-meta"><span class="name">${group.name}</span><span class="handle">${group.members.length} members</span></div>`;
-    groupCard.onclick = () => openGroupChat(group.id, group.name, group.members.length);
-    usersList.appendChild(groupCard);
+    
+    const meta = myUserData?.chatMeta?.[group.id] || {};
+    let unreadCount = meta.unreadCount || (meta.unread ? 1 : 0);
+    let isUnread = unreadCount > 0;
+    let timeDisplay = meta.time ? timeAgo(meta.time) : 'No messages yet';
+    let previewText = meta.text || `${group.members.length} members`;
+
+    const nameStyle = isUnread ? "font-weight:700; color:var(--text-main);" : "color:var(--text-main);";
+    const handleStyle = isUnread ? "font-weight:600; color:var(--text-main);" : "color:var(--text-muted);";
+    const timeStyle = isUnread ? "font-weight:700; color:var(--primary);" : "color:var(--text-muted);";
+    const avatarUrl = group.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(group.name)}&background=8b5cf6&color=fff`;
+
+    groupCard.innerHTML = `
+      <div class="avatar-wrapper"><img src="${avatarUrl}" class="avatar"></div>
+      <div class="user-meta" style="flex:1;">
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+              <span class="name" style="${nameStyle}">${group.name}</span>
+              <span class="time-meta" style="${timeStyle}; font-size:10px;">${timeDisplay}</span>
+          </div>
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-top:2px;">
+              <span class="handle" style="${handleStyle}; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:85%;">${previewText}</span>
+              ${isUnread ? `<div class="unread-badge">${unreadCount > 99 ? '99+' : unreadCount}</div>` : ''}
+          </div>
+      </div>`;
+      
+    groupCard.onclick = () => {
+      if (isUnread) updateDoc(doc(db, "users", auth.currentUser.uid), { [`chatMeta.${group.id}.unread`]: false, [`chatMeta.${group.id}.unreadCount`]: 0 });
+      openGroupChat(group.id, group.name, group.members.length);
+    };
+    groupsList.appendChild(groupCard);
   });
 
   let sortedUsers = [...allUsers].filter(u => u.id !== auth.currentUser.uid);
@@ -609,14 +677,15 @@ function renderSidebar() {
   });
 
   sortedUsers.forEach((user) => {
+    const meta = myUserData?.chatMeta?.[user.id] || {};
+    if (meta.isGroup) return; // Prevent bleed over from any incorrectly saved data
     const displayName = user.fullName || user.username;
     const avatarUrl = generateAvatar(user, displayName);
     const isOnline = user.isOnline ? "online" : "";
-    const meta = myUserData?.chatMeta?.[user.id] || {};
     
     let unreadCount = meta.unreadCount || (meta.unread ? 1 : 0);
     let isUnread = unreadCount > 0;
-    let timeDisplay = meta.time ? timeAgo(meta.time) : '';
+    let timeDisplay = meta.time ? timeAgo(meta.time) : 'No messages yet';
     
     let previewText = meta.text ? meta.text : `@${user.username}`;
     if (previewText.startsWith("U2FsdGVkX1") || previewText.startsWith("U2Fz")) {
@@ -659,7 +728,12 @@ if(createGroupBtn) {
     selectableUsers.forEach((u, index) => { promptText += `${index + 1}. ${u.fullName || u.username}\n`; });
     const selections = prompt(promptText); if (!selections) return;
     let members = [auth.currentUser.uid]; selections.split(',').forEach(numText => { const idx = parseInt(numText.trim()) - 1; if (selectableUsers[idx]) members.push(selectableUsers[idx].id); });
-    if (members.length > 1) { addDoc(collection(db, "groups"), { name: groupName, members: members, createdAt: Date.now(), createdBy: auth.currentUser.uid }); showToast("Group Created", `${groupName} was created successfully.`); } else { alert("At least one other person required."); }
+    if (members.length > 1) { 
+        addDoc(collection(db, "groups"), { name: groupName, members: members, createdAt: Date.now(), createdBy: auth.currentUser.uid }).then(docRef => {
+            showToast("Group Created", `${groupName} was created successfully.`);
+            openGroupChat(docRef.id, groupName, members.length);
+        });
+    } else { alert("At least one other person required."); }
   });
 }
 
@@ -873,7 +947,16 @@ messagesUnsubscribe = onSnapshot(q, async (snapshot) => {
           };
           if (timeLeft <= 0) { wipeMessage(); continue; } else { window.msgTimeouts.push(setTimeout(wipeMessage, timeLeft)); }
       }
-      if (msg.deletedFor && msg.deletedFor.includes(auth.currentUser.uid)) continue;
+      if (msg.isExpired) {
+          const el = document.getElementById(`msg_${msgId}`);
+          if (el) el.remove();
+          continue;
+      }
+      if (msg.deletedFor && msg.deletedFor.includes(auth.currentUser.uid)) {
+          const el = document.getElementById(`msg_${msgId}`);
+          if (el) el.remove();
+          continue;
+      }
 
       const pDoodleArea = document.getElementById("privateDoodleArea"); const isDoodleOpen = pDoodleArea && pDoodleArea.style.display === "flex";
       const activeGameArea = document.getElementById("activeGameArea"); const isGameOpen = activeGameArea && activeGameArea.style.display === "flex";
@@ -900,18 +983,19 @@ messagesUnsubscribe = onSnapshot(q, async (snapshot) => {
       const timeStr = new Date(msg.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); 
       let contentHtml = "";
 
-      if (msg.isDoodleRequest) {
-          if (isMe) { contentHtml = `<div class="challenge-bubble" onclick="event.stopPropagation();"><h4>🎨 Doodle Request Sent</h4><p>Waiting for opponent to accept...</p></div>`; }
-          else { contentHtml = `<div class="challenge-bubble" onclick="event.stopPropagation();"><h4>🎨 Shared Whiteboard</h4><p>Wants to draw with you!</p><div class="challenge-actions"><button class="btn-accept" onclick="acceptDoodle()">Accept</button></div></div>`; }
+      if (msg.isDeleted) { contentHtml = `<div class="msg-bubble msg-deleted"><i class="fa-solid fa-ban"></i> This message was deleted</div>`; } 
+      else if (msg.isDoodleRequest) {
+          const encodedText = encodeURIComponent("🎨 Doodle Request"); const encodedName = encodeURIComponent(isMe ? 'You' : (msg.senderName || document.getElementById('chatTargetName').innerText));
+          if (isMe) { contentHtml = `<div class="challenge-bubble" onclick="openMessageModal('${msgId}', '${encodedText}', '${encodedName}', ${isMe}, 'chat')"><h4>🎨 Doodle Request Sent</h4><p>Waiting for opponent to accept...</p></div>`; }
+          else { contentHtml = `<div class="challenge-bubble" onclick="openMessageModal('${msgId}', '${encodedText}', '${encodedName}', ${isMe}, 'chat')"><h4>🎨 Shared Whiteboard</h4><p>Wants to draw with you!</p><div class="challenge-actions"><button class="btn-accept" onclick="event.stopPropagation(); acceptDoodle()">Accept</button></div></div>`; }
       } else if (msg.isGameChallenge) {
-         const gameNames = { "ludo": "Ludo Arena", "tictactoe": "Tic Tac Toe", "rps": "Rock Paper Scissors", "jetfighter": "Jet Fighter", "carracing": "Car Racing", "cybertanks": "Cyber Tanks (1v1)" };
+          const gameNames = { "ludo": "Ludo Arena", "tictactoe": "Tic Tac Toe", "rps": "Rock Paper Scissors", "jetfighter": "Jet Fighter", "carracing": "Car Racing", "cybertanks": "Cyber Tanks (1v1)" };
+          const encodedText = encodeURIComponent("🎮 Game Challenge"); const encodedName = encodeURIComponent(isMe ? 'You' : (msg.senderName || document.getElementById('chatTargetName').innerText));
           if (isMe) { 
-              // FIXED: Sender now has an Enter Game button so they can join/re-join the waiting room!
-              contentHtml = `<div class="challenge-bubble" onclick="event.stopPropagation();"><h4>🎮 Challenge Sent</h4><p>Waiting for opponent to accept ${gameNames[msg.gameType] || 'a Game'}...</p><div class="challenge-actions"><button class="btn-accept" style="background:var(--primary);" onclick="window.joinGameRoom('${msg.gameId}', '${msg.gameType}')">Enter Game Room</button></div></div>`; 
+              contentHtml = `<div class="challenge-bubble" onclick="openMessageModal('${msgId}', '${encodedText}', '${encodedName}', ${isMe}, 'chat')"><h4>🎮 Challenge Sent</h4><p>Waiting for opponent to accept ${gameNames[msg.gameType] || 'a Game'}...</p><div class="challenge-actions"><button class="btn-accept" style="background:var(--primary);" onclick="event.stopPropagation(); window.joinGameRoom('${msg.gameId}', '${msg.gameType}')">Enter Game Room</button></div></div>`; 
           } 
-          else { contentHtml = `<div class="challenge-bubble" onclick="event.stopPropagation();"><h4>🎮 Game Request</h4><p>Wants to play <b>${gameNames[msg.gameType] || 'a Game'}</b></p><div class="challenge-actions"><button class="btn-accept" onclick="acceptGameChallenge('${msg.gameId}', '${msg.gameType}')">Accept</button></div></div>`; }
-      } else if (msg.isDeleted) { contentHtml = `<div class="msg-bubble msg-deleted"><i class="fa-solid fa-ban"></i> This message was deleted</div>`; } 
-      else {
+          else { contentHtml = `<div class="challenge-bubble" onclick="openMessageModal('${msgId}', '${encodedText}', '${encodedName}', ${isMe}, 'chat')"><h4>🎮 Game Request</h4><p>Wants to play <b>${gameNames[msg.gameType] || 'a Game'}</b></p><div class="challenge-actions"><button class="btn-accept" onclick="event.stopPropagation(); window.acceptGameChallenge('${msg.gameId}', '${msg.gameType}')">Accept</button></div></div>`; }
+      } else {
         let decryptedText = msg.text;
         if (msg.text && msg.text.startsWith("E2EE:")) decryptedText = await CryptoE2EE.decrypt(msg.text, activeSharedKey);
         if (!isActiveMessageLoad()) return;
@@ -984,6 +1068,12 @@ messagesUnsubscribe = onSnapshot(q, async (snapshot) => {
         }
     });
 
+  }, (error) => {
+      console.error("Error loading messages:", error);
+      hideChatLoadingIndicator();
+      chatBox.innerHTML = `<div style="text-align:center; padding:20px; color:#ef4444;">Unable to load messages: ${error.message}</div>`;
+      chatBox.style.visibility = "visible";
+      chatBox.style.opacity = "1";
   });
 }
 
@@ -1010,16 +1100,29 @@ function listenToTyping() {
         const targetUser = allUsers.find(u => u.id === targetUserUid);
         const statusEl = document.getElementById("chatTargetStatus");
         if (targetUser && canSeePrivacy(targetUser, 'privacyStatus')) {
-            if (docSnap.exists() && docSnap.data()[`typing_${targetUserUid}`]) { statusEl.innerText = "typing..."; } else { if (targetUser.isOnline) { statusEl.innerText = "Online"; } else { statusEl.innerText = `Last seen: ${timeAgo(targetUser.lastSeen)}`; } } 
-        } else { statusEl.innerText = "Offline"; }
+                if (docSnap.exists() && docSnap.data()[`typing_${targetUserUid}`]) { 
+                    statusEl.innerText = "typing..."; 
+                    statusEl.classList.remove("online");
+                } else { 
+                    if (targetUser.isOnline) { statusEl.innerText = "Online"; statusEl.classList.add("online"); } 
+                    else { statusEl.innerText = `Last seen: ${timeAgo(targetUser.lastSeen)}`; statusEl.classList.remove("online"); } 
+                } 
+            } else { statusEl.innerText = "Offline"; statusEl.classList.remove("online"); }
     }); 
 }
 msgInput.addEventListener("input", async () => { if(!currentChatId || isCurrentChatGroup) return; await setDoc(doc(db, "chats", currentChatId), { [`typing_${auth.currentUser.uid}`]: true }, { merge: true }); clearTimeout(typingTimeout); typingTimeout = setTimeout(async () => { await setDoc(doc(db, "chats", currentChatId), { [`typing_${auth.currentUser.uid}`]: false }, { merge: true }); }, 1500); });
 
+let isSendingMsg = false;
 async function sendMessage() {
+  if (isSendingMsg) return;
   const text = msgInput.value.trim(); if (!text) return;
+  isSendingMsg = true;
   const timerValue = modalMsgTimerSelect ? parseInt(modalMsgTimerSelect.value) : 0;
-  msgInput.value = ""; msgInput.style.height = "20px"; msgInput.focus(); if (!isCurrentChatGroup && currentChatStatus !== 'accepted') return;
+  msgInput.value = ""; msgInput.style.height = "20px"; msgInput.focus(); 
+  if (!isCurrentChatGroup && currentChatStatus !== 'accepted') {
+      isSendingMsg = false;
+      return;
+  }
   
   // Encrypt outbound payload via Web Crypto
   let encryptedText = text;
@@ -1038,10 +1141,15 @@ async function sendMessage() {
       if (group) {
         const myName = document.getElementById("myName").innerText;
         const batch = writeBatch(db);
+        
+        batch.set(doc(db, "users", auth.currentUser.uid), {
+          chatMeta: { [currentChatId]: { time: Date.now(), text: `You: ${text}`, unread: false, unreadCount: 0, isGroup: true, groupId: currentChatId, groupName: document.getElementById("chatTargetName").innerText } }
+        }, { merge: true });
+
         group.members.forEach(memberId => {
           if (memberId !== auth.currentUser.uid) {
             batch.set(doc(db, "users", memberId), {
-              chatMeta: { [auth.currentUser.uid]: { time: Date.now(), text: `${myName}: ${text}`, unread: true, groupId: currentChatId, groupName: document.getElementById("chatTargetName").innerText } }
+              chatMeta: { [currentChatId]: { time: Date.now(), text: `${myName}: ${text}`, unread: true, unreadCount: increment(1), isGroup: true, groupId: currentChatId, groupName: document.getElementById("chatTargetName").innerText } }
             }, { merge: true });
           }
         });
@@ -1057,9 +1165,16 @@ async function sendMessage() {
       payload.replyToText = activeSharedKey ? await CryptoE2EE.encrypt(replyingToMsg.text, activeSharedKey) : replyingToMsg.text; 
       payload.replyToName = replyingToMsg.name; document.getElementById("cancelReplyBtn").click(); 
   }
-  try { await addDoc(collection(db, "chats", currentChatId, "messages"), payload); } catch (e) { showToast("Error", "Message failed to send."); }
+  try { 
+      await addDoc(collection(db, "chats", currentChatId, "messages"), payload); 
+  } catch (e) { 
+      showToast("Error", "Message failed to send."); 
+  } finally {
+      isSendingMsg = false;
+  }
 }
-sendBtn.addEventListener("click", sendMessage); msgInput.addEventListener("keypress", (e) => { if (e.key === "Enter") { e.preventDefault(); sendMessage(); } });
+sendBtn.addEventListener("click", (e) => { if(e) { e.preventDefault(); e.stopPropagation(); } sendMessage(); }); 
+msgInput.addEventListener("keypress", (e) => { if (e.key === "Enter") { e.preventDefault(); sendMessage(); } });
 // Auto-resize textarea as user types
 msgInput.addEventListener("input", () => {
     msgInput.style.height = "20px";
@@ -1067,9 +1182,10 @@ msgInput.addEventListener("input", () => {
 });
 searchInput.addEventListener("input", (e) => { 
     const term = e.target.value.toLowerCase(); let hasVisible = false;
-    document.querySelectorAll(".user-item").forEach(item => { const match = item.innerText.toLowerCase().includes(term); item.style.display = match ? "flex" : "none"; if (match) hasVisible = true; }); 
+    const activeList = document.getElementById("usersList").style.display !== "none" ? document.getElementById("usersList") : document.getElementById("groupsList");
+    document.querySelectorAll(".user-item").forEach(item => { const match = item.innerText.toLowerCase().includes(term); item.style.display = match ? "flex" : "none"; if (match && item.parentElement === activeList) hasVisible = true; }); 
     let noResultsMsg = document.getElementById("noResultsSearch");
-    if (!hasVisible && term !== "") { if (!noResultsMsg) { noResultsMsg = document.createElement("div"); noResultsMsg.id = "noResultsSearch"; noResultsMsg.style.cssText = "padding: 20px; text-align: center; color: var(--text-muted); font-size: 13px;"; noResultsMsg.innerText = "No connections match your search."; document.getElementById("usersList").appendChild(noResultsMsg); } noResultsMsg.style.display = "block"; } else if (noResultsMsg) { noResultsMsg.style.display = "none"; }
+    if (!hasVisible && term !== "") { if (!noResultsMsg) { noResultsMsg = document.createElement("div"); noResultsMsg.id = "noResultsSearch"; noResultsMsg.style.cssText = "padding: 20px; text-align: center; color: var(--text-muted); font-size: 13px;"; noResultsMsg.innerText = "No connections match your search."; } activeList.appendChild(noResultsMsg); noResultsMsg.style.display = "block"; } else if (noResultsMsg) { noResultsMsg.style.display = "none"; }
 });
 const fileInput = document.createElement("input"); fileInput.type = "file"; fileInput.accept = "image/*"; fileInput.style.display = "none"; document.body.appendChild(fileInput);
 document.querySelector('.fa-paperclip').parentElement.addEventListener("click", () => fileInput.click());
@@ -1143,22 +1259,37 @@ window.triggerGroupAvatarUpload = () => { const input = document.createElement("
 
 bindPointerTap(launchGameMenuBtn, () => { gameSelectionModal.style.display = "flex"; });
 bindPointerTap(closeGameSelectBtn, () => { gameSelectionModal.style.display = "none"; });
+
+let isSendingChallenge = false;
 document.querySelectorAll(".game-select-btn").forEach(btn => {
-    bindPointerTap(btn, async () => {
-        const gameType = btn.getAttribute("data-game"); gameSelectionModal.style.display = "none"; const timerValue = modalMsgTimerSelect ? parseInt(modalMsgTimerSelect.value) : 0;
-        if (gameType === 'doodle') {
-            if (isCurrentChatGroup) { alert("Doodle is for 1v1 only!"); return; }
-            await updateDoc(doc(db, "chats", currentChatId), { doodleReq: auth.currentUser.uid });
-            const payload = { sender: auth.currentUser.uid, time: Date.now(), isDoodleRequest: true, isDeleted: false }; if (timerValue > 0) payload.timerDuration = timerValue; 
-            await addDoc(collection(db, "chats", currentChatId, "messages"), payload); await setDoc(doc(db, "users", targetUserUid), { chatMeta: { [auth.currentUser.uid]: { time: Date.now(), text: "🎨 DOODLE REQUEST", unread: true } } }, { merge: true });
-            showToast("Request Sent", "Doodle request sent to friend."); return;
+    const newBtn = btn.cloneNode(true);
+    btn.parentNode.replaceChild(newBtn, btn);
+    bindPointerTap(newBtn, async (e) => {
+        if (e) { e.preventDefault(); e.stopPropagation(); }
+        if (isSendingChallenge) return;
+        isSendingChallenge = true;
+        newBtn.classList.add("loading");
+        try {
+            const gameType = newBtn.getAttribute("data-game"); gameSelectionModal.style.display = "none"; const timerValue = modalMsgTimerSelect ? parseInt(modalMsgTimerSelect.value) : 0;
+            if (gameType === 'doodle') {
+                if (isCurrentChatGroup) { alert("Doodle is for 1v1 only!"); return; }
+                await updateDoc(doc(db, "chats", currentChatId), { doodleReq: auth.currentUser.uid });
+                const payload = { sender: auth.currentUser.uid, time: Date.now(), isDoodleRequest: true, isDeleted: false }; if (timerValue > 0) payload.timerDuration = timerValue; 
+                await addDoc(collection(db, "chats", currentChatId, "messages"), payload); await setDoc(doc(db, "users", targetUserUid), { chatMeta: { [auth.currentUser.uid]: { time: Date.now(), text: "🎨 DOODLE REQUEST", unread: true } } }, { merge: true });
+                showToast("Request Sent", "Doodle request sent to friend."); return;
+            }
+            const gameId = `game_${Date.now()}_${auth.currentUser.uid}`;
+            let initialData = { type: gameType, status: "waiting", player1: auth.currentUser.uid, player2: targetUserUid, createdAt: Date.now(), turn: auth.currentUser.uid, winner: null, p1Score: null, p2Score: null, board: ["","","","","","","","",""], p1Choice: null, p2Choice: null };
+            if(gameType === 'ludo') { initialData.ludoTokens = { p1: [-1, -1, -1, -1], p2: [-1, -1, -1, -1] }; initialData.diceValue = null; }
+            await setDoc(doc(db, "games", gameId), initialData);
+            const gPayload = { sender: auth.currentUser.uid, time: Date.now(), isGameChallenge: true, gameType: gameType, gameId: gameId, isDeleted: false }; if (timerValue > 0) gPayload.timerDuration = timerValue;
+            await addDoc(collection(db, "chats", currentChatId, "messages"), gPayload); await setDoc(doc(db, "users", targetUserUid), { chatMeta: { [auth.currentUser.uid]: { time: Date.now(), text: "🎮 GAME CHALLENGE", unread: true } } }, { merge: true }); joinGameRoom(gameId, gameType);
+        } catch (error) {
+            console.error(error);
+        } finally {
+            newBtn.classList.remove("loading");
+            setTimeout(() => { isSendingChallenge = false; }, 500);
         }
-        const gameId = `game_${Date.now()}_${auth.currentUser.uid}`;
-        let initialData = { type: gameType, status: "waiting", player1: auth.currentUser.uid, player2: targetUserUid, createdAt: Date.now(), turn: auth.currentUser.uid, winner: null, p1Score: null, p2Score: null, board: ["","","","","","","","",""], p1Choice: null, p2Choice: null };
-        if(gameType === 'ludo') { initialData.ludoTokens = { p1: [-1, -1, -1, -1], p2: [-1, -1, -1, -1] }; initialData.diceValue = null; }
-        await setDoc(doc(db, "games", gameId), initialData);
-        const gPayload = { sender: auth.currentUser.uid, time: Date.now(), isGameChallenge: true, gameType: gameType, gameId: gameId, isDeleted: false }; if (timerValue > 0) gPayload.timerDuration = timerValue;
-        await addDoc(collection(db, "chats", currentChatId, "messages"), gPayload); await setDoc(doc(db, "users", targetUserUid), { chatMeta: { [auth.currentUser.uid]: { time: Date.now(), text: "🎮 GAME CHALLENGE", unread: true } } }, { merge: true }); joinGameRoom(gameId, gameType);
     });
 });
 window.acceptGameChallenge = async (gameId, gameType) => { await updateDoc(doc(db, "games", gameId), { status: "playing" }); joinGameRoom(gameId, gameType); };
@@ -1270,17 +1401,32 @@ window.resetRPS = async (gameId) => { await updateDoc(doc(db, "games", gameId), 
 // --- DOODLE LOGIC ---
 const pDoodleArea = document.getElementById("privateDoodleArea"); const pDoodleCanvas = document.getElementById("pDoodleCanvas"); const pDoodleCtx = pDoodleCanvas.getContext("2d"); const pDoodleColor = document.getElementById("pDoodleColor"); const pDoodleSize = document.getElementById("pDoodleSize"); const undoPDoodleBtn = document.getElementById("undoPDoodleBtn");
 let isPDrawing = false; let currentPStroke = [];
-chatDoodleBtn.addEventListener("click", async () => {
-    if(currentChatStatus !== 'accepted') { alert("Connection request not accepted yet."); return; }
-    const chatSnap = await getDoc(doc(db, "chats", currentChatId));
-    if(chatSnap.exists() && chatSnap.data().doodleActive) { pDoodleArea.style.display = "flex"; document.getElementById("doodleBadge").style.display = "none"; window.dispatchEvent(new Event('resize')); } 
-    else {
-        if (isCurrentChatGroup) { alert("Doodle is for 1v1 only!"); return; }
-        await updateDoc(doc(db, "chats", currentChatId), { doodleReq: auth.currentUser.uid });
-        const timerValue = modalMsgTimerSelect ? parseInt(modalMsgTimerSelect.value) : 0;
-        const payload = { sender: auth.currentUser.uid, time: Date.now(), isDoodleRequest: true, isDeleted: false }; if (timerValue > 0) payload.timerDuration = timerValue;
-        await addDoc(collection(db, "chats", currentChatId, "messages"), payload); await setDoc(doc(db, "users", targetUserUid), { chatMeta: { [auth.currentUser.uid]: { time: Date.now(), text: "🎨 DOODLE REQUEST", unread: true } } }, { merge: true });
-        showToast("Request Sent", "Doodle request sent to friend.");
+
+let isSendingDoodle = false;
+chatDoodleBtn.addEventListener("click", async (e) => {
+    if (e) { e.preventDefault(); e.stopPropagation(); }
+    if(isSendingDoodle) return;
+    isSendingDoodle = true;
+    chatDoodleBtn.style.opacity = "0.5";
+    chatDoodleBtn.style.pointerEvents = "none";
+    try {
+        if(currentChatStatus !== 'accepted') { alert("Connection request not accepted yet."); return; }
+        const chatSnap = await getDoc(doc(db, "chats", currentChatId));
+        if(chatSnap.exists() && chatSnap.data().doodleActive) { pDoodleArea.style.display = "flex"; document.getElementById("doodleBadge").style.display = "none"; window.dispatchEvent(new Event('resize')); } 
+        else {
+            if (isCurrentChatGroup) { alert("Doodle is for 1v1 only!"); return; }
+            await updateDoc(doc(db, "chats", currentChatId), { doodleReq: auth.currentUser.uid });
+            const timerValue = modalMsgTimerSelect ? parseInt(modalMsgTimerSelect.value) : 0;
+            const payload = { sender: auth.currentUser.uid, time: Date.now(), isDoodleRequest: true, isDeleted: false }; if (timerValue > 0) payload.timerDuration = timerValue;
+            await addDoc(collection(db, "chats", currentChatId, "messages"), payload); await setDoc(doc(db, "users", targetUserUid), { chatMeta: { [auth.currentUser.uid]: { time: Date.now(), text: "🎨 DOODLE REQUEST", unread: true } } }, { merge: true });
+            showToast("Request Sent", "Doodle request sent to friend.");
+        }
+    } catch (error) {
+        console.error(error);
+    } finally {
+        chatDoodleBtn.style.opacity = "1";
+        chatDoodleBtn.style.pointerEvents = "auto";
+        setTimeout(() => { isSendingDoodle = false; }, 500);
     }
 });
 document.getElementById("hideDoodleBtn").addEventListener("click", () => { pDoodleArea.style.display = "none"; if (currentChatId) { loadMessages(); } });
@@ -1430,6 +1576,38 @@ if (modalMsgTimerSelect) modalMsgTimerSelect.addEventListener("change", async (e
 if (changeWallpaperBtn && wallpaperInput) { changeWallpaperBtn.addEventListener("click", () => wallpaperInput.click()); wallpaperInput.addEventListener("change", async (e) => { const file = e.target.files[0]; if (!file || !currentChatId || isCurrentChatGroup) return; const originalText = changeWallpaperBtn.innerHTML; changeWallpaperBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Uploading...'; changeWallpaperBtn.disabled = true; try { const formData = new FormData(); formData.append("file", file); formData.append("upload_preset", UPLOAD_PRESET); const response = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`, { method: "POST", body: formData }); const data = await response.json(); await updateDoc(doc(db, "chats", currentChatId), { wallpaperUrl: data.secure_url }); showToast("Wallpaper Updated", "Chat background synced for both users."); } catch (err) { alert("Failed to upload wallpaper: " + err.message); } finally { changeWallpaperBtn.innerHTML = originalText; changeWallpaperBtn.disabled = false; wallpaperInput.value = ""; } }); }
 if (removeWallpaperBtn) { removeWallpaperBtn.addEventListener("click", async () => { if (!currentChatId || isCurrentChatGroup) return; try { await updateDoc(doc(db, "chats", currentChatId), { wallpaperUrl: null }); showToast("Wallpaper Removed", "Restored default background for both."); } catch (err) {} }); }
 if (clearChatMeBtn) { clearChatMeBtn.addEventListener("click", async () => { if (!currentChatId) return; if (confirm("Are you sure you want to clear this chat for yourself? Messages will be hidden for you but remain for the other person.")) { clearChatMeBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Clearing...'; try { const msgsSnap = await getDocs(query(collection(db, "chats", currentChatId, "messages"))); const batch = writeBatch(db); msgsSnap.docs.forEach(docSnap => { batch.update(docSnap.ref, { deletedFor: arrayUnion(auth.currentUser.uid) }); }); await batch.commit(); document.getElementById("chatSettingsModal").style.display = "none"; showToast("Chat Cleared", "Messages have been hidden from your screen."); } catch (e) { alert("Error clearing chat."); } finally { clearChatMeBtn.innerHTML = '<i class="fa-solid fa-eraser"></i> Clear Chat for Me'; } } }); }
+
+window.triggerClearChatEveryone = async () => {
+    if (!currentChatId) return; 
+
+    if (confirm("DEVELOPER ACTION: Permanently wipe this entire chat history for BOTH users? This cannot be undone.")) {
+        const clearBtn = document.getElementById("clearChatEveryoneBtn");
+        if (clearBtn) clearBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Wiping...';
+        
+        try {
+            const msgsQuery = query(collection(db, "chats", currentChatId, "messages"));
+            const msgsSnap = await getDocs(msgsQuery);
+            
+            const batch = writeBatch(db);
+            
+            msgsSnap.docs.forEach(docSnap => {
+                batch.delete(docSnap.ref);
+            });
+            
+            await batch.commit();
+            
+            showToast("Wiped", "Chat history permanently deleted for everyone.");
+            
+            const settingsModal = document.getElementById("chatSettingsModal");
+            if (settingsModal) settingsModal.style.display = "none";
+            
+        } catch (error) {
+            alert("Failed to wipe chat: " + error.message);
+        } finally {
+            if (clearBtn) clearBtn.innerHTML = '<i class="fa-solid fa-fire"></i> Clear for Everyone';
+        }
+    }
+};
 
 window.addEventListener("popstate", (e) => {
     let modalClosed = false;
@@ -1749,3 +1927,16 @@ function lockWallpaperHeight() {
 
 // Run this the exact moment the app loads
 window.addEventListener('DOMContentLoaded', lockWallpaperHeight);
+
+// ==========================================
+// PRESENCE / VISIBILITY SYNC
+// ==========================================
+document.addEventListener("visibilitychange", () => {
+    if (auth && auth.currentUser) {
+        if (document.visibilityState === "visible") {
+            updateDoc(doc(db, "users", auth.currentUser.uid), { isOnline: true }).catch(() => {});
+        } else {
+            updateDoc(doc(db, "users", auth.currentUser.uid), { isOnline: false, lastSeen: Date.now() }).catch(() => {});
+        }
+    }
+});
