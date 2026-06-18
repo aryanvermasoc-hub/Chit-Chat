@@ -547,8 +547,16 @@ body { background: var(--bg-base); color: var(--text-main); display: flex; justi
 .dice-btn { width: 60px; height: 60px; background: rgba(255,255,255,0.1); border: 1px solid var(--glass-border); border-radius: 12px; font-size: 30px; color: white; cursor: pointer; display: flex; justify-content: center; align-items: center; box-shadow: 0 5px 15px rgba(0,0,0,0.3); transition: 0.2s; }
 .dice-btn:active { transform: scale(0.9); }
 .dice-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-.dice-rolling { animation: rollDiceAnim 0.5s infinite linear; }
+.dice-rolling { animation: rollDiceAnim 0.5s linear; }
 .dice-btn.pulse:not(:disabled) { animation: dicePulse 1s infinite alternate; border-color: var(--primary); }
+
+@keyframes rollDiceAnim {
+  0% { transform: rotate(0deg) scale(1); }
+  25% { transform: rotate(90deg) scale(1.1); }
+  50% { transform: rotate(180deg) scale(1); }
+  75% { transform: rotate(270deg) scale(1.1); }
+  100% { transform: rotate(360deg) scale(1); }
+}
 /* Sidebar Tabs Styling Fix */
 .tab-btn {
     background: transparent !important;

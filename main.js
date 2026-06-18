@@ -183,40 +183,16 @@ window.openSelectUsersModal = (mode, existingMembers = [], pendingArr = []) => {
         closeBtn.onclick = () => { cleanup(); resolve(null); };
 
         confirmBtn.onclick = () => {
-            let validMembers = [];
-            let blockedCount = 0;
-            
-            for (let uid of selectedUids) {
-                const u = allUsers.find(x => x.id === uid);
-                if (!u) continue;
-                const pref = u.privacyGroupInvite || 'everyone';
-                const isFriend = !!(u.chatMeta && u.chatMeta[auth.currentUser.uid]);
-                
-                if (pref === 'none') {
-                    showToast("Blocked", `${u.fullName || u.username} does not accept group invites.`);
-                    blockedCount++;
-                } else if (pref === 'friends' && !isFriend) {
-                    showToast("Blocked", `${u.fullName || u.username} only accepts invites from friends.`);
-                    blockedCount++;
-                } else {
-                    validMembers.push(uid);
-                }
-            }
+            let validMembers = Array.from(selectedUids);
 
             if (mode === 'create_group') {
                 const gName = groupNameInput.value.trim();
                 if (!gName) { showToast("Error", "Group Name is required."); return; }
-                if (validMembers.length === 0) { 
-                    if (blockedCount === 0) showToast("Error", "Select at least one valid member."); 
-                    return; 
-                }
+                if (validMembers.length === 0) { showToast("Error", "Select at least one member."); return; }
                 cleanup();
                 resolve({ groupName: gName, members: validMembers });
             } else {
-                if (validMembers.length === 0) { 
-                    if (blockedCount === 0) showToast("Error", "Select at least one valid member."); 
-                    return; 
-                }
+                if (validMembers.length === 0) { showToast("Error", "Select at least one member."); return; }
                 cleanup();
                 resolve({ members: validMembers });
             }
@@ -410,6 +386,10 @@ function startGlobalMessageNotifier(uid) {
       const unsub = onSnapshot(q, async (snapshot) => {
         if (snapshot.empty) return;
         const msgDoc = snapshot.docs[0];
+        // Suppress notifications if any game is active on screen
+        const gameAreaEl = document.getElementById("activeGameArea");
+        if (gameAreaEl && window.getComputedStyle(gameAreaEl).display !== "none") return;
+
         const msg = msgDoc.data();
 
         // Skip own messages, expired/deleted/system messages, and old messages
@@ -731,6 +711,11 @@ onAuthStateChanged(auth, async (user) => {
                     [`chatMeta.${otherUid}.unreadCount`]: 0 
                 });
               } else {
+                // Suppress notifications if any game is active on screen
+                const gameAreaEl = document.getElementById("activeGameArea");
+                const isGameActive = gameAreaEl && window.getComputedStyle(gameAreaEl).display !== "none";
+                if (isGameActive) continue;
+
                 // Not looking at this chat — show notification
                 let sName = "Someone";
                 let sAvatar = null;
@@ -953,13 +938,20 @@ if(createGroupBtn) {
           showToast("Group Created", `${groupName} was created successfully. Invites sent.`);
           openGroupChat(docRef.id, groupName, groupMembers.length);
           invitedMembers.forEach(uid => {
+              const u = allUsers.find(x => x.id === uid);
+              const pref = u ? (u.privacyGroupInvite || 'everyone') : 'everyone';
+              const isFriend = u && !!(u.chatMeta && u.chatMeta[auth.currentUser.uid]);
+              let shouldNotify = true;
+              if (pref === 'none') shouldNotify = false;
+              if (pref === 'friends' && !isFriend) shouldNotify = false;
+
               setDoc(doc(db, "users", uid), {
                   chatMeta: {
                       [docRef.id]: {
                           time: Date.now(),
                           text: `You were invited to join ${groupName}`,
-                          unread: true,
-                          unreadCount: increment(1),
+                          unread: shouldNotify,
+                          unreadCount: shouldNotify ? increment(1) : 0,
                           isGroup: true,
                           groupId: docRef.id,
                           groupName: groupName
@@ -1523,13 +1515,20 @@ window.triggerAddGroupMember = async () => {
         await updateDoc(doc(db, "groups", currentChatId), { invitedMembers: arrayUnion(...selectedMembers) }); 
         showToast("Invites Sent", `Invitations sent to ${selectedMembers.length} user(s).`); 
         selectedMembers.forEach(uid => {
+            const u = allUsers.find(x => x.id === uid);
+            const pref = u ? (u.privacyGroupInvite || 'everyone') : 'everyone';
+            const isFriend = u && !!(u.chatMeta && u.chatMeta[auth.currentUser.uid]);
+            let shouldNotify = true;
+            if (pref === 'none') shouldNotify = false;
+            if (pref === 'friends' && !isFriend) shouldNotify = false;
+
             setDoc(doc(db, "users", uid), {
                 chatMeta: {
                     [currentChatId]: {
                         time: Date.now(),
                         text: `You were invited to join ${group.name}`,
-                        unread: true,
-                        unreadCount: increment(1),
+                        unread: shouldNotify,
+                        unreadCount: shouldNotify ? increment(1) : 0,
                         isGroup: true,
                         groupId: currentChatId,
                         groupName: group.name
@@ -1613,10 +1612,98 @@ function renderLudo(data, gameId) {
     ludoPath.forEach((pos, i) => { let extraClass = ''; if (i >= 52 && i <= 56) extraClass = 'path-red'; if (i >= 57 && i <= 61) extraClass = 'path-blue'; const safeZones = [0, 8, 13, 21, 26, 34, 39, 47]; if (safeZones.includes(i)) extraClass += ' safe-zone'; if (i === 0) extraClass += ' start-red'; if (i === 26) extraClass += ' start-blue'; board.innerHTML += `<div class="ludo-cell ${extraClass}" style="left:${pos.x - 10}px; top:${pos.y - 10}px;">${safeZones.includes(i) ? '<i class="fa-solid fa-star" style="font-size:8px; opacity:0.5; color:white;"></i>' : ''}</div>`; });
     ['p1', 'p2'].forEach(player => { data.ludoTokens[player].forEach((pos, index) => { let coords = pos === -1 ? ludoBases[player][index] : ludoPath[pos]; if ((player === 'p1' && pos === 57) || (player === 'p2' && pos === 62)) return; let token = document.createElement("div"); token.className = `ludo-token token-${player === 'p1' ? 'red' : 'blue'}`; if (isMyTurn && player === myRole && data.diceValue) { token.classList.add('token-playable'); } token.style.left = `${coords.x}px`; token.style.top = `${coords.y}px`; if (isMyTurn && player === myRole && data.diceValue) { token.onclick = () => moveLudoToken(gameId, data, index, myRole); } board.appendChild(token); }); });
 }
-window.rollLudoDice = async (gameId, myRole) => { const diceBtn = document.getElementById("ludoDiceBtn"); diceBtn.classList.add("dice-rolling"); diceBtn.classList.remove("pulse"); diceBtn.disabled = true; setTimeout(async () => { const roll = Math.floor(Math.random() * 6) + 1; await updateDoc(doc(db, "games", gameId), { diceValue: roll }); const docSnap = await getDoc(doc(db, "games", gameId)); const data = docSnap.data(); let canMove = false; data.ludoTokens[myRole].forEach(pos => { if (pos === -1 && roll === 6) canMove = true; if (pos !== -1) { if (myRole === 'p1' && pos + roll <= 57) canMove = true; if (myRole === 'p2') { let absoluteProgress = pos >= 26 ? (pos - 26) : (pos + 26); if (absoluteProgress + roll <= 57) canMove = true; } } }); if (!canMove) { showToast("No Moves!", "Skipping turn..."); const nextTurn = data.player1 === auth.currentUser.uid ? data.player2 : data.player1; await updateDoc(doc(db, "games", gameId), { turn: nextTurn, diceValue: null }); } }, 500); };
+window.rollLudoDice = async (gameId, myRole) => { const diceBtn = document.getElementById("ludoDiceBtn"); diceBtn.classList.add("dice-rolling"); diceBtn.classList.remove("pulse"); diceBtn.disabled = true; setTimeout(async () => { const roll = Math.floor(Math.random() * 6) + 1; await updateDoc(doc(db, "games", gameId), { diceValue: roll }); const docSnap = await getDoc(doc(db, "games", gameId)); const data = docSnap.data(); let canMove = false; data.ludoTokens[myRole].forEach(pos => { if (pos === -1 && roll === 6) canMove = true; if (pos !== -1) { if (myRole === 'p1' && pos + roll <= 57) canMove = true; if (myRole === 'p2') { let absoluteProgress = pos >= 26 ? (pos - 26) : (pos + 26); if (absoluteProgress + roll <= 57) canMove = true; } } }); if (!canMove) { setTimeout(async () => { const nextTurn = data.player1 === auth.currentUser.uid ? data.player2 : data.player1; await updateDoc(doc(db, "games", gameId), { turn: nextTurn, diceValue: null }); }, 1000); } }, 500); };
 window.moveLudoToken = async (gameId, data, tokenIndex, role) => { let tokens = { ...data.ludoTokens }; let roll = data.diceValue; let currPos = tokens[role][tokenIndex]; let newPos = currPos; if (currPos === -1) { if (roll !== 6) return; newPos = role === 'p1' ? 0 : 26; } else { if (role === 'p1') { newPos = currPos + roll; if (newPos > 51 && currPos <= 51) newPos = 51 + (newPos - 51); if (newPos > 57) return; } else { newPos = currPos + roll; if (currPos <= 24 && newPos >= 25) { newPos = 56 + (newPos - 24); } else if (newPos > 51 && currPos > 24 && currPos <= 51) { newPos = newPos - 52; } if (newPos > 62) return; } } tokens[role][tokenIndex] = newPos; const safeZones = [0, 8, 13, 21, 26, 34, 39, 47]; let hasKilled = false; let oppRole = role === 'p1' ? 'p2' : 'p1'; if (!safeZones.includes(newPos) && newPos <= 51) { tokens[oppRole].forEach((oppPos, idx) => { if (oppPos === newPos) { tokens[oppRole][idx] = -1; hasKilled = true; } }); } let hasWon = false; if (role === 'p1' && tokens.p1.every(p => p === 57)) hasWon = true; if (role === 'p2' && tokens.p2.every(p => p === 62)) hasWon = true; let nextTurn = data.turn; let nextDice = null; if (roll !== 6 && !hasKilled && !hasWon) { nextTurn = data.player1 === auth.currentUser.uid ? data.player2 : data.player1; } await updateDoc(doc(db, "games", gameId), { ludoTokens: tokens, turn: nextTurn, diceValue: nextDice, winner: hasWon ? auth.currentUser.uid : null }); };
 window.resetLudo = async (gameId) => { const docSnap = await getDoc(doc(db, "games", gameId)); await updateDoc(doc(db, "games", gameId), { ludoTokens: { p1: [-1, -1, -1, -1], p2: [-1, -1, -1, -1] }, winner: null, turn: docSnap.data().player1, diceValue: null }); };
-window.startSinglePlayer = (gameType) => { singlePlayerMode = true; currentGameId = null; if (window.innerWidth <= 992) sidebar.style.display = "none"; activeGameArea.style.display = "flex"; if (gameType === 'tictactoe') { spTttReset(); } else if (gameType === 'rps') { renderSinglePlayerRPS(); } else if (gameType === 'jetfighter' || gameType === 'carracing' || gameType === 'flappybird') { renderSinglePlayerAction(gameType); } };
+window.startSinglePlayer = (gameType) => { singlePlayerMode = true; currentGameId = null; if (window.innerWidth <= 992) sidebar.style.display = "none"; activeGameArea.style.display = "flex"; if (gameType === 'tictactoe') { spTttReset(); } else if (gameType === 'rps') { renderSinglePlayerRPS(); } else if (gameType === 'jetfighter' || gameType === 'carracing' || gameType === 'flappybird') { renderSinglePlayerAction(gameType); } else if (gameType === 'ludo') { spLudoReset(); } };
+
+let spLudoTokens = { p1: [-1, -1, -1, -1], p2: [-1, -1, -1, -1] }; let spLudoTurn = 'p1'; let spLudoDice = null; let spLudoActive = true; let spLudoWinner = null; let isComputerThinking = false;
+function getSpLudoProgress(player, pos) { if (pos === -1) return -1; if (player === 'p1') { if (pos >= 52) return 51 + (pos - 51); return pos; } else { if (pos >= 57) return 51 + (pos - 56); return (pos - 26 + 52) % 52; } }
+function isSpLudoMoveValid(player, tokenIndex, dice) { const pos = spLudoTokens[player][tokenIndex]; const winPos = player === 'p1' ? 57 : 62; if (pos === winPos) return false; if (pos === -1) return dice === 6; const progress = getSpLudoProgress(player, pos); return progress + dice <= 57; }
+window.spLudoReset = () => { spLudoTokens = { p1: [-1, -1, -1, -1], p2: [-1, -1, -1, -1] }; spLudoTurn = 'p1'; spLudoDice = null; spLudoActive = true; spLudoWinner = null; isComputerThinking = false; renderSinglePlayerLudo(); };
+function renderSinglePlayerLudo() {
+    document.getElementById("activeGameTitle").innerText = "Ludo Arena (Solo)"; const isMyTurn = spLudoTurn === 'p1'; const diceIcons = ['🎲', '⚀', '⚁', '⚂', '⚃', '⚄', '⚅']; let currentDice = spLudoDice ? diceIcons[spLudoDice] : '🎲';
+    let statusText = spLudoWinner ? (spLudoWinner === 'p1' ? "🎉 You Won!" : "😞 Computer Won!") : (isMyTurn ? "Your Turn" : "Computer's Turn...");
+    let html = `<div class="ludo-header-info"><div class="ludo-player-badge red-badge ${isMyTurn && !spLudoWinner ? 'active' : ''}">You</div><div class="ludo-vs">VS</div><div class="ludo-player-badge blue-badge ${!isMyTurn && !spLudoWinner ? 'active' : ''}">Computer</div></div><div class="game-turn-indicator" style="color: ${isMyTurn && !spLudoWinner ? '#ef4444' : 'white'}; font-weight:bold; margin-top: 10px;">${statusText}</div><div class="ludo-container"><div class="ludo-board-wrapper" id="ludoBoard"></div><div class="ludo-controls"><button id="ludoDiceBtn" class="dice-btn ${!spLudoDice && isMyTurn ? 'pulse' : ''}" ${!isMyTurn || spLudoWinner || isComputerThinking ? 'disabled' : ''} onclick="spLudoRollDice()">${currentDice}</button></div>${spLudoWinner ? `<button class="primary-btn glow-btn" style="max-width:200px;" onclick="spLudoReset()">Play Again</button>` : ''}</div>`;
+    gameUIContainer.innerHTML = html; const board = document.getElementById("ludoBoard"); board.innerHTML += `<div class="ludo-base red-base"><div class="base-inner"></div></div><div class="ludo-base blue-base"><div class="base-inner"></div></div>`;
+    ludoPath.forEach((pos, i) => { let extraClass = ''; if (i >= 52 && i < 57) extraClass = 'path-red'; if (i >= 57 && i < 62) extraClass = 'path-blue'; const safeZones = [0, 8, 13, 21, 26, 34, 39, 47]; if (safeZones.includes(i)) extraClass += ' safe-zone'; if (i === 0) extraClass += ' start-red'; if (i === 26) extraClass += ' start-blue'; board.innerHTML += `<div class="ludo-cell ${extraClass}" style="left:${pos.x - 10}px; top:${pos.y - 10}px;">${safeZones.includes(i) ? '<i class="fa-solid fa-star" style="font-size:8px; opacity:0.5; color:white;"></i>' : ''}</div>`; });
+    ['p1', 'p2'].forEach(player => {
+        spLudoTokens[player].forEach((pos, index) => {
+            const winPos = player === 'p1' ? 57 : 62; if (pos === winPos) return;
+            let coords = pos === -1 ? ludoBases[player][index] : ludoPath[pos]; let token = document.createElement("div"); token.className = `ludo-token token-${player === 'p1' ? 'red' : 'blue'}`;
+            if (isMyTurn && player === 'p1' && spLudoDice && !spLudoWinner && isSpLudoMoveValid('p1', index, spLudoDice)) { token.classList.add('token-playable'); token.onclick = () => spLudoMoveToken(index); }
+            token.style.left = `${coords.x}px`; token.style.top = `${coords.y}px`; board.appendChild(token);
+        });
+    });
+}
+window.spLudoRollDice = () => {
+    if (spLudoTurn !== 'p1' || spLudoDice) return; const diceBtn = document.getElementById("ludoDiceBtn"); diceBtn.classList.add("dice-rolling"); diceBtn.classList.remove("pulse"); diceBtn.disabled = true;
+    setTimeout(() => {
+        const roll = Math.floor(Math.random() * 6) + 1; spLudoDice = roll; let canMove = false;
+        for (let i = 0; i < 4; i++) { if (isSpLudoMoveValid('p1', i, spLudoDice)) { canMove = true; break; } }
+            renderSinglePlayerLudo();
+            if (!canMove) { setTimeout(() => { spLudoTurn = 'p2'; spLudoDice = null; renderSinglePlayerLudo(); setTimeout(triggerComputerLudoTurn, 1000); }, 1000); }
+    }, 500);
+};
+window.spLudoMoveToken = (tokenIndex) => {
+    if (spLudoTurn !== 'p1' || !spLudoDice || !isSpLudoMoveValid('p1', tokenIndex, spLudoDice)) return;
+    let roll = spLudoDice; let currPos = spLudoTokens.p1[tokenIndex]; let newPos;
+    if (currPos === -1) { newPos = 0; } else { let progress = getSpLudoProgress('p1', currPos); let newProgress = progress + roll; if (newProgress === 57) newPos = 57; else if (newProgress > 51) newPos = 52 + (newProgress - 52); else newPos = newProgress; }
+    spLudoTokens.p1[tokenIndex] = newPos;
+    const safeZones = [0, 8, 13, 21, 26, 34, 39, 47]; let hasKilled = false;
+        if (!safeZones.includes(newPos) && newPos <= 51) { for (let i = 0; i < 4; i++) { if (spLudoTokens.p2[i] === newPos) { spLudoTokens.p2[i] = -1; hasKilled = true; break; } } }
+    if (spLudoTokens.p1.every(p => p === 57)) { spLudoWinner = 'p1'; spLudoActive = false; }
+    if (roll !== 6 && !hasKilled && !spLudoWinner) { spLudoTurn = 'p2'; }
+    spLudoDice = null; renderSinglePlayerLudo();
+    if (spLudoTurn === 'p2' && spLudoActive) { setTimeout(triggerComputerLudoTurn, 1000); }
+};
+function triggerComputerLudoTurn() {
+    if (spLudoTurn !== 'p2' || !spLudoActive) return; isComputerThinking = true; renderSinglePlayerLudo();
+    setTimeout(() => {
+        const roll = Math.floor(Math.random() * 6) + 1; spLudoDice = roll; const move = getComputerLudoMove(roll);
+            renderSinglePlayerLudo();
+            setTimeout(() => {
+                if (move.tokenIndex === -1) { spLudoTurn = 'p1'; spLudoDice = null; isComputerThinking = false; renderSinglePlayerLudo(); return; }
+                let currPos = spLudoTokens.p2[move.tokenIndex]; let newPos;
+                if (currPos === -1) { newPos = 26; } else { let progress = getSpLudoProgress('p2', currPos); let newProgress = progress + roll; if (newProgress === 57) newPos = 62; else if (newProgress > 51) newPos = 57 + (newProgress - 52); else newPos = (26 + newProgress) % 52; }
+                spLudoTokens.p2[move.tokenIndex] = newPos;
+                const safeZones = [0, 8, 13, 21, 26, 34, 39, 47]; let hasKilled = false;
+                if (!safeZones.includes(newPos) && newPos <= 51) { for (let i = 0; i < 4; i++) { if (spLudoTokens.p1[i] === newPos) { spLudoTokens.p1[i] = -1; hasKilled = true; break; } } }
+                if (spLudoTokens.p2.every(p => p === 62)) { spLudoWinner = 'p2'; spLudoActive = false; }
+                if (roll !== 6 && !hasKilled && !spLudoWinner) { spLudoTurn = 'p1'; }
+                spLudoDice = null; isComputerThinking = false; renderSinglePlayerLudo();
+                if (spLudoTurn === 'p2' && spLudoActive) { setTimeout(triggerComputerLudoTurn, 1000); }
+            }, 1000);
+        }, 1000);
+}
+function getComputerLudoMove(dice) {
+    let moves = [];
+    for (let i = 0; i < 4; i++) {
+        if (isSpLudoMoveValid('p2', i, dice)) {
+            let score = 0; const currPos = spLudoTokens.p2[i]; let newPos;
+            if (currPos === -1) {
+                newPos = 26;
+            } else {
+                const progress = getSpLudoProgress('p2', currPos);
+                const newProgress = progress + dice;
+                if (newProgress === 57) newPos = 62;
+                else if (newProgress > 51) newPos = 57 + (newProgress - 52);
+                else newPos = (26 + newProgress) % 52;
+            }
+            if (newPos === 62) score += 1000;
+            const safeZones = [0, 8, 13, 21, 26, 34, 39, 47];
+            if (!safeZones.includes(newPos) && newPos <= 51 && spLudoTokens.p1.includes(newPos)) { score += 500; }
+            if (currPos === -1 && dice === 6) score += 200;
+            if (safeZones.includes(newPos) && !safeZones.includes(currPos)) score += 50;
+            score += getSpLudoProgress('p2', newPos);
+            moves.push({ tokenIndex: i, score: score });
+        }
+    }
+    if (moves.length === 0) return { tokenIndex: -1, score: 0 };
+    moves.sort((a, b) => b.score - a.score);
+    return moves[0];
+}
+
 let spTttBoard = ["","","","","","","","",""]; let spTttActive = true;
 window.renderSinglePlayerTTT = () => { document.getElementById("activeGameTitle").innerText = "Tic Tac Toe (Solo)"; let html = `<div class="game-turn-indicator" style="margin-bottom:10px;">You vs Computer</div><select id="spDifficulty" class="difficulty-select" onchange="changeSpDifficulty(this.value)"><option value="easy" ${currentSpDifficulty==='easy'?'selected':''}>Difficulty: Easy</option><option value="medium" ${currentSpDifficulty==='medium'?'selected':''}>Difficulty: Medium</option><option value="hard" ${currentSpDifficulty==='hard'?'selected':''}>Difficulty: Hard</option></select><div class="ttt-board">`; spTttBoard.forEach((cell, i) => { const cellClass = cell === 'X' ? 'x' : (cell === 'O' ? 'o' : ''); html += `<div class="ttt-cell ${cellClass}" onclick="spTttMove(${i})">${cell}</div>`; }); html += `</div>`; if(!spTttActive) html += `<button class="primary-btn glow-btn" style="max-width:200px; margin-top:20px;" onclick="spTttReset()">Play Again</button>`; gameUIContainer.innerHTML = html; };
 function getBotMoveTTT(board, difficulty) { let empty = board.map((c, i) => c === "" ? i : null).filter(c => c !== null); if (empty.length === 0) return -1; if (difficulty === 'easy') return empty[Math.floor(Math.random() * empty.length)]; const checkWin = (player) => { const lines = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]]; for(let line of lines) { const [a,b,c] = line; if(board[a]===player && board[b]===player && board[c]==="") return c; if(board[a]===player && board[c]===player && board[b]==="") return b; if(board[b]===player && board[c]===player && board[a]==="") return a; } return null; }; let winMove = checkWin("O"); let blockMove = checkWin("X"); if (difficulty === 'hard') { if (winMove !== null) return winMove; if (blockMove !== null) return blockMove; if (board[4] === "") return 4; const corners = [0, 2, 6, 8].filter(c => board[c] === ""); if (corners.length > 0) return corners[Math.floor(Math.random() * corners.length)]; return empty[Math.floor(Math.random() * empty.length)]; } if (Math.random() > 0.4) { if (winMove !== null) return winMove; if (blockMove !== null) return blockMove; } return empty[Math.floor(Math.random() * empty.length)]; }
@@ -2185,13 +2272,20 @@ window.approveMember = async (groupId, memberId) => {
         }); 
         const group = allGroups.find(g => g.id === groupId);
         if (group) {
+            const u = allUsers.find(x => x.id === memberId);
+            const pref = u ? (u.privacyGroupInvite || 'everyone') : 'everyone';
+            const isFriend = u && !!(u.chatMeta && u.chatMeta[auth.currentUser.uid]);
+            let shouldNotify = true;
+            if (pref === 'none') shouldNotify = false;
+            if (pref === 'friends' && !isFriend) shouldNotify = false;
+
             await setDoc(doc(db, "users", memberId), {
                 chatMeta: {
                     [groupId]: {
                         time: Date.now(),
                         text: `You were invited to join ${group.name}`,
-                        unread: true,
-                        unreadCount: increment(1),
+                        unread: shouldNotify,
+                        unreadCount: shouldNotify ? increment(1) : 0,
                         isGroup: true,
                         groupId: groupId,
                         groupName: group.name
