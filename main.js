@@ -1,7 +1,7 @@
 import { db, auth, messaging } from './firebase.js';
 import { CryptoE2EE } from './crypto.js';
 import { getToken } from "https://www.gstatic.com/firebasejs/10.0.0/firebase-messaging.js";
-import { collection, addDoc, onSnapshot, doc, setDoc, query, orderBy, getDoc, getDocs, deleteDoc, updateDoc, arrayUnion, arrayRemove, writeBatch, limit, where, increment } from "https://www.gstatic.com/firebasejs/10.0.0/firebase-firestore.js";
+import { collection, addDoc, onSnapshot, doc, setDoc, query, orderBy, getDoc, getDocs, deleteDoc, updateDoc, arrayUnion, arrayRemove, writeBatch, limit, where, increment, deleteField } from "https://www.gstatic.com/firebasejs/10.0.0/firebase-firestore.js";
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.0.0/firebase-auth.js";
 // Safe History API to prevent crashes during local mobile testing
 const originalPushState = history.pushState;
@@ -18,6 +18,11 @@ history.pushState = function(state, title, url) {
 if (window.location.search.includes('updated=')) {
     const cleanUrl = window.location.href.split('?')[0];
     window.history.replaceState(null, '', cleanUrl);
+    setTimeout(() => {
+        if (window.showToast) {
+            window.showToast("🎉 Update applied", "You are on the latest version.");
+        }
+    }, 800);
 }
 const CLOUD_NAME = "ddkov7oka"; const UPLOAD_PRESET = "chitchat_preset"; 
 
@@ -36,6 +41,194 @@ window.changeSpDifficulty = (val) => { currentSpDifficulty = val; };
 
 let localStream = null; let remoteStream = null; let peerConnection = null;
 const servers = { iceServers: [{ urls: ['stun:stun1.l.google.com:19302', 'stun:stun2.l.google.com:19302'] }] };
+
+// =========================================================
+// CUSTOM UI MODALS (Replace prompts/confirms)
+// =========================================================
+window.customConfirm = (title, message, confirmText = "Confirm", confirmColor = "#ef4444") => {
+    return new Promise((resolve) => {
+        const modal = document.getElementById("customConfirmModal");
+        document.getElementById("confirmModalTitle").innerText = title;
+        document.getElementById("confirmModalMessage").innerText = message;
+        const confirmBtn = document.getElementById("confirmActionBtn");
+        confirmBtn.innerText = confirmText;
+        confirmBtn.style.background = confirmColor;
+        
+        const cleanup = () => {
+            document.getElementById("confirmCancelBtn").removeEventListener("click", onCancel);
+            confirmBtn.removeEventListener("click", onConfirm);
+            modal.style.display = "none";
+        };
+        
+        const onConfirm = () => { cleanup(); resolve(true); };
+        const onCancel = () => { cleanup(); resolve(false); };
+        
+        document.getElementById("confirmCancelBtn").addEventListener("click", onCancel);
+        confirmBtn.addEventListener("click", onConfirm);
+        
+        modal.style.display = "flex";
+    });
+};
+
+window.customPrompt = (title, defaultValue = "", placeholder = "Enter value...") => {
+    return new Promise((resolve) => {
+        const modal = document.getElementById("customPromptModal");
+        document.getElementById("promptModalTitle").innerText = title;
+        const input = document.getElementById("promptModalInput");
+        input.value = defaultValue;
+        input.placeholder = placeholder;
+        
+        const cleanup = () => {
+            document.getElementById("promptCancelBtn").removeEventListener("click", onCancel);
+            document.getElementById("promptActionBtn").removeEventListener("click", onConfirm);
+            modal.style.display = "none";
+        };
+        
+        const onConfirm = () => { cleanup(); resolve(input.value); };
+        const onCancel = () => { cleanup(); resolve(null); };
+        
+        document.getElementById("promptCancelBtn").addEventListener("click", onCancel);
+        document.getElementById("promptActionBtn").addEventListener("click", onConfirm);
+        
+        modal.style.display = "flex";
+        setTimeout(() => input.focus(), 100);
+    });
+};
+
+window.openSelectUsersModal = (mode, existingMembers = [], pendingArr = []) => {
+    return new Promise((resolve) => {
+        const modal = document.getElementById("selectUsersModal");
+        const titleEl = document.getElementById("selectUsersTitle");
+        const groupNameContainer = document.getElementById("createGroupNameContainer");
+        const groupNameInput = document.getElementById("newGroupNameInput");
+        const searchInput = document.getElementById("selectUsersSearch");
+        const listEl = document.getElementById("selectableUsersList");
+        const chipsEl = document.getElementById("selectedUsersChips");
+        const confirmBtn = document.getElementById("confirmSelectUsersBtn");
+        const closeBtn = document.getElementById("closeSelectUsersBtn");
+
+        let selectedUids = new Set();
+        let selectableUsers = [];
+
+        if (mode === 'create_group') {
+            titleEl.innerText = "Create New Group";
+            groupNameContainer.style.display = "block";
+            groupNameInput.value = "";
+            selectableUsers = allUsers.filter(u => u.id !== auth.currentUser.uid);
+        } else if (mode === 'add_members') {
+            titleEl.innerText = "Add Members";
+            groupNameContainer.style.display = "none";
+            selectableUsers = allUsers.filter(u => u.id !== auth.currentUser.uid && !existingMembers.includes(u.id) && !pendingArr.includes(u.id));
+            if (selectableUsers.length === 0) {
+                showToast("Info", "All users are already in the group or pending.");
+                resolve(null);
+                return;
+            }
+        }
+        
+        const updateConfirmText = () => {
+            confirmBtn.innerHTML = `${mode === 'create_group' ? 'Create Group' : 'Add Selected'} (<span id="selectedCount">${selectedUids.size}</span>)`;
+        };
+        updateConfirmText();
+
+        const renderChips = () => {
+            chipsEl.innerHTML = "";
+            selectedUids.forEach(uid => {
+                const u = allUsers.find(x => x.id === uid);
+                if (!u) return;
+                const chip = document.createElement("div");
+                chip.className = "selected-chip";
+                chip.innerHTML = `<img src="${generateAvatar(u, u.fullName || u.username)}"><span>${u.fullName || u.username}</span><i class="fa-solid fa-xmark remove-chip"></i>`;
+                chip.querySelector('.remove-chip').onclick = (e) => {
+                    e.stopPropagation();
+                    selectedUids.delete(uid);
+                    renderList(searchInput.value);
+                    renderChips();
+                };
+                chipsEl.appendChild(chip);
+            });
+            updateConfirmText();
+        };
+
+        const renderList = (filterText = "") => {
+            listEl.innerHTML = "";
+            const filtered = selectableUsers.filter(u => (u.fullName || u.username).toLowerCase().includes(filterText.toLowerCase()));
+            if (filtered.length === 0) {
+                listEl.innerHTML = `<div style="padding: 10px; color: var(--text-muted); text-align: center; font-size: 13px;">No users found.</div>`;
+                return;
+            }
+            filtered.forEach(u => {
+                const isSelected = selectedUids.has(u.id);
+                const row = document.createElement("div");
+                row.className = `user-select-row ${isSelected ? 'selected' : ''}`;
+                row.innerHTML = `<img src="${generateAvatar(u, u.fullName || u.username)}" class="avatar"><div class="name-col"><span class="name">${u.fullName || u.username}</span><span class="handle">@${u.username}</span></div><div class="custom-checkbox"></div>`;
+                row.onclick = () => {
+                    if (selectedUids.has(u.id)) selectedUids.delete(u.id);
+                    else selectedUids.add(u.id);
+                    renderList(searchInput.value);
+                    renderChips();
+                };
+                listEl.appendChild(row);
+            });
+        };
+
+        searchInput.oninput = (e) => renderList(e.target.value);
+
+        const cleanup = () => {
+            closeBtn.onclick = null;
+            confirmBtn.onclick = null;
+            modal.style.display = "none";
+        };
+
+        closeBtn.onclick = () => { cleanup(); resolve(null); };
+
+        confirmBtn.onclick = () => {
+            let validMembers = [];
+            let blockedCount = 0;
+            
+            for (let uid of selectedUids) {
+                const u = allUsers.find(x => x.id === uid);
+                if (!u) continue;
+                const pref = u.privacyGroupInvite || 'everyone';
+                const isFriend = !!(u.chatMeta && u.chatMeta[auth.currentUser.uid]);
+                
+                if (pref === 'none') {
+                    showToast("Blocked", `${u.fullName || u.username} does not accept group invites.`);
+                    blockedCount++;
+                } else if (pref === 'friends' && !isFriend) {
+                    showToast("Blocked", `${u.fullName || u.username} only accepts invites from friends.`);
+                    blockedCount++;
+                } else {
+                    validMembers.push(uid);
+                }
+            }
+
+            if (mode === 'create_group') {
+                const gName = groupNameInput.value.trim();
+                if (!gName) { showToast("Error", "Group Name is required."); return; }
+                if (validMembers.length === 0) { 
+                    if (blockedCount === 0) showToast("Error", "Select at least one valid member."); 
+                    return; 
+                }
+                cleanup();
+                resolve({ groupName: gName, members: validMembers });
+            } else {
+                if (validMembers.length === 0) { 
+                    if (blockedCount === 0) showToast("Error", "Select at least one valid member."); 
+                    return; 
+                }
+                cleanup();
+                resolve({ members: validMembers });
+            }
+        };
+
+        selectedUids.clear();
+        searchInput.value = "";
+        renderChips();
+        renderList();
+        modal.style.display = "flex";
+    });
+};
 
 const authScreen = document.getElementById("authScreen"); const appScreen = document.getElementById("appScreen");
 const tabLogin = document.getElementById("tabLogin"); const tabSignup = document.getElementById("tabSignup");
@@ -627,6 +820,34 @@ function renderSidebar() {
   usersList.innerHTML = "";
   groupsList.innerHTML = "";
 
+  let myInvites = [...allGroups].filter(g => g.invitedMembers && g.invitedMembers.includes(auth.currentUser.uid));
+  
+  myInvites.forEach(group => {
+      const inviteCard = document.createElement("div");
+      inviteCard.className = "user-item";
+      inviteCard.style.background = "rgba(245, 158, 11, 0.1)"; 
+      inviteCard.style.border = "1px solid rgba(245, 158, 11, 0.3)";
+      inviteCard.style.flexDirection = "column";
+      inviteCard.style.alignItems = "stretch";
+      
+      const avatarUrl = group.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(group.name)}&background=8b5cf6&color=fff`;
+      
+      inviteCard.innerHTML = `
+        <div style="display:flex; align-items:center; gap: 12px; margin-bottom: 10px;">
+            <div class="avatar-wrapper"><img src="${avatarUrl}" class="avatar"></div>
+            <div class="user-meta" style="flex:1;">
+                <span class="name" style="color:var(--text-main); font-weight: 600;">${group.name}</span>
+                <span class="handle" style="color:var(--text-muted); font-size:11px;">Invited to join</span>
+            </div>
+        </div>
+        <div style="display:flex; gap: 8px;">
+            <button class="primary-btn" style="flex:1; padding: 6px; font-size: 12px; background: #10b981;" onclick="acceptGroupInvite('${group.id}')">Accept</button>
+            <button class="primary-btn" style="flex:1; padding: 6px; font-size: 12px; background: rgba(255,255,255,0.1); color: var(--text-main);" onclick="rejectGroupInvite('${group.id}')">Reject</button>
+        </div>
+      `;
+      groupsList.appendChild(inviteCard);
+  });
+
   let sortedGroups = [...allGroups].filter(g => g.members.includes(auth.currentUser.uid));
   sortedGroups.sort((a, b) => {
     let timeA = myUserData?.chatMeta?.[a.id]?.time || 0;
@@ -722,18 +943,31 @@ function renderSidebar() {
 
 const createGroupBtn = document.getElementById("createGroupBtn");
 if(createGroupBtn) {
-  createGroupBtn.addEventListener("click", () => {
-    const groupName = prompt("Enter a name for the new Group:"); if (!groupName) return;
-    let promptText = "Select members by typing numbers:\n\n"; const selectableUsers = allUsers.filter(u => u.id !== auth.currentUser.uid);
-    selectableUsers.forEach((u, index) => { promptText += `${index + 1}. ${u.fullName || u.username}\n`; });
-    const selections = prompt(promptText); if (!selections) return;
-    let members = [auth.currentUser.uid]; selections.split(',').forEach(numText => { const idx = parseInt(numText.trim()) - 1; if (selectableUsers[idx]) members.push(selectableUsers[idx].id); });
-    if (members.length > 1) { 
-        addDoc(collection(db, "groups"), { name: groupName, members: members, createdAt: Date.now(), createdBy: auth.currentUser.uid }).then(docRef => {
-            showToast("Group Created", `${groupName} was created successfully.`);
-            openGroupChat(docRef.id, groupName, members.length);
-        });
-    } else { alert("At least one other person required."); }
+  createGroupBtn.addEventListener("click", async () => {
+      const result = await openSelectUsersModal('create_group');
+      if (!result) return;
+      const { groupName, members } = result;
+      let groupMembers = [auth.currentUser.uid];
+      let invitedMembers = members;
+      addDoc(collection(db, "groups"), { name: groupName, members: groupMembers, invitedMembers: invitedMembers, createdAt: Date.now(), createdBy: auth.currentUser.uid }).then(docRef => {
+          showToast("Group Created", `${groupName} was created successfully. Invites sent.`);
+          openGroupChat(docRef.id, groupName, groupMembers.length);
+          invitedMembers.forEach(uid => {
+              setDoc(doc(db, "users", uid), {
+                  chatMeta: {
+                      [docRef.id]: {
+                          time: Date.now(),
+                          text: `You were invited to join ${groupName}`,
+                          unread: true,
+                          unreadCount: increment(1),
+                          isGroup: true,
+                          groupId: docRef.id,
+                          groupName: groupName
+                      }
+                  }
+              }, { merge: true });
+          });
+      });
   });
 }
 
@@ -1085,9 +1319,9 @@ window.openMessageModal = (msgId, encodedText, encodedName, isMe, context = 'cha
 };
 window.closeMsgOptions = () => { document.getElementById("msgOptionsModal").style.display = "none"; };
 window.triggerReply = () => { closeMsgOptions(); replyingToMsg = { id: activeMsgId, text: activeMsgText, name: activeMsgSender, context: activeMsgContext }; document.getElementById("replyPreviewName").innerText = `Replying to ${activeMsgSender}`; document.getElementById("replyPreviewText").innerText = activeMsgText; const previewContainer = document.getElementById("replyPreviewContainer"); previewContainer.style.display = "flex"; if (activeMsgContext === 'global') { document.getElementById("exploreLounge").insertBefore(previewContainer, document.querySelector("#exploreLounge .chat-input-wrapper")); globalMsgInput.focus(); } else { document.getElementById("activeChatState").insertBefore(previewContainer, document.querySelector("#activeChatState .chat-input-wrapper")); msgInput.focus(); } };
-window.triggerEdit = async () => { closeMsgOptions(); const newText = prompt("Edit message:", activeMsgText); if (newText && newText.trim() !== "" && newText !== activeMsgText) { if (activeMsgContext === 'global') { await updateDoc(doc(db, "global_lounge", activeMsgId), { text: newText.trim(), isEdited: true }); } else { const eText = activeSharedKey ? await CryptoE2EE.encrypt(newText.trim(), activeSharedKey) : newText.trim(); await updateDoc(doc(db, "chats", currentChatId, "messages", activeMsgId), { text: eText, isEdited: true }); } } };
-window.triggerDeleteEveryone = async () => { closeMsgOptions(); if (confirm("Delete this message for everyone?")) { if (activeMsgContext === 'global') { await updateDoc(doc(db, "global_lounge", activeMsgId), { isDeleted: true, text: "" }); } else { await updateDoc(doc(db, "chats", currentChatId, "messages", activeMsgId), { isDeleted: true, text: "" }); } } };
-window.triggerDeleteMe = async () => { closeMsgOptions(); if (confirm("Delete this message for yourself?")) { if (activeMsgContext === 'global') { await updateDoc(doc(db, "global_lounge", activeMsgId), { deletedFor: arrayUnion(auth.currentUser.uid) }); } else { await updateDoc(doc(db, "chats", currentChatId, "messages", activeMsgId), { deletedFor: arrayUnion(auth.currentUser.uid) }); } } };
+window.triggerEdit = async () => { closeMsgOptions(); const newText = await customPrompt("Edit message", activeMsgText, "Update your message..."); if (newText !== null && newText.trim() !== "" && newText !== activeMsgText) { if (activeMsgContext === 'global') { await updateDoc(doc(db, "global_lounge", activeMsgId), { text: newText.trim(), isEdited: true }); } else { const eText = activeSharedKey ? await CryptoE2EE.encrypt(newText.trim(), activeSharedKey) : newText.trim(); await updateDoc(doc(db, "chats", currentChatId, "messages", activeMsgId), { text: eText, isEdited: true }); } } };
+window.triggerDeleteEveryone = async () => { closeMsgOptions(); const isConfirmed = await customConfirm("Delete for Everyone", "Delete this message for everyone? It cannot be restored.", "Delete", "#ef4444"); if (isConfirmed) { if (activeMsgContext === 'global') { await updateDoc(doc(db, "global_lounge", activeMsgId), { isDeleted: true, text: "" }); } else { await updateDoc(doc(db, "chats", currentChatId, "messages", activeMsgId), { isDeleted: true, text: "" }); } } };
+window.triggerDeleteMe = async () => { closeMsgOptions(); const isConfirmed = await customConfirm("Delete for Me", "Delete this message for yourself?", "Delete", "#f59e0b"); if (isConfirmed) { if (activeMsgContext === 'global') { await updateDoc(doc(db, "global_lounge", activeMsgId), { deletedFor: arrayUnion(auth.currentUser.uid) }); } else { await updateDoc(doc(db, "chats", currentChatId, "messages", activeMsgId), { deletedFor: arrayUnion(auth.currentUser.uid) }); } } };
 document.getElementById("cancelReplyBtn").addEventListener("click", () => { replyingToMsg = null; const previewContainer = document.getElementById("replyPreviewContainer"); previewContainer.style.display = "none"; document.getElementById("activeChatState").insertBefore(previewContainer, document.querySelector("#activeChatState .chat-input-wrapper")); });
 window.sendChatRequest = async () => { if (!currentChatId || !targetUserUid) return; try { await setDoc(doc(db, "chats", currentChatId), { status: 'pending', initiator: auth.currentUser.uid, createdAt: Date.now() }); await setDoc(doc(db, "users", targetUserUid), { chatMeta: { [auth.currentUser.uid]: { time: Date.now(), text: "👋 Connection Request", unread: true } } }, { merge: true }); showToast("Request Sent", "Waiting for approval."); } catch (error) { showToast("Error", "Failed to send request."); } };
 window.acceptChatRequest = async () => { if (!currentChatId) return; try { await updateDoc(doc(db, "chats", currentChatId), { status: 'accepted' }); showToast("Connected", "You can now chat!"); } catch (error) { showToast("Error", "Failed to accept request."); } };
@@ -1234,7 +1468,32 @@ document.querySelector(".chat-header").addEventListener("click", (e) => {
                 membersListDiv.innerHTML += `<div style="font-size: 13px; padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,0.05); display: flex; justify-content: space-between; align-items: center; width: 100%;"><div style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; padding-right: 10px;">${name}${isMe}${adminBadge}</div><div style="flex-shrink: 0;">${removeBtn}</div></div>`;   
             });
             const deleteBtn = document.getElementById("deleteGroupBtn"); const addMemberBtn = document.getElementById("addGroupMemberBtn"); const pendingReqDiv = document.getElementById("groupPendingRequests");
+            const leaveBtn = document.getElementById("leaveGroupBtn");
             if (addMemberBtn) { addMemberBtn.style.display = "flex"; addMemberBtn.innerHTML = isAdmin ? '<i class="fa-solid fa-user-plus"></i> Add New Member' : '<i class="fa-solid fa-user-plus"></i> Request to Add'; }
+            if (leaveBtn) {
+                leaveBtn.style.display = "flex";
+                leaveBtn.onclick = async () => {
+                    const isConfirmed = await customConfirm("Leave Group", `Are you sure you want to leave ${group.name}? You will lose access to all messages.`, "Leave", "#f59e0b");
+                    if (isConfirmed) {
+                        leaveBtn.innerHTML = "<i class='fa-solid fa-spinner fa-spin'></i> Leaving...";
+                        if (isAdmin) {
+                            const otherMembers = group.members.filter(m => m !== auth.currentUser.uid);
+                            if (otherMembers.length > 0) {
+                                await updateDoc(doc(db, "groups", currentChatId), { createdBy: otherMembers[0], members: arrayRemove(auth.currentUser.uid) });
+                                showToast("Left Group", "You have left the group and ownership was transferred.");
+                            } else {
+                                const msgsSnap = await getDocs(query(collection(db, "chats", currentChatId, "messages"))); const batch = writeBatch(db); msgsSnap.docs.forEach(msgDoc => batch.delete(msgDoc.ref)); await batch.commit(); await deleteDoc(doc(db, "groups", currentChatId));
+                                showToast("Group Deleted", "You were the last member. Group deleted.");
+                            }
+                        } else {
+                            await updateDoc(doc(db, "groups", currentChatId), { members: arrayRemove(auth.currentUser.uid) });
+                            showToast("Left Group", "You have left the group.");
+                        }
+                        document.getElementById("groupSettingsModal").style.display = "none"; 
+                        document.getElementById("backToUsersBtn").click();
+                    }
+                };
+            }
             if (isAdmin) { 
                 deleteBtn.style.display = "flex"; 
                 if (group.pendingMembers && group.pendingMembers.length > 0) {
@@ -1244,14 +1503,47 @@ document.querySelector(".chat-header").addEventListener("click", (e) => {
                         pendingReqDiv.innerHTML += `<div style="font-size: 13px; padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,0.05); display: flex; justify-content: space-between; align-items: center;"><span>${pName}</span><div><button onclick="approveMember('${group.id}', '${pendingId}')" style="background:#10b981; border:none; color:white; padding:4px 8px; border-radius:4px; font-size:11px; cursor:pointer; margin-right:5px;">Approve</button><button onclick="rejectMember('${group.id}', '${pendingId}')" style="background:#ef4444; border:none; color:white; padding:4px 8px; border-radius:4px; font-size:11px; cursor:pointer;">Reject</button></div></div>`;
                     });
                 } else { pendingReqDiv.style.display = "none"; }
-                deleteBtn.onclick = async () => { if (confirm(`Are you sure you want to delete ${group.name}?`)) { deleteBtn.innerHTML = "<i class='fa-solid fa-spinner fa-spin'></i> Deleting..."; const msgsSnap = await getDocs(query(collection(db, "chats", currentChatId, "messages"))); const batch = writeBatch(db); msgsSnap.docs.forEach(msgDoc => batch.delete(msgDoc.ref)); await batch.commit(); await deleteDoc(doc(db, "groups", currentChatId)); document.getElementById("groupSettingsModal").style.display = "none"; document.getElementById("backToUsersBtn").click(); showToast("Group Deleted", "Group permanently wiped."); } }; 
+                deleteBtn.onclick = async () => { const isConfirmed = await customConfirm("Delete Group", `Are you sure you want to delete ${group.name}? This action cannot be undone.`, "Delete", "#ef4444"); if (isConfirmed) { deleteBtn.innerHTML = "<i class='fa-solid fa-spinner fa-spin'></i> Deleting..."; const msgsSnap = await getDocs(query(collection(db, "chats", currentChatId, "messages"))); const batch = writeBatch(db); msgsSnap.docs.forEach(msgDoc => batch.delete(msgDoc.ref)); await batch.commit(); await deleteDoc(doc(db, "groups", currentChatId)); document.getElementById("groupSettingsModal").style.display = "none"; document.getElementById("backToUsersBtn").click(); showToast("Group Deleted", "Group permanently wiped."); } }; 
             } else { deleteBtn.style.display = "none"; if (pendingReqDiv) pendingReqDiv.style.display = "none"; }
             document.getElementById("groupSettingsModal").style.display = "flex";
         }
     }
 });
-window.triggerAddGroupMember = async () => { const group = allGroups.find(g => g.id === currentChatId); if(!group) return; const isAdmin = group.createdBy === auth.currentUser.uid; const pendingArr = group.pendingMembers || []; let promptText = "Type the number of the user to add:\n\n"; const selectableUsers = allUsers.filter(u => u.id !== auth.currentUser.uid && !group.members.includes(u.id) && !pendingArr.includes(u.id)); if(selectableUsers.length === 0) { alert("All users are already in the group or pending approval!"); return; } selectableUsers.forEach((u, index) => { promptText += `${index + 1}. ${u.fullName || u.username}\n`; }); const selection = prompt(promptText); if(selection) { const idx = parseInt(selection.trim()) - 1; if(selectableUsers[idx]) { const targetUid = selectableUsers[idx].id; if (isAdmin) { await updateDoc(doc(db, "groups", currentChatId), { members: arrayUnion(targetUid) }); showToast("Member Added", `${selectableUsers[idx].fullName || selectableUsers[idx].username} was added.`); } else { await updateDoc(doc(db, "groups", currentChatId), { pendingMembers: arrayUnion(targetUid) }); showToast("Request Sent", "Admin must approve this request."); } document.getElementById("groupSettingsModal").style.display = "none"; } } };
-window.triggerRemoveMember = async (groupId, memberId) => { if(confirm("Kick this user from the group?")) { try { await updateDoc(doc(db, "groups", groupId), { members: arrayRemove(memberId) }); showToast("Member Removed", "User was kicked from the group."); document.getElementById("groupSettingsModal").style.display = "none"; } catch(e) { alert("Failed to remove member. Are you sure you are the Admin?"); } } };
+window.triggerAddGroupMember = async () => { const group = allGroups.find(g => g.id === currentChatId); if(!group) return; const isAdmin = group.createdBy === auth.currentUser.uid; const pendingArr = group.pendingMembers || []; const result = await openSelectUsersModal('add_members', group.members, pendingArr); if (!result) return; const selectedMembers = result.members; if (isAdmin) { await updateDoc(doc(db, "groups", currentChatId), { members: arrayUnion(...selectedMembers) }); showToast("Members Added", `${selectedMembers.length} member(s) added.`); } else { await updateDoc(doc(db, "groups", currentChatId), { pendingMembers: arrayUnion(...selectedMembers) }); showToast("Request Sent", "Admin must approve these requests."); } document.getElementById("groupSettingsModal").style.display = "none"; };
+window.triggerAddGroupMember = async () => { 
+    const group = allGroups.find(g => g.id === currentChatId); 
+    if(!group) return; 
+    const isAdmin = group.createdBy === auth.currentUser.uid; 
+    const pendingArr = group.pendingMembers || []; 
+    const invitedArr = group.invitedMembers || [];
+    const result = await openSelectUsersModal('add_members', group.members, [...pendingArr, ...invitedArr]); 
+    if (!result) return; 
+    const selectedMembers = result.members; 
+    if (isAdmin) { 
+        await updateDoc(doc(db, "groups", currentChatId), { invitedMembers: arrayUnion(...selectedMembers) }); 
+        showToast("Invites Sent", `Invitations sent to ${selectedMembers.length} user(s).`); 
+        selectedMembers.forEach(uid => {
+            setDoc(doc(db, "users", uid), {
+                chatMeta: {
+                    [currentChatId]: {
+                        time: Date.now(),
+                        text: `You were invited to join ${group.name}`,
+                        unread: true,
+                        unreadCount: increment(1),
+                        isGroup: true,
+                        groupId: currentChatId,
+                        groupName: group.name
+                    }
+                }
+            }, { merge: true });
+        });
+    } else { 
+        await updateDoc(doc(db, "groups", currentChatId), { pendingMembers: arrayUnion(...selectedMembers) }); 
+        showToast("Request Sent", "Admin must approve these requests."); 
+    } 
+    document.getElementById("groupSettingsModal").style.display = "none"; 
+};
+window.triggerRemoveMember = async (groupId, memberId) => { const isConfirmed = await customConfirm("Remove Member", "Are you sure you want to kick this user from the group?", "Remove", "#ef4444"); if(isConfirmed) { try { await updateDoc(doc(db, "groups", groupId), { members: arrayRemove(memberId) }); showToast("Member Removed", "User was kicked from the group."); } catch(e) { showToast("Error", "Failed to remove member."); } } };
 window.triggerGroupAvatarUpload = () => { const input = document.createElement("input"); input.type = "file"; input.accept = "image/*"; input.onchange = async (e) => { const file = e.target.files[0]; if(!file) return;if (file.size > 5000000) { 
             alert("File is too large! Please choose an image under 5MB."); 
             return; 
@@ -1346,10 +1638,10 @@ function renderActionGame(data, gameId, gameType) {
     if (isPlayingActionGame) return; 
     gameUIContainer.innerHTML = `<div class="game-turn-indicator" style="margin-bottom: 5px;">High Score Challenge!</div><div class="action-game-container"><div style="position: relative; width: 100%; max-width: 300px;"><canvas id="actionCanvas" width="300" height="400" class="action-canvas" style="margin: 0;"></canvas><div id="startOverlay" style="position: absolute; top:0; left:0; width:100%; height:100%; display:flex; justify-content:center; align-items:center; background:rgba(0,0,0,0.6); border-radius:12px; z-index:10; flex-direction:column; gap:10px;"><span style="color:white; font-size:14px;">Opponent is ready!</span><button class="primary-btn glow-btn" id="btnStartGame" style="width:auto; padding:15px 40px; font-size: 16px;">Play Now</button></div></div><div class="game-btn-row" id="gameControls" style="display:none;"><button class="game-control-btn" id="btnLeft">⬅️</button><button class="game-control-btn" id="btnRight">➡️</button></div></div>`; 
     const canvas = document.getElementById('actionCanvas'); 
-    if (canvas) { const ctx = canvas.getContext('2d'); if (gameType === 'carracing') { ctx.fillStyle = '#8b5cf6'; ctx.fillRect(135, 330, 30, 50); } else if (gameType === 'cybertanks') { ctx.fillStyle = '#ef4444'; ctx.fillRect(140, 350, 20, 20); } else { ctx.fillStyle = '#10b981'; ctx.beginPath(); ctx.moveTo(150, 350); ctx.lineTo(165, 380); ctx.lineTo(135, 380); ctx.fill(); } } 
+    if (canvas) { const ctx = canvas.getContext('2d'); if (gameType === 'carracing') { ctx.fillStyle = '#8b5cf6'; ctx.fillRect(135, 330, 30, 50); } else if (gameType === 'cybertanks') { ctx.fillStyle = '#3b82f6'; ctx.fillRect(135, 350, 30, 30); ctx.fillStyle = 'white'; ctx.fillRect(135 + 12, 340, 6, 14); } else { ctx.fillStyle = '#10b981'; ctx.beginPath(); ctx.moveTo(150, 350); ctx.lineTo(165, 380); ctx.lineTo(135, 380); ctx.fill(); } } 
     document.getElementById('btnStartGame').addEventListener('click', () => { isPlayingActionGame = true; document.getElementById('startOverlay').style.display = 'none'; document.getElementById('gameControls').style.display = 'flex'; if (gameType === 'carracing') startCarRacing(gameId, isPlayer1); else if (gameType === 'cybertanks') startCyberTanks(gameId, isPlayer1); else startJetFighter(gameId, isPlayer1); }); 
 }
-window.resetActionGame = async (gameId) => { await updateDoc(doc(db, "games", gameId), { p1Score: null, p2Score: null }); };
+window.resetActionGame = async (gameId) => { await updateDoc(doc(db, "games", gameId), { p1Score: null, p2Score: null, currentP1Score: 0, currentP2Score: 0, p1Shots: 0, p2Shots: 0 }); };
 function startFlappyBird(gameId, isPlayer1) {
     const canvas = document.getElementById('actionCanvas'); if (!canvas) return; const ctx = canvas.getContext('2d'); document.getElementById('gameControls').style.display = 'none';
     let birdY = 200; let velocity = 0; const gravity = 0.5; const jumpStrength = -7; const birdRadius = 12; let pipes = []; let frameCount = 0; let score = 0; let isGameOver = false; let isCountingDown = true;
@@ -1374,22 +1666,171 @@ function startJetFighter(gameId, isPlayer1) { const canvas = document.getElement
 function renderTicTacToe(data, gameId) { const isMyTurn = data.turn === auth.currentUser.uid; const mySymbol = data.player1 === auth.currentUser.uid ? "X" : "O"; let turnText = data.winner ? (data.winner === 'draw' ? "It's a Draw!" : (data.winner === auth.currentUser.uid ? "🎉 You Won!" : "😞 You Lost!")) : (isMyTurn ? "Your Turn" : "Opponent's Turn"); let html = `<div class="game-turn-indicator" style="color: ${isMyTurn && !data.winner ? 'var(--primary)' : 'white'}">${turnText}</div><div class="ttt-board">`; data.board.forEach((cell, index) => { const cellClass = cell === 'X' ? 'x' : (cell === 'O' ? 'o' : ''); html += `<div class="ttt-cell ${cellClass}" onclick="makeMoveTTT(${index}, '${data.board[index]}', ${isMyTurn}, '${mySymbol}')">${cell}</div>`; }); html += `</div>`; if(data.winner) html += `<button class="primary-btn glow-btn" style="max-width:200px; margin-top:20px;" onclick="resetTTT('${gameId}')">Play Again</button>`; gameUIContainer.innerHTML = html; }
 function startCyberTanks(gameId, isPlayer1) {
     const canvas = document.getElementById('actionCanvas'); if (!canvas) return; const ctx = canvas.getContext('2d');
-    let myX = 135; let myY = isPlayer1 ? 350 : 30; let friendX = 135; let friendY = isPlayer1 ? 30 : 350; let isShooting = false; let lastP2Shooting = false; 
-    let bullets = []; let p1Score = 0; let p2Score = 0; let isGameOver = false; const myColor = '#3b82f6'; const friendColor = '#ef4444'; const tankSize = 20; const keys = { ArrowLeft: false, ArrowRight: false };
-    const handleShoot = (e) => { if(e) e.preventDefault(); if(!isPlayingActionGame || isGameOver) return; if(isPlayer1 && !isShooting) { bullets.push({ x: myX + 8, y: myY - 8, dy: -6, isP1: true }); } isShooting = true; };
-    const handleKeyDown = (e) => { if(!isPlayingActionGame) return; if(e.key === 'ArrowLeft') { e.preventDefault(); keys.ArrowLeft = true; } if(e.key === 'ArrowRight') { e.preventDefault(); keys.ArrowRight = true; } if(e.key === ' ' || e.key === 'ArrowUp') handleShoot(e); };
-    const handleKeyUp = (e) => { if(e.key === 'ArrowLeft') keys.ArrowLeft = false; if(e.key === 'ArrowRight') keys.ArrowRight = false; if(e.key === ' ' || e.key === 'ArrowUp') isShooting = false; };
-    window.addEventListener('keydown', handleKeyDown); window.addEventListener('keyup', handleKeyUp);
+    
+    const isP1 = isPlayer1;
+    const tankW = 30; const tankH = 30;
+    let myX = 135; let oppX = 135;
+    let myShots = 0; let oppShots = 0; let lastOppShots = 0;
+    let bullets = []; 
+    let myScore = 0; let oppScore = 0;
+    let isGameOver = false;
+    let lastShotTime = 0;
+    
+    const keys = { Left: false, Right: false };
+    
+    const handleShoot = (e) => { 
+        if(e) e.preventDefault(); 
+        if(!isPlayingActionGame || isGameOver) return; 
+        const now = Date.now();
+        if (now - lastShotTime < 400) return; // Prevent network flooding
+        lastShotTime = now;
+        myShots++;
+        bullets.push({ x: myX + tankW/2 - 3, y: 350 - 12, isMine: true });
+    };
+    
+    const handleKeyDown = (e) => { 
+        if(!isPlayingActionGame) return; 
+        if(e.key === 'ArrowLeft') { e.preventDefault(); keys.Left = true; } 
+        if(e.key === 'ArrowRight') { e.preventDefault(); keys.Right = true; } 
+        if(e.key === ' ' || e.key === 'ArrowUp') handleShoot(e); 
+    };
+    
+    const handleKeyUp = (e) => { 
+        if(e.key === 'ArrowLeft') keys.Left = false; 
+        if(e.key === 'ArrowRight') keys.Right = false; 
+    };
+    
+    window.addEventListener('keydown', handleKeyDown); 
+    window.addEventListener('keyup', handleKeyUp);
+    
     const btnLeft = document.getElementById('btnLeft'); const btnRight = document.getElementById('btnRight');
-    if (btnLeft) { btnLeft.onmousedown = btnLeft.ontouchstart = (e) => { e.preventDefault(); keys.ArrowLeft = true; }; btnLeft.onmouseup = btnLeft.ontouchend = btnLeft.onmouseleave = (e) => { e.preventDefault(); keys.ArrowLeft = false; }; }
-    if (btnRight) { btnRight.onmousedown = btnRight.ontouchstart = (e) => { e.preventDefault(); keys.ArrowRight = true; }; btnRight.onmouseup = btnRight.ontouchend = btnRight.onmouseleave = (e) => { e.preventDefault(); keys.ArrowRight = false; }; }
-    if(!document.getElementById('btnShoot')) { const btnShoot = document.createElement('button'); btnShoot.id = 'btnShoot'; btnShoot.className = 'game-control-btn'; btnShoot.style.background = 'rgba(236, 72, 153, 0.2)'; btnShoot.style.borderColor = 'var(--accent)'; btnShoot.innerText = '🔥'; document.getElementById('gameControls').appendChild(btnShoot); }
-    const btnShoot = document.getElementById('btnShoot'); if (btnShoot) { btnShoot.onmousedown = btnShoot.ontouchstart = handleShoot; btnShoot.onmouseup = btnShoot.ontouchend = btnShoot.onmouseleave = (e) => { e.preventDefault(); isShooting = false; }; }
-    function drawTank(x, y, isP1Tank) { if (isP1Tank) { ctx.fillStyle = isPlayer1 ? myColor : friendColor; ctx.fillRect(x, y, tankSize, tankSize); ctx.fillStyle = 'white'; ctx.fillRect(x + 8, y - 8, 4, 10); } else { ctx.fillStyle = !isPlayer1 ? myColor : friendColor; ctx.fillRect(x, y, tankSize, tankSize); ctx.fillStyle = 'white'; ctx.fillRect(x + 8, y + tankSize - 2, 4, 10); } }
-    const syncInterval = setInterval(async () => { if(isGameOver) return; try { if (isPlayer1) { await updateDoc(doc(db, "games", gameId), { p1X: myX, p1Shooting: isShooting, bullets: bullets, currentP1Score: p1Score, currentP2Score: p2Score }); } else { await updateDoc(doc(db, "games", gameId), { p2X: myX, p2Shooting: isShooting }); } } catch(e) {} }, 80);
-    const unsub = onSnapshot(doc(db, "games", gameId), (docSnap) => { if(!docSnap.exists() || isGameOver) return; const data = docSnap.data(); if (isPlayer1) { friendX = data.p2X !== undefined ? data.p2X : friendX; if(data.p2Shooting && !lastP2Shooting) { bullets.push({ x: friendX + 8, y: friendY + tankSize + 2, dy: 6, isP1: false }); } lastP2Shooting = !!data.p2Shooting; } else { friendX = data.p1X !== undefined ? data.p1X : friendX; bullets = data.bullets || []; p1Score = data.currentP1Score || 0; p2Score = data.currentP2Score || 0; } });
-    function gameLoop() { if(isGameOver) return; ctx.clearRect(0, 0, canvas.width, canvas.height); if(keys.ArrowLeft) { if (isPlayer1 && myX > 0) myX -= 4; if (!isPlayer1 && myX < canvas.width - tankSize) myX += 4; } if(keys.ArrowRight) { if (isPlayer1 && myX < canvas.width - tankSize) myX += 4; if (!isPlayer1 && myX > 0) myX -= 4; } ctx.save(); if (!isPlayer1) { ctx.translate(canvas.width / 2, canvas.height / 2); ctx.rotate(Math.PI); ctx.translate(-canvas.width / 2, -canvas.height / 2); } ctx.fillStyle = '#555'; ctx.fillRect(50, 190, 60, 20); ctx.fillRect(190, 190, 60, 20); if (isPlayer1) { drawTank(myX, myY, true); drawTank(friendX, friendY, false); } else { drawTank(friendX, friendY, true); drawTank(myX, myY, false); } ctx.fillStyle = '#f59e0b'; for(let i = bullets.length - 1; i >= 0; i--) { let b = bullets[i]; b.y += b.dy; ctx.fillRect(b.x, b.y, 4, 8); if(isPlayer1) { if ((b.x + 4 > 50 && b.x < 110 && b.y + 8 > 190 && b.y < 210) || (b.x + 4 > 190 && b.x < 250 && b.y + 8 > 190 && b.y < 210)) { bullets.splice(i, 1); continue; } if(b.isP1 && b.x + 4 > friendX && b.x < friendX + tankSize && b.y + 8 > friendY && b.y < friendY + tankSize) { p1Score += 1; bullets.splice(i, 1); if(p1Score >= 5) gameOver(); continue; } if(!b.isP1 && b.x + 4 > myX && b.x < myX + tankSize && b.y + 8 > myY && b.y < myY + tankSize) { p2Score += 1; bullets.splice(i, 1); if(p2Score >= 5) gameOver(); continue; } if(b.y < 0 || b.y > canvas.height) bullets.splice(i, 1); } } ctx.restore(); ctx.fillStyle = 'white'; ctx.font = 'bold 16px Inter'; if (isPlayer1) { ctx.fillText(`You: ${p1Score}`, 10, 25); ctx.fillText(`Opponent: ${p2Score}`, canvas.width - 120, 25); } else { ctx.fillText(`You: ${p2Score}`, 10, 25); ctx.fillText(`Opponent: ${p1Score}`, canvas.width - 120, 25); } currentAnimationId = requestAnimationFrame(gameLoop); }
-    function gameOver() { isGameOver = true; isPlayingActionGame = false; clearInterval(syncInterval); unsub(); window.removeEventListener('keydown', handleKeyDown); window.removeEventListener('keyup', handleKeyUp); if (btnLeft) { btnLeft.onmousedown = btnLeft.ontouchstart = null; btnLeft.onmouseup = btnLeft.ontouchend = btnLeft.onmouseleave = null; } if (btnRight) { btnRight.onmousedown = btnRight.ontouchstart = null; btnRight.onmouseup = btnRight.ontouchend = btnRight.onmouseleave = null; } if (btnShoot) { btnShoot.onmousedown = btnShoot.ontouchstart = null; btnShoot.onmouseup = btnShoot.ontouchend = btnShoot.onmouseleave = null; } if(currentAnimationId) cancelAnimationFrame(currentAnimationId); ctx.fillStyle = 'rgba(0,0,0,0.8)'; ctx.fillRect(0,0,canvas.width,canvas.height); ctx.fillStyle = 'white'; ctx.font = 'bold 24px Inter'; let winText = (isPlayer1 && p1Score >= 5) || (!isPlayer1 && p2Score >= 5) ? "YOU WIN!" : "YOU LOSE!"; ctx.fillText(winText, 85, 200); setTimeout(() => { if (isPlayer1) updateDoc(doc(db, "games", gameId), { p1Score: p1Score, p2Score: p2Score }); }, 2000); }
+    if (btnLeft) { btnLeft.onmousedown = btnLeft.ontouchstart = (e) => { e.preventDefault(); keys.Left = true; }; btnLeft.onmouseup = btnLeft.ontouchend = btnLeft.onmouseleave = (e) => { e.preventDefault(); keys.Left = false; }; }
+    if (btnRight) { btnRight.onmousedown = btnRight.ontouchstart = (e) => { e.preventDefault(); keys.Right = true; }; btnRight.onmouseup = btnRight.ontouchend = btnRight.onmouseleave = (e) => { e.preventDefault(); keys.Right = false; }; }
+    
+    if(!document.getElementById('btnShoot')) { 
+        const btnShoot = document.createElement('button'); btnShoot.id = 'btnShoot'; btnShoot.className = 'game-control-btn'; 
+        btnShoot.style.background = 'rgba(236, 72, 153, 0.2)'; btnShoot.style.borderColor = 'var(--accent)'; btnShoot.innerText = '🔥'; 
+        document.getElementById('gameControls').appendChild(btnShoot); 
+    }
+    const btnShoot = document.getElementById('btnShoot'); 
+    if (btnShoot) { 
+        btnShoot.onmousedown = btnShoot.ontouchstart = handleShoot; 
+    }
+    
+    const syncInterval = setInterval(async () => { 
+        if(isGameOver) return; 
+        try { 
+            const payload = isP1 
+                ? { p1X: myX, p1Shots: myShots, currentP1Score: myScore, currentP2Score: oppScore } 
+                : { p2X: myX, p2Shots: myShots }; 
+            await updateDoc(doc(db, "games", gameId), payload); 
+        } catch(e) {} 
+    }, 60); 
+    
+    const unsub = onSnapshot(doc(db, "games", gameId), (docSnap) => { 
+        if(!docSnap.exists() || isGameOver) return; 
+        const data = docSnap.data(); 
+        
+        let rawOppX = isP1 ? data.p2X : data.p1X;
+        if (rawOppX !== undefined) oppX = canvas.width - tankW - rawOppX; // Mirroring Logic
+        
+        let currentOppShots = isP1 ? data.p2Shots : data.p1Shots;
+        if (currentOppShots !== undefined && currentOppShots > lastOppShots) {
+            let newShots = currentOppShots - lastOppShots;
+            for (let i=0; i<newShots; i++) {
+                bullets.push({ x: oppX + tankW/2 - 3, y: 20 + tankH + 2, isMine: false });
+            }
+            lastOppShots = currentOppShots;
+        }
+        
+        // P1 manages score locally. P2 reads the score updates via P1's sync.
+        if (!isP1) {
+            myScore = data.currentP2Score || 0;
+            oppScore = data.currentP1Score || 0;
+            if (myScore >= 5 || oppScore >= 5) gameOver();
+        }
+    });
+    
+    function gameLoop() { 
+        if(isGameOver) return; 
+        ctx.clearRect(0, 0, canvas.width, canvas.height); 
+        
+        if(keys.Left && myX > 0) myX -= 4; 
+        if(keys.Right && myX < canvas.width - tankW) myX += 4; 
+        
+        ctx.fillStyle = '#101015'; 
+        ctx.fillRect(0,0,canvas.width,canvas.height); 
+        
+        const obstacles = [ { x: 50, y: 190, w: 60, h: 20 }, { x: 190, y: 190, w: 60, h: 20 } ];
+        ctx.fillStyle = '#475569'; 
+        obstacles.forEach(o => ctx.fillRect(o.x, o.y, o.w, o.h)); 
+        
+        // Draw My Tank (Blue, Bottom)
+        ctx.fillStyle = '#3b82f6'; 
+        ctx.fillRect(myX, 350, tankW, tankH); 
+        ctx.fillStyle = 'white'; ctx.fillRect(myX + tankW/2 - 3, 350 - 10, 6, 14); 
+        
+        // Draw Opp Tank (Red, Top)
+        ctx.fillStyle = '#ef4444'; 
+        ctx.fillRect(oppX, 20, tankW, tankH); 
+        ctx.fillStyle = 'white'; ctx.fillRect(oppX + tankW/2 - 3, 20 + tankH - 4, 6, 14); 
+        
+        ctx.fillStyle = '#f59e0b'; 
+        for (let i = bullets.length - 1; i >= 0; i--) { 
+            let b = bullets[i]; 
+            b.y += b.isMine ? -6 : 6; 
+            ctx.fillRect(b.x, b.y, 6, 12); 
+            
+            let hitObstacle = false;
+            obstacles.forEach(o => { if (b.x < o.x + o.w && b.x + 6 > o.x && b.y < o.y + o.h && b.y + 12 > o.y) hitObstacle = true; });
+            if (hitObstacle) { bullets.splice(i, 1); continue; }
+            
+            if (isP1) {
+                if (b.isMine) {
+                    if (b.x < oppX + tankW && b.x + 6 > oppX && b.y < 20 + tankH && b.y + 12 > 20) {
+                        myScore++; bullets.splice(i, 1); if (myScore >= 5) gameOver(); continue;
+                    }
+                } else {
+                    if (b.x < myX + tankW && b.x + 6 > myX && b.y < 350 + tankH && b.y + 12 > 350) {
+                        oppScore++; bullets.splice(i, 1); if (oppScore >= 5) gameOver(); continue;
+                    }
+                }
+            } else {
+                if (b.isMine) {
+                    if (b.x < oppX + tankW && b.x + 6 > oppX && b.y < 20 + tankH && b.y + 12 > 20) { bullets.splice(i, 1); continue; }
+                } else {
+                    if (b.x < myX + tankW && b.x + 6 > myX && b.y < 350 + tankH && b.y + 12 > 350) { bullets.splice(i, 1); continue; }
+                }
+            }
+            
+            if(b.y < -20 || b.y > canvas.height + 20) bullets.splice(i, 1); 
+        } 
+        
+        ctx.fillStyle = 'white'; ctx.font = 'bold 16px Inter'; 
+        ctx.fillText(`You: ${myScore}`, 15, 390); ctx.fillText(`Opp: ${oppScore}`, canvas.width - 80, 390); 
+        
+        currentAnimationId = requestAnimationFrame(gameLoop); 
+    } 
+    
+    function gameOver() { 
+        isGameOver = true; isPlayingActionGame = false; 
+        clearInterval(syncInterval); unsub(); 
+        window.removeEventListener('keydown', handleKeyDown); window.removeEventListener('keyup', handleKeyUp); 
+        if (btnLeft) { btnLeft.onmousedown = btnLeft.ontouchstart = null; btnLeft.onmouseup = btnLeft.ontouchend = btnLeft.onmouseleave = null; } 
+        if (btnRight) { btnRight.onmousedown = btnRight.ontouchstart = null; btnRight.onmouseup = btnRight.ontouchend = btnRight.onmouseleave = null; } 
+        if (btnShoot) { btnShoot.onmousedown = btnShoot.ontouchstart = null; } 
+        if(currentAnimationId) cancelAnimationFrame(currentAnimationId); 
+        
+        ctx.fillStyle = 'rgba(0,0,0,0.8)'; ctx.fillRect(0,0,canvas.width,canvas.height); 
+        ctx.fillStyle = 'white'; ctx.font = 'bold 24px Inter'; 
+        let winText = myScore >= 5 ? "YOU WIN!" : "YOU LOSE!"; 
+        ctx.fillText(winText, 85, 200); 
+        
+        setTimeout(() => { 
+            if (isP1) updateDoc(doc(db, "games", gameId), { p1Score: myScore, p2Score: oppScore }); 
+        }, 1500); 
+    } 
+    
     gameLoop();
 }
 window.makeMoveTTT = async (index, currentVal, isMyTurn, mySymbol) => { if(!isMyTurn || currentVal !== "" || !currentGameId) return; const docRef = doc(db, "games", currentGameId); const snap = await getDoc(docRef); const data = snap.data(); if(data.winner) return; let newBoard = [...data.board]; newBoard[index] = mySymbol; const lines = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]]; let newWinner = null; for (let i = 0; i < lines.length; i++) { const [a, b, c] = lines[i]; if (newBoard[a] && newBoard[a] === newBoard[b] && newBoard[a] === newBoard[c]) newWinner = auth.currentUser.uid; } if(!newWinner && !newBoard.includes("")) newWinner = "draw"; const nextTurn = data.player1 === auth.currentUser.uid ? data.player2 : data.player1; await updateDoc(docRef, { board: newBoard, turn: nextTurn, winner: newWinner }); };
@@ -1397,6 +1838,40 @@ window.resetTTT = async (gameId) => { const docRef = doc(db, "games", gameId); c
 function renderRPS(data, gameId) { const isPlayer1 = data.player1 === auth.currentUser.uid; const myChoice = isPlayer1 ? data.p1Choice : data.p2Choice; const oppChoice = isPlayer1 ? data.p2Choice : data.p1Choice; let statusText = "Make your choice!"; let bothSelected = data.p1Choice && data.p2Choice; if (bothSelected) { if (myChoice === oppChoice) statusText = "It's a Tie!"; else if ((myChoice === 'rock' && oppChoice === 'scissors') || (myChoice === 'paper' && oppChoice === 'rock') || (myChoice === 'scissors' && oppChoice === 'paper')) statusText = "🎉 You Won!"; else statusText = "😞 You Lost!"; } else if (myChoice) statusText = "Waiting for opponent..."; const icons = { rock: "fa-hand-back-fist", paper: "fa-hand", scissors: "fa-hand-scissors" }; let html = `<div class="game-turn-indicator">${statusText}</div><div class="rps-arena"><div class="rps-player"><span>You</span><div class="rps-choice-display"><i class="fa-solid ${myChoice ? icons[myChoice] : 'fa-question'}"></i></div></div><div class="vs-badge">VS</div><div class="rps-player"><span>Opponent</span><div class="rps-choice-display"><i class="fa-solid ${bothSelected ? icons[oppChoice] : (oppChoice ? 'fa-check' : 'fa-question')}" style="color: ${oppChoice && !bothSelected ? '#10b981' : 'white'}"></i></div></div></div>`; if (!myChoice && !bothSelected) html += `<div class="rps-controls"><button class="rps-btn" onclick="makeMoveRPS('rock')"><i class="fa-solid fa-hand-back-fist"></i></button><button class="rps-btn" onclick="makeMoveRPS('paper')"><i class="fa-solid fa-hand"></i></button><button class="rps-btn" onclick="makeMoveRPS('scissors')"><i class="fa-solid fa-hand-scissors"></i></button></div>`; if(bothSelected) html += `<button class="primary-btn glow-btn" style="max-width:200px; margin-top:20px;" onclick="resetRPS('${gameId}')">Play Again</button>`; gameUIContainer.innerHTML = html; }
 window.makeMoveRPS = async (choice) => { if(!currentGameId) return; const docRef = doc(db, "games", currentGameId); const snap = await getDoc(docRef); const isPlayer1 = snap.data().player1 === auth.currentUser.uid; if (isPlayer1) await updateDoc(docRef, { p1Choice: choice }); else await updateDoc(docRef, { p2Choice: choice }); };
 window.resetRPS = async (gameId) => { await updateDoc(doc(db, "games", gameId), { p1Choice: null, p2Choice: null }); };
+
+window.acceptGroupInvite = async (groupId) => {
+    try {
+        await updateDoc(doc(db, "groups", groupId), {
+            members: arrayUnion(auth.currentUser.uid),
+            invitedMembers: arrayRemove(auth.currentUser.uid)
+        });
+        await updateDoc(doc(db, "users", auth.currentUser.uid), {
+            [`chatMeta.${groupId}.unread`]: false,
+            [`chatMeta.${groupId}.unreadCount`]: 0
+        });
+        showToast("Joined Group", "You have joined the group.");
+        const group = allGroups.find(g => g.id === groupId);
+        if (group) {
+            openGroupChat(groupId, group.name, group.members.length + 1);
+        }
+    } catch(e) {
+        showToast("Error", "Failed to join group.");
+    }
+};
+
+window.rejectGroupInvite = async (groupId) => {
+    try {
+        await updateDoc(doc(db, "groups", groupId), {
+            invitedMembers: arrayRemove(auth.currentUser.uid)
+        });
+        await updateDoc(doc(db, "users", auth.currentUser.uid), {
+            [`chatMeta.${groupId}`]: deleteField()
+        });
+        showToast("Rejected", "Group invitation rejected.");
+    } catch(e) {
+        showToast("Error", "Failed to reject invite.");
+    }
+};
 
 // --- DOODLE LOGIC ---
 const pDoodleArea = document.getElementById("privateDoodleArea"); const pDoodleCanvas = document.getElementById("pDoodleCanvas"); const pDoodleCtx = pDoodleCanvas.getContext("2d"); const pDoodleColor = document.getElementById("pDoodleColor"); const pDoodleSize = document.getElementById("pDoodleSize"); const undoPDoodleBtn = document.getElementById("undoPDoodleBtn");
@@ -1431,7 +1906,7 @@ chatDoodleBtn.addEventListener("click", async (e) => {
 });
 document.getElementById("hideDoodleBtn").addEventListener("click", () => { pDoodleArea.style.display = "none"; if (currentChatId) { loadMessages(); } });
 window.acceptDoodle = async () => { await updateDoc(doc(db, "chats", currentChatId), { doodleActive: true, doodleReq: null }); pDoodleArea.style.display = "flex"; window.dispatchEvent(new Event('resize')); };
-document.getElementById("disconnectDoodleBtn").addEventListener("click", async () => { if(confirm("Stop doodling and wipe the board for both of you?")) { await updateDoc(doc(db, "chats", currentChatId), { doodleActive: false }); const snaps = await getDocs(collection(db, "chats", currentChatId, "doodle")); const batch = writeBatch(db); snaps.docs.forEach(d => batch.delete(d.ref)); await batch.commit(); pDoodleArea.style.display = "none"; } });
+document.getElementById("disconnectDoodleBtn").addEventListener("click", async () => { const isConfirmed = await customConfirm("Stop Doodling", "Stop doodling and wipe the board for both of you?", "Disconnect", "#ef4444"); if(isConfirmed) { await updateDoc(doc(db, "chats", currentChatId), { doodleActive: false }); const snaps = await getDocs(collection(db, "chats", currentChatId, "doodle")); const batch = writeBatch(db); snaps.docs.forEach(d => batch.delete(d.ref)); await batch.commit(); pDoodleArea.style.display = "none"; } });
 function getPCoordinates(e) { const rect = pDoodleCanvas.getBoundingClientRect(); const clientX = e.touches ? e.touches[0].clientX : e.clientX; const clientY = e.touches ? e.touches[0].clientY : e.clientY; return { x: clientX - rect.left, y: clientY - rect.top }; }
 function drawPLine(x0, y0, x1, y1, color, size = 3) { pDoodleCtx.beginPath(); pDoodleCtx.moveTo(x0, y0); pDoodleCtx.lineTo(x1, y1); pDoodleCtx.strokeStyle = color; pDoodleCtx.lineWidth = size; pDoodleCtx.lineCap = 'round'; pDoodleCtx.stroke(); pDoodleCtx.closePath(); }
 function initPrivateDoodle() {
@@ -1454,7 +1929,7 @@ const startPDrawing = (e) => { isPDrawing = true; currentPStroke = []; currentPS
 const drawP = (e) => { if (!isPDrawing) return; e.preventDefault(); const pos = getPCoordinates(e); const lastPos = currentPStroke[currentPStroke.length - 1]; drawPLine(lastPos.x, lastPos.y, pos.x, pos.y, pDoodleColor.value, pDoodleSize.value); currentPStroke.push(pos); };
 const stopPDrawing = async () => { if (!isPDrawing) return; isPDrawing = false; if(currentPStroke.length > 1) { try { await addDoc(collection(db, "chats", currentChatId, "doodle"), { stroke: currentPStroke, color: pDoodleColor.value, size: pDoodleSize.value, time: Date.now(), sender: auth.currentUser.uid }); } catch(e) {} } };
 pDoodleCanvas.addEventListener("mousedown", startPDrawing); pDoodleCanvas.addEventListener("mousemove", drawP); pDoodleCanvas.addEventListener("mouseup", stopPDrawing); pDoodleCanvas.addEventListener("mouseout", stopPDrawing); pDoodleCanvas.addEventListener("touchstart", startPDrawing, {passive: false}); pDoodleCanvas.addEventListener("touchmove", drawP, {passive: false}); pDoodleCanvas.addEventListener("touchend", stopPDrawing);
-document.getElementById("clearPDoodleBtn").addEventListener("click", async () => { if(confirm("Clear board?")) { const snaps = await getDocs(collection(db, "chats", currentChatId, "doodle")); const batch = writeBatch(db); snaps.docs.forEach(d => batch.delete(d.ref)); await batch.commit(); await addDoc(collection(db, "chats", currentChatId, "doodle"), { type: 'clear', time: Date.now() }); } });
+document.getElementById("clearPDoodleBtn").addEventListener("click", async () => { const isConfirmed = await customConfirm("Clear Board", "Are you sure you want to clear the whiteboard?", "Clear", "#ef4444"); if(isConfirmed) { const snaps = await getDocs(collection(db, "chats", currentChatId, "doodle")); const batch = writeBatch(db); snaps.docs.forEach(d => batch.delete(d.ref)); await batch.commit(); await addDoc(collection(db, "chats", currentChatId, "doodle"), { type: 'clear', time: Date.now() }); } });
 if (undoPDoodleBtn) { undoPDoodleBtn.addEventListener("click", async () => { if (!currentChatId) return; try { const snaps = await getDocs(query(collection(db, "chats", currentChatId, "doodle"), orderBy("time", "desc"))); for (let docSnap of snaps.docs) { const data = docSnap.data(); if (data.sender === auth.currentUser.uid && data.type !== 'clear') { await deleteDoc(doc(db, "chats", currentChatId, "doodle", docSnap.id)); break; } else if (data.type === 'clear') { break; } } } catch(e) { console.error("Undo failed:", e); } }); }
 
 // --- EXPLORE HUB ---
@@ -1575,12 +2050,13 @@ if (chatSettingsBtn) chatSettingsBtn.addEventListener("click", () => document.ge
 if (modalMsgTimerSelect) modalMsgTimerSelect.addEventListener("change", async (e) => { if (currentChatId && !isCurrentChatGroup) { await updateDoc(doc(db, "chats", currentChatId), { messageTimer: e.target.value }); showToast("Timer Updated", "Disappearing message timer changed for this chat."); } });
 if (changeWallpaperBtn && wallpaperInput) { changeWallpaperBtn.addEventListener("click", () => wallpaperInput.click()); wallpaperInput.addEventListener("change", async (e) => { const file = e.target.files[0]; if (!file || !currentChatId || isCurrentChatGroup) return; const originalText = changeWallpaperBtn.innerHTML; changeWallpaperBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Uploading...'; changeWallpaperBtn.disabled = true; try { const formData = new FormData(); formData.append("file", file); formData.append("upload_preset", UPLOAD_PRESET); const response = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`, { method: "POST", body: formData }); const data = await response.json(); await updateDoc(doc(db, "chats", currentChatId), { wallpaperUrl: data.secure_url }); showToast("Wallpaper Updated", "Chat background synced for both users."); } catch (err) { alert("Failed to upload wallpaper: " + err.message); } finally { changeWallpaperBtn.innerHTML = originalText; changeWallpaperBtn.disabled = false; wallpaperInput.value = ""; } }); }
 if (removeWallpaperBtn) { removeWallpaperBtn.addEventListener("click", async () => { if (!currentChatId || isCurrentChatGroup) return; try { await updateDoc(doc(db, "chats", currentChatId), { wallpaperUrl: null }); showToast("Wallpaper Removed", "Restored default background for both."); } catch (err) {} }); }
-if (clearChatMeBtn) { clearChatMeBtn.addEventListener("click", async () => { if (!currentChatId) return; if (confirm("Are you sure you want to clear this chat for yourself? Messages will be hidden for you but remain for the other person.")) { clearChatMeBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Clearing...'; try { const msgsSnap = await getDocs(query(collection(db, "chats", currentChatId, "messages"))); const batch = writeBatch(db); msgsSnap.docs.forEach(docSnap => { batch.update(docSnap.ref, { deletedFor: arrayUnion(auth.currentUser.uid) }); }); await batch.commit(); document.getElementById("chatSettingsModal").style.display = "none"; showToast("Chat Cleared", "Messages have been hidden from your screen."); } catch (e) { alert("Error clearing chat."); } finally { clearChatMeBtn.innerHTML = '<i class="fa-solid fa-eraser"></i> Clear Chat for Me'; } } }); }
+if (clearChatMeBtn) { clearChatMeBtn.addEventListener("click", async () => { if (!currentChatId) return; const isConfirmed = await customConfirm("Clear Chat", "Are you sure you want to clear this chat for yourself? Messages will be hidden for you but remain for the other person.", "Clear for Me", "#f59e0b"); if (isConfirmed) { clearChatMeBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Clearing...'; try { const msgsSnap = await getDocs(query(collection(db, "chats", currentChatId, "messages"))); const batch = writeBatch(db); msgsSnap.docs.forEach(docSnap => { batch.update(docSnap.ref, { deletedFor: arrayUnion(auth.currentUser.uid) }); }); await batch.commit(); document.getElementById("chatSettingsModal").style.display = "none"; showToast("Chat Cleared", "Messages have been hidden from your screen."); } catch (e) { showToast("Error", "Error clearing chat."); } finally { clearChatMeBtn.innerHTML = '<i class="fa-solid fa-eraser"></i> Clear Chat for Me'; } } }); }
 
 window.triggerClearChatEveryone = async () => {
     if (!currentChatId) return; 
 
-    if (confirm("DEVELOPER ACTION: Permanently wipe this entire chat history for BOTH users? This cannot be undone.")) {
+    const isConfirmed = await customConfirm("DEVELOPER ACTION", "Permanently wipe this entire chat history for BOTH users? This cannot be undone.", "Wipe Everyone", "#ef4444");
+    if (isConfirmed) {
         const clearBtn = document.getElementById("clearChatEveryoneBtn");
         if (clearBtn) clearBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Wiping...';
         
@@ -1646,6 +2122,7 @@ if (appSettingsBtnEl) {
             document.getElementById("settingsBio").value = myUserData.bio || "";
             document.getElementById("settingsStatusPrivacy").value = myUserData.privacyStatus || "everyone";
             document.getElementById("settingsPfpPrivacy").value = myUserData.privacyPfp || "everyone";
+            document.getElementById("settingsGroupInvitePrivacy").value = myUserData.privacyGroupInvite || "everyone";
         }
         document.getElementById("appSettingsModal").style.display = "flex";
     };
@@ -1664,7 +2141,14 @@ if (settingsSaveProfileBtnEl) {
                 const usernameSnapshot = await getDocs(usernameQuery);
                 if (!usernameSnapshot.empty) { alert("This username is already taken by another user."); btn.innerHTML = 'Save Profile'; return; }
             }
-            await updateDoc(doc(db, "users", auth.currentUser.uid), { fullName: newName, username: newUsername, bio: newBio, privacyStatus: document.getElementById("settingsStatusPrivacy").value, privacyPfp: document.getElementById("settingsPfpPrivacy").value });
+            await updateDoc(doc(db, "users", auth.currentUser.uid), { 
+                fullName: newName, 
+                username: newUsername, 
+                bio: newBio, 
+                privacyStatus: document.getElementById("settingsStatusPrivacy").value, 
+                privacyPfp: document.getElementById("settingsPfpPrivacy").value,
+                privacyGroupInvite: document.getElementById("settingsGroupInvitePrivacy").value 
+            });
             showToast("Profile Updated", "Your details were saved successfully.");
             document.getElementById("appSettingsModal").style.display = "none";
         } catch(e) { showToast("Error", "Failed to update profile."); } finally { btn.innerHTML = 'Save Profile'; }
@@ -1693,7 +2177,34 @@ if (settingsPfpInput) {
     };
 }
 
-window.approveMember = async (groupId, memberId) => { try { await updateDoc(doc(db, "groups", groupId), { members: arrayUnion(memberId), pendingMembers: arrayRemove(memberId) }); showToast("Approved", "User has been added to the group."); document.getElementById("groupSettingsModal").style.display = "none"; } catch (e) { alert("Error approving member."); } };
+window.approveMember = async (groupId, memberId) => { 
+    try { 
+        await updateDoc(doc(db, "groups", groupId), { 
+            invitedMembers: arrayUnion(memberId), 
+            pendingMembers: arrayRemove(memberId) 
+        }); 
+        const group = allGroups.find(g => g.id === groupId);
+        if (group) {
+            await setDoc(doc(db, "users", memberId), {
+                chatMeta: {
+                    [groupId]: {
+                        time: Date.now(),
+                        text: `You were invited to join ${group.name}`,
+                        unread: true,
+                        unreadCount: increment(1),
+                        isGroup: true,
+                        groupId: groupId,
+                        groupName: group.name
+                    }
+                }
+            }, { merge: true });
+        }
+        showToast("Approved", "Invitation sent to the user."); 
+        document.getElementById("groupSettingsModal").style.display = "none"; 
+    } catch (e) { 
+        alert("Error approving member."); 
+    } 
+};
 window.rejectMember = async (groupId, memberId) => { try { await updateDoc(doc(db, "groups", groupId), { pendingMembers: arrayRemove(memberId) }); showToast("Rejected", "Request deleted."); document.getElementById("groupSettingsModal").style.display = "none"; } catch (e) { alert("Error rejecting member."); } };
 
 document.querySelectorAll('.modal-overlay').forEach(modal => {
@@ -1761,12 +2272,28 @@ if (installAppBtn) {
 const updateAppBtn = document.getElementById('updateAppBtn');
 let refreshing = false; 
 
+async function getLatestAppVersion() {
+    try {
+        // Fetch the main document headers, bypassing all caches
+        const res = await fetch(window.location.href.split('?')[0] + '?_no_cache=' + Date.now(), { method: 'HEAD', cache: 'no-store' });
+        return res.headers.get('etag') || res.headers.get('last-modified') || "unknown";
+    } catch (e) {
+        return null;
+    }
+}
+
+window.addEventListener('load', async () => {
+    if (!localStorage.getItem('app_version_etag')) {
+        const ver = await getLatestAppVersion();
+        if (ver && ver !== "unknown") localStorage.setItem('app_version_etag', ver);
+    }
+});
+
 // Fires ONLY when a new Service Worker has successfully taken over — reload to apply it
 // Guard: navigator.serviceWorker may not exist on some browsers/iOS
 if ('serviceWorker' in navigator) navigator.serviceWorker.addEventListener('controllerchange', () => {
   if (!refreshing) {
     refreshing = true;
-    showToast("🎉 Update Applied!", "Reloading with the latest version...");
     setTimeout(() => {
       window.location.href = window.location.href.split('?')[0] + '?updated=' + Date.now();
     }, 1200);
@@ -1793,65 +2320,56 @@ if (updateAppBtn) {
     };
 
     try {
-      const reg = await navigator.serviceWorker.getRegistration();
-      if (!reg) {
-        showToast("Error", "Service Worker not found.");
+      const currentVersion = localStorage.getItem('app_version_etag');
+      const latestVersion = await getLatestAppVersion();
+
+      if (!latestVersion) {
+        showToast("Error", "Could not check for updates. Check connection.");
         resetBtn();
         return;
       }
 
-      // CASE 1: An update was already downloaded in the background and is waiting to activate
-      if (reg.waiting) {
-        updateAppBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Applying Update...';
-        reg.waiting.postMessage({ type: 'SKIP_WAITING' });
-        // controllerchange listener above will handle the reload
-        setTimeout(() => { if (!refreshing) resetBtn(); }, 4000); // silent failsafe only
-        return;
-      }
-
-      // CASE 2: Listen for a NEW update discovered during this check
-      let updateFound = false;
-
-      reg.addEventListener('updatefound', () => {
-        updateFound = true;
-        const newWorker = reg.installing;
-        updateAppBtn.innerHTML = '<i class="fa-solid fa-download fa-fade"></i> Downloading Update...';
-
-        newWorker.addEventListener('statechange', () => {
-          if (newWorker.state === 'installed') {
-            if (navigator.serviceWorker.controller) {
-              // New version downloaded — activate it immediately
-              updateAppBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Applying Update...';
-              newWorker.postMessage({ type: 'SKIP_WAITING' });
-              // controllerchange listener will reload the page
-            } else {
-              // First install — no previous controller, nothing to update
-              resetBtn("You are on our latest version.");
-            }
-          } else if (newWorker.state === 'redundant') {
-            showToast("Error", "Update check failed. Please try again.");
-            resetBtn();
-          }
-        });
-      }, { once: true });
-
-      // Ask the browser to fetch sw.js from the server and compare
-      await reg.update();
-
-      // CASE 3: reg.update() completed with no new worker found = already up to date
-      setTimeout(() => {
-        if (!updateFound && !reg.waiting && !refreshing) {
-          resetBtn("You are on our latest version.");
+      if (currentVersion && latestVersion !== "unknown" && currentVersion !== latestVersion) {
+        // We found a legitimate deployed update
+        updateAppBtn.innerHTML = '<i class="fa-solid fa-download fa-fade"></i> Update found...';
+        
+        // 1. Clear the Cache API to ensure we don't serve old CSS/JS/HTML
+        if ('caches' in window) {
+            const cacheKeys = await caches.keys();
+            await Promise.all(cacheKeys.map(key => caches.delete(key)));
         }
-      }, 1500); // 1.5s grace period for slow networks
-
+        
+        // 2. Unregister service workers so they don't block the next page load
+        if ('serviceWorker' in navigator) {
+            const regs = await navigator.serviceWorker.getRegistrations();
+            await Promise.all(regs.map(r => r.unregister()));
+        }
+        
+        localStorage.setItem('app_version_etag', latestVersion);
+        updateAppBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Updating...';
+        refreshing = true;
+        
+        setTimeout(() => {
+            window.location.href = window.location.href.split('?')[0] + '?updated=' + Date.now();
+        }, 1000);
+      } else {
+        // If the old store was null, save it now to compare next time
+        if (!currentVersion && latestVersion !== "unknown") {
+            localStorage.setItem('app_version_etag', latestVersion);
+        }
+        
+        // Also ask SW to check its internal updates seamlessly in the background
+        if ('serviceWorker' in navigator) {
+            const reg = await navigator.serviceWorker.getRegistration();
+            if (reg) await reg.update();
+        }
+        
+        resetBtn("You are already on the latest version.");
+      }
     } catch (err) {
       console.error("PWA Update Error:", err);
       showToast("Error", "Could not reach the server. Try again.");
-      if (updateAppBtn && !refreshing) {
-        updateAppBtn.innerHTML = originalText;
-        updateAppBtn.disabled = false;
-      }
+      resetBtn();
     }
   });
 }

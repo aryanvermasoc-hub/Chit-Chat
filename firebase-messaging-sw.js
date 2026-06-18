@@ -63,8 +63,8 @@ self.addEventListener("activate", (event) => {
 
 // Fetch event: Network-first strategy, ignoring API routes and POST requests
 self.addEventListener("fetch", (event) => {
-  // Do not intercept backend API requests or POST requests
-  if (event.request.url.includes('/api/') || event.request.method !== 'GET') {
+  // Do not intercept backend API requests, POST requests, or cache-busted update checks
+  if (event.request.url.includes('/api/') || event.request.method !== 'GET' || event.request.url.includes('_no_cache')) {
     return; 
   }
   

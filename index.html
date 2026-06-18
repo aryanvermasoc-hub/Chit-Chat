@@ -329,6 +329,15 @@
             <div style="flex: 1;"><label style="font-size: 11px; color: var(--text-muted); margin-bottom: 5px; display: block;">Profile Picture</label><select id="settingsPfpPrivacy" class="difficulty-select" style="width: 100%; margin-bottom: 0;"><option value="everyone">Everyone</option><option value="friends">Friends Only</option><option value="none">Nobody</option></select></div>
         </div>
         
+        <div style="margin-bottom: 15px;">
+            <label style="font-size: 11px; color: var(--text-muted); margin-bottom: 5px; display: block;">Who can invite me to groups?</label>
+            <select id="settingsGroupInvitePrivacy" class="difficulty-select" style="width: 100%; margin-bottom: 0;">
+                <option value="everyone">Anyone</option>
+                <option value="friends">Friends Only</option>
+                <option value="none">No One</option>
+            </select>
+        </div>
+        
         <div style="display: flex; gap: 10px; margin-bottom: 35px;">
             <button id="settingsChangePfpBtn" class="primary-btn" style="flex: 1; background: rgba(255,255,255,0.1);"><i class="fa-solid fa-camera"></i> Update Avatar</button>
             <button id="settingsSaveProfileBtn" class="primary-btn glow-btn" style="flex: 1;">Save Profile</button>
@@ -358,7 +367,7 @@
       <div class="profile-header"><div style="position: relative; display: inline-block;"><img id="groupSettingsAvatar" src="" class="profile-avatar-large"><button onclick="triggerGroupAvatarUpload()" style="position:absolute; bottom:10px; right:0; background:var(--primary); color:white; border-radius:50%; width:35px; height:35px; border:none; cursor:pointer;"><i class="fa-solid fa-camera"></i></button></div><h2 id="groupSettingsName">Group Name</h2><p class="text-muted"><span id="groupMemberCount">0</span> Members</p></div>
       <div id="groupMembersList" style="margin-top: 15px; max-height: 150px; overflow-y: auto; text-align: left; background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px;"></div>
       <div id="groupPendingRequests" style="margin-top: 15px; display: none; max-height: 150px; overflow-y: auto; text-align: left; background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px;"></div>
-      <div class="profile-actions"><button id="addGroupMemberBtn" onclick="triggerAddGroupMember()" class="primary-btn" style="background: #3b82f6;"><i class="fa-solid fa-user-plus"></i> Add New Member</button><button id="deleteGroupBtn" class="primary-btn" style="background: #ef4444; display: none; margin-top: 10px;"><i class="fa-solid fa-trash"></i> Delete Group</button></div>
+      <div class="profile-actions"><button id="addGroupMemberBtn" onclick="triggerAddGroupMember()" class="primary-btn" style="background: #3b82f6;"><i class="fa-solid fa-user-plus"></i> Add New Member</button><button id="leaveGroupBtn" class="primary-btn" style="background: #f59e0b; display: none; margin-top: 10px;"><i class="fa-solid fa-arrow-right-from-bracket"></i> Leave Group</button><button id="deleteGroupBtn" class="primary-btn" style="background: #ef4444; display: none; margin-top: 10px;"><i class="fa-solid fa-trash"></i> Delete Group</button></div>
     </div>
   </div>
   <div id="otpModal" class="modal-overlay" style="display: none; z-index: 100;">
@@ -387,5 +396,53 @@
     </div>
   </div>
   
+  <!-- Generic Confirm Modal -->
+  <div id="customConfirmModal" class="modal-overlay" style="display: none; z-index: 2000;">
+    <div class="modal-content" style="max-width: 350px; padding: 25px;">
+      <div class="modal-header" style="border-bottom: none; margin-bottom: 10px; padding-bottom: 0;">
+        <h3 id="confirmModalTitle">Are you sure?</h3>
+      </div>
+      <p id="confirmModalMessage" style="color: var(--text-muted); font-size: 14px; margin-bottom: 25px; line-height: 1.5;"></p>
+      <div style="display: flex; gap: 10px; justify-content: flex-end;">
+        <button id="confirmCancelBtn" class="primary-btn" style="background: rgba(255,255,255,0.1); color: var(--text-main); width: auto; flex: 1;">Cancel</button>
+        <button id="confirmActionBtn" class="primary-btn glow-btn" style="background: #ef4444; width: auto; flex: 1;">Confirm</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Generic Prompt Modal -->
+  <div id="customPromptModal" class="modal-overlay" style="display: none; z-index: 2000;">
+    <div class="modal-content" style="max-width: 350px; padding: 25px;">
+      <div class="modal-header" style="border-bottom: none; margin-bottom: 10px; padding-bottom: 0;">
+        <h3 id="promptModalTitle">Input</h3>
+      </div>
+      <div class="input-group" style="margin-bottom: 20px;">
+          <input type="text" id="promptModalInput" placeholder="Enter value...">
+      </div>
+      <div style="display: flex; gap: 10px; justify-content: flex-end;">
+        <button id="promptCancelBtn" class="primary-btn" style="background: rgba(255,255,255,0.1); color: var(--text-main); width: auto; flex: 1;">Cancel</button>
+        <button id="promptActionBtn" class="primary-btn glow-btn" style="width: auto; flex: 1;">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Select Users Modal (For Groups) -->
+  <div id="selectUsersModal" class="modal-overlay" style="display: none; z-index: 2000;">
+    <div class="modal-content" style="display: flex; flex-direction: column; max-height: 80vh;">
+      <div class="modal-header" style="flex-shrink: 0; padding-bottom: 15px;">
+        <h3 id="selectUsersTitle">Select Members</h3>
+        <button id="closeSelectUsersBtn" class="icon-btn"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div id="createGroupNameContainer" style="display: none; margin-bottom: 15px; flex-shrink: 0;">
+          <div class="input-group" style="margin-bottom: 0;"><i class="fa-solid fa-users"></i><input type="text" id="newGroupNameInput" placeholder="Enter Group Name"></div>
+      </div>
+      <div class="search-container" style="padding: 0; border: none; margin-bottom: 15px; flex-shrink: 0;">
+        <i class="fa-solid fa-magnifying-glass search-icon" style="position: absolute; margin-left: 15px; color: var(--text-muted);"></i><input type="text" id="selectUsersSearch" placeholder="Search users..." style="padding-left: 40px; width: 100%;">
+      </div>
+      <div id="selectedUsersChips" style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; flex-shrink: 0; max-height: 80px; overflow-y: auto;"></div>
+      <div id="selectableUsersList" style="flex: 1; overflow-y: auto; text-align: left; background: rgba(0,0,0,0.2); border-radius: 12px; padding: 10px; margin-bottom: 15px;"></div>
+      <div style="flex-shrink: 0;"><button id="confirmSelectUsersBtn" class="primary-btn glow-btn">Continue (<span id="selectedCount">0</span>)</button></div>
+    </div>
+  </div>
  <script type="module" src="./main.js?v=999"></script>
 </html>
