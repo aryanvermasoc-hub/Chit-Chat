@@ -308,10 +308,9 @@ const canSeePrivacy = (targetUser, privacyType) => {
     const setting = targetUser[privacyType] || 'everyone';
     if (setting === 'everyone' || targetUser.id === auth.currentUser.uid) return true;
     if (setting === 'none') return false;
-    if (setting === 'friends') return !!(myUserData?.chatMeta?.[targetUser.id]);
+    if (setting === 'friends') return !!(targetUser.chatMeta?.[auth.currentUser.uid]);
     return true;
 };
-
 const generateAvatar = (userObj, fallbackName) => { 
     const name = (userObj && (userObj.fullName || userObj.username)) || fallbackName || "User";
     const defaultAvatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=random&color=fff&rounded=true&bold=true`;
@@ -781,9 +780,14 @@ function loadSidebarData() {
               const statusEl = document.getElementById("chatTargetStatus");
               if (statusEl && !statusEl.innerText.includes("typing")) {
                   if (canSeePrivacy(tUser, 'privacyStatus')) {
+                      statusEl.style.display = "";
                       if (tUser.isOnline) { statusEl.innerText = "Online"; statusEl.classList.add("online"); } 
                       else { statusEl.innerText = `Last seen: ${timeAgo(tUser.lastSeen)}`; statusEl.classList.remove("online"); }
-                  } else { statusEl.innerText = "Offline"; statusEl.classList.remove("online"); }
+                  } else { 
+                      statusEl.innerText = ""; 
+                      statusEl.classList.remove("online");
+                      statusEl.style.display = "none";
+                  }
               }
           }
       }
@@ -887,7 +891,10 @@ function renderSidebar() {
     if (meta.isGroup) return; // Prevent bleed over from any incorrectly saved data
     const displayName = user.fullName || user.username;
     const avatarUrl = generateAvatar(user, displayName);
-    const isOnline = user.isOnline ? "online" : "";
+    
+    const canSee = canSeePrivacy(user, 'privacyStatus');
+    const isOnline = (canSee && user.isOnline) ? "online" : "";
+    const statusDotHtml = canSee ? `<div class="status-dot ${isOnline}"></div>` : `<div class="status-dot" style="display:none;"></div>`;
     
     let unreadCount = meta.unreadCount || (meta.unread ? 1 : 0);
     let isUnread = unreadCount > 0;
@@ -906,7 +913,7 @@ function renderSidebar() {
     const userCard = document.createElement("div");
     userCard.className = "user-item";
     userCard.innerHTML = `
-      <div class="avatar-wrapper"><img src="${avatarUrl}" class="avatar"><div class="status-dot ${isOnline}"></div></div>
+      <div class="avatar-wrapper"><img src="${avatarUrl}" class="avatar">${statusDotHtml}</div>
       <div class="user-meta" style="flex:1;">
           <div style="display:flex; justify-content:space-between; align-items:center;">
               <span class="name" style="${nameStyle} white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:55%;">${displayName}</span>
@@ -1066,25 +1073,30 @@ window.openChat = async (targetUid, targetName, targetAvatar, isTargetOnline, ta
       activeSharedKey = null;
   }
 
-  const targetUser = allUsers.find(u => u.id === targetUid);
+const targetUser = allUsers.find(u => u.id === targetUid);
   const targetStatus = document.getElementById("chatTargetStatus");
   if (targetUser && canSeePrivacy(targetUser, 'privacyStatus')) {
+      targetStatus.style.display = "";
       if (isTargetOnline) { targetStatus.classList.add('online'); targetStatus.innerText = "Online"; } 
       else { targetStatus.classList.remove('online'); targetStatus.innerText = `Last seen: ${timeAgo(targetLastSeen)}`; }
-  } else { targetStatus.classList.remove('online'); targetStatus.innerText = "Offline"; }
+  } else { 
+      targetStatus.innerText = ""; 
+      targetStatus.classList.remove("online"); 
+      targetStatus.style.display = "none"; 
+  }
   
   loadMessages(); 
 }
-
 window.openGroupChat = (groupId, groupName, memberCount) => {
   isCurrentChatGroup = true; currentChatId = groupId; targetUserUid = null; activeSharedKey = null; // No E2EE for groups in this version
   document.getElementById("launchGameMenuBtn").style.display = "none"; document.getElementById("chatSettingsBtn").style.display = "none"; document.getElementById("chatDoodleBtn").style.display = "none"; if (ghostModeBtn) ghostModeBtn.style.display = "none"; 
   chatBox.style.transition = "none"; chatBox.style.visibility = "hidden"; chatBox.style.opacity = "0"; chatBox.innerHTML = ""; document.getElementById("chatWallpaper").style.backgroundImage = "none"; if(replyingToMsg) document.getElementById("cancelReplyBtn").click(); if(pDoodleUnsubscribe) { pDoodleUnsubscribe(); pDoodleUnsubscribe = null; }
   showChatLoadingIndicator();
   const overlay = document.getElementById("chatStateOverlay"); if(overlay) { overlay.style.display = "none"; overlay.innerHTML = ""; }
-  const groupData = allGroups.find(g => g.id === groupId); const avatarToUse = groupData && groupData.avatarUrl ? groupData.avatarUrl : `https://ui-avatars.com/api/?name=${encodeURIComponent(groupName)}&background=8b5cf6&color=fff`;
-  document.getElementById("chatTargetName").innerText = groupName; document.getElementById("chatTargetAvatar").src = avatarToUse; document.getElementById("chatTargetStatus").innerText = `${memberCount} members`;
-  emptyChatState.style.display = "none"; activeChatState.style.display = "flex"; 
+ const groupData = allGroups.find(g => g.id === groupId); const avatarToUse = groupData && groupData.avatarUrl ? groupData.avatarUrl : `https://ui-avatars.com/api/?name=${encodeURIComponent(groupName)}&background=8b5cf6&color=fff`;
+  document.getElementById("chatTargetName").innerText = groupName; document.getElementById("chatTargetAvatar").src = avatarToUse; 
+  document.getElementById("chatTargetStatus").style.display = ""; document.getElementById("chatTargetStatus").innerText = `${memberCount} members`;
+  emptyChatState.style.display = "none"; activeChatState.style.display = "flex";
   _lockViewportSuppressed = true;
   setTimeout(() => { _lockViewportSuppressed = false; }, 350);
   if(window.innerWidth <= 992) { sidebar.style.display = "none"; history.pushState({ page: "chat" }, ""); }
@@ -1326,6 +1338,7 @@ function listenToTyping() {
         const targetUser = allUsers.find(u => u.id === targetUserUid);
         const statusEl = document.getElementById("chatTargetStatus");
         if (targetUser && canSeePrivacy(targetUser, 'privacyStatus')) {
+                statusEl.style.display = "";
                 if (docSnap.exists() && docSnap.data()[`typing_${targetUserUid}`]) { 
                     statusEl.innerText = "typing..."; 
                     statusEl.classList.remove("online");
@@ -1333,7 +1346,11 @@ function listenToTyping() {
                     if (targetUser.isOnline) { statusEl.innerText = "Online"; statusEl.classList.add("online"); } 
                     else { statusEl.innerText = `Last seen: ${timeAgo(targetUser.lastSeen)}`; statusEl.classList.remove("online"); } 
                 } 
-            } else { statusEl.innerText = "Offline"; statusEl.classList.remove("online"); }
+            } else { 
+                statusEl.innerText = ""; 
+                statusEl.classList.remove("online"); 
+                statusEl.style.display = "none"; 
+            }
     }); 
 }
 msgInput.addEventListener("input", async () => { if(!currentChatId || isCurrentChatGroup) return; await setDoc(doc(db, "chats", currentChatId), { [`typing_${auth.currentUser.uid}`]: true }, { merge: true }); clearTimeout(typingTimeout); typingTimeout = setTimeout(async () => { await setDoc(doc(db, "chats", currentChatId), { [`typing_${auth.currentUser.uid}`]: false }, { merge: true }); }, 1500); });
