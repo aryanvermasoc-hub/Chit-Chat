@@ -39,8 +39,6 @@ let messageLoadSeq = 0;
 
 window.changeSpDifficulty = (val) => { currentSpDifficulty = val; };
 
-let localStream = null; let remoteStream = null; let peerConnection = null;
-const servers = { iceServers: [{ urls: ['stun:stun1.l.google.com:19302', 'stun:stun2.l.google.com:19302'] }] };
 
 // =========================================================
 // CUSTOM UI MODALS (Replace prompts/confirms)
@@ -662,6 +660,7 @@ onAuthStateChanged(auth, async (user) => {
     loadSidebarData();
     startMyProfileListener(user.uid);
     startGlobalMessageNotifier(user.uid); // ← real-time in-app notifications
+    if (window.listenForIncomingCalls) window.listenForIncomingCalls(user.uid);
 
     function startMyProfileListener(uid) {
   if(myProfileUnsubscribe) myProfileUnsubscribe();
@@ -1019,28 +1018,26 @@ function listenToChatStatus(targetName) {
                 if (ghostModeBtn) ghostModeBtn.classList.remove("active"); if (inputWrapper) inputWrapper.classList.remove("ghost-input-active");
                 if (previousGhostState && currentChatStatus === 'accepted') showToast("Ghost Mode Off", "Back to normal chat mode.");
             }
-
-            if (data.status === 'pending') {
-                document.getElementById("chatDoodleBtn").style.display = "none"; if (ghostModeBtn) ghostModeBtn.style.display = "none"; document.getElementById("launchGameMenuBtn").style.display = "none"; document.getElementById("chatSettingsBtn").style.display = "none";
+if (data.status === 'pending') {
+                document.getElementById("chatDoodleBtn").style.display = "none"; if (ghostModeBtn) ghostModeBtn.style.display = "none"; document.getElementById("callMenuBtn").style.display = "none"; document.getElementById("launchGameMenuBtn").style.display = "none"; document.getElementById("chatSettingsBtn").style.display = "none";
                 if(overlay) overlay.style.display = "flex"; if(inputWrapper) inputWrapper.style.display = "none";
                 if (data.initiator === auth.currentUser.uid) { overlay.innerHTML = `<p style="font-size: 14px; margin: 0; color: var(--text-muted);"><i class="fa-solid fa-clock"></i> Request sent to <b>${targetName}</b>. Waiting...</p>`; } 
                 else { overlay.innerHTML = `<p style="font-size: 14px; margin-bottom: 15px;"><strong style="color:var(--primary);">${targetName}</strong> wants to connect.</p><div style="display:flex; gap: 15px; justify-content: center;"><button onclick="acceptChatRequest()" class="primary-btn glow-btn" style="width:auto; padding: 8px 25px; background:#10b981;">Accept</button><button onclick="declineChatRequest()" class="primary-btn" style="width:auto; padding: 8px 25px; background:rgba(255,255,255,0.1); color:var(--text-muted);">Decline</button></div>`; }
             } else if (data.status === 'accepted') { 
-                document.getElementById("chatDoodleBtn").style.display = "block"; if (ghostModeBtn) ghostModeBtn.style.display = "block"; document.getElementById("launchGameMenuBtn").style.display = "block"; document.getElementById("chatSettingsBtn").style.display = "block";
+                document.getElementById("chatDoodleBtn").style.display = "block"; if (ghostModeBtn) ghostModeBtn.style.display = "block"; document.getElementById("callMenuBtn").style.display = "block"; document.getElementById("launchGameMenuBtn").style.display = "block"; document.getElementById("chatSettingsBtn").style.display = "block";
                 if(overlay) overlay.style.display = "none"; if(inputWrapper) inputWrapper.style.display = "flex"; 
             }
         } else {
-            currentChatStatus = 'none'; document.getElementById("chatDoodleBtn").style.display = "none"; if (ghostModeBtn) ghostModeBtn.style.display = "none"; document.getElementById("launchGameMenuBtn").style.display = "none"; document.getElementById("chatSettingsBtn").style.display = "none";
+            currentChatStatus = 'none'; document.getElementById("chatDoodleBtn").style.display = "none"; if (ghostModeBtn) ghostModeBtn.style.display = "none"; document.getElementById("callMenuBtn").style.display = "none"; document.getElementById("launchGameMenuBtn").style.display = "none"; document.getElementById("chatSettingsBtn").style.display = "none";
             if(overlay) overlay.style.display = "flex"; if(inputWrapper) inputWrapper.style.display = "none";
             overlay.innerHTML = `<p style="font-size: 14px; margin-bottom: 15px;">You are not connected with <b>${targetName}</b>.</p><button onclick="sendChatRequest()" class="primary-btn glow-btn" style="width:auto; padding: 8px 25px;"><i class="fa-solid fa-user-plus"></i> Send Request</button>`;
         }
     });
 }
-
 window.openChat = async (targetUid, targetName, targetAvatar, isTargetOnline, targetLastSeen, targetPublicKey) => {
   isCurrentChatGroup = false; currentChatId = auth.currentUser.uid < targetUid ? `${auth.currentUser.uid}_${targetUid}` : `${targetUid}_${auth.currentUser.uid}`; targetUserUid = targetUid;
-  document.getElementById("chatSettingsBtn").style.display = "none"; document.getElementById("chatDoodleBtn").style.display = "none"; if (ghostModeBtn) ghostModeBtn.style.display = "none"; document.getElementById("launchGameMenuBtn").style.display = "none"; 
- chatBox.style.transition = "none"; chatBox.style.visibility = "hidden"; chatBox.style.opacity = "0"; chatBox.innerHTML = ""; if(replyingToMsg) document.getElementById("cancelReplyBtn").click(); if (document.getElementById("privateDoodleArea")) document.getElementById("privateDoodleArea").style.display = "none";
+  document.getElementById("chatSettingsBtn").style.display = "none"; document.getElementById("chatDoodleBtn").style.display = "none"; if (ghostModeBtn) ghostModeBtn.style.display = "none"; document.getElementById("callMenuBtn").style.display = "none"; document.getElementById("launchGameMenuBtn").style.display = "none";
+chatBox.style.transition = "none"; chatBox.style.visibility = "hidden"; chatBox.style.opacity = "0"; chatBox.innerHTML = ""; if(replyingToMsg) document.getElementById("cancelReplyBtn").click(); if (document.getElementById("privateDoodleArea")) document.getElementById("privateDoodleArea").style.display = "none";
  showChatLoadingIndicator();
  const overlay = document.getElementById("chatStateOverlay"); if(overlay) { overlay.style.display = "none"; overlay.innerHTML = ""; }
   // Instantly apply cached wallpaper if it exists to prevent delay
@@ -1089,8 +1086,8 @@ const targetUser = allUsers.find(u => u.id === targetUid);
 }
 window.openGroupChat = (groupId, groupName, memberCount) => {
   isCurrentChatGroup = true; currentChatId = groupId; targetUserUid = null; activeSharedKey = null; // No E2EE for groups in this version
-  document.getElementById("launchGameMenuBtn").style.display = "none"; document.getElementById("chatSettingsBtn").style.display = "none"; document.getElementById("chatDoodleBtn").style.display = "none"; if (ghostModeBtn) ghostModeBtn.style.display = "none"; 
-  chatBox.style.transition = "none"; chatBox.style.visibility = "hidden"; chatBox.style.opacity = "0"; chatBox.innerHTML = ""; document.getElementById("chatWallpaper").style.backgroundImage = "none"; if(replyingToMsg) document.getElementById("cancelReplyBtn").click(); if(pDoodleUnsubscribe) { pDoodleUnsubscribe(); pDoodleUnsubscribe = null; }
+  document.getElementById("launchGameMenuBtn").style.display = "none"; document.getElementById("chatSettingsBtn").style.display = "none"; document.getElementById("chatDoodleBtn").style.display = "none"; if (ghostModeBtn) ghostModeBtn.style.display = "none"; document.getElementById("callMenuBtn").style.display = "none";
+chatBox.style.transition = "none"; chatBox.style.visibility = "hidden"; chatBox.style.opacity = "0"; chatBox.innerHTML = ""; document.getElementById("chatWallpaper").style.backgroundImage = "none"; if(replyingToMsg) document.getElementById("cancelReplyBtn").click(); if(pDoodleUnsubscribe) { pDoodleUnsubscribe(); pDoodleUnsubscribe = null; }
   showChatLoadingIndicator();
   const overlay = document.getElementById("chatStateOverlay"); if(overlay) { overlay.style.display = "none"; overlay.innerHTML = ""; }
  const groupData = allGroups.find(g => g.id === groupId); const avatarToUse = groupData && groupData.avatarUrl ? groupData.avatarUrl : `https://ui-avatars.com/api/?name=${encodeURIComponent(groupName)}&background=8b5cf6&color=fff`;
@@ -1331,30 +1328,61 @@ window.sendChatRequest = async () => { if (!currentChatId || !targetUserUid) ret
 window.acceptChatRequest = async () => { if (!currentChatId) return; try { await updateDoc(doc(db, "chats", currentChatId), { status: 'accepted' }); showToast("Connected", "You can now chat!"); } catch (error) { showToast("Error", "Failed to accept request."); } };
 window.declineChatRequest = async () => { if (!currentChatId) return; try { await deleteDoc(doc(db, "chats", currentChatId)); showToast("Declined", "Request removed."); if (window.innerWidth <= 992) document.getElementById("backToUsersBtn").click(); } catch (error) { showToast("Error", "Failed to decline request."); } };
 let typingUnsubscribe = null;
+let presenceUnsubscribe = null;
+
 function listenToTyping() { 
     if (typingUnsubscribe) { typingUnsubscribe(); typingUnsubscribe = null; }
-    if (isCurrentChatGroup) return; 
-    typingUnsubscribe = onSnapshot(doc(db, "chats", currentChatId), (docSnap) => { 
-        const targetUser = allUsers.find(u => u.id === targetUserUid);
-        const statusEl = document.getElementById("chatTargetStatus");
-        if (targetUser && canSeePrivacy(targetUser, 'privacyStatus')) {
-                statusEl.style.display = "";
-                if (docSnap.exists() && docSnap.data()[`typing_${targetUserUid}`]) { 
-                    statusEl.innerText = "typing..."; 
-                    statusEl.classList.remove("online");
-                } else { 
-                    if (targetUser.isOnline) { statusEl.innerText = "Online"; statusEl.classList.add("online"); } 
-                    else { statusEl.innerText = `Last seen: ${timeAgo(targetUser.lastSeen)}`; statusEl.classList.remove("online"); } 
-                } 
-            } else { 
-                statusEl.innerText = ""; 
-                statusEl.classList.remove("online"); 
-                statusEl.style.display = "none"; 
-            }
-    }); 
-}
-msgInput.addEventListener("input", async () => { if(!currentChatId || isCurrentChatGroup) return; await setDoc(doc(db, "chats", currentChatId), { [`typing_${auth.currentUser.uid}`]: true }, { merge: true }); clearTimeout(typingTimeout); typingTimeout = setTimeout(async () => { await setDoc(doc(db, "chats", currentChatId), { [`typing_${auth.currentUser.uid}`]: false }, { merge: true }); }, 1500); });
+    if (presenceUnsubscribe) { presenceUnsubscribe(); presenceUnsubscribe = null; }
+    if (isCurrentChatGroup || !targetUserUid) return; 
 
+    const statusEl = document.getElementById("chatTargetStatus");
+    let currentlyTyping = false;
+    let liveTargetUser = allUsers.find(u => u.id === targetUserUid) || {};
+
+    const updateHeaderStatus = () => {
+        if (!liveTargetUser || !liveTargetUser.id) return;
+        const canSeeStatus = canSeePrivacy(liveTargetUser, 'privacyStatus');
+        const canSeeTyping = canSeePrivacy(liveTargetUser, 'privacyTyping');
+
+        if (currentlyTyping && canSeeTyping) {
+            statusEl.style.display = "";
+            statusEl.innerText = "typing..."; 
+            statusEl.classList.remove("online");
+        } else if (canSeeStatus) {
+            statusEl.style.display = "";
+            if (liveTargetUser.isOnline) { statusEl.innerText = "Online"; statusEl.classList.add("online"); } 
+            else { statusEl.innerText = `Last seen: ${timeAgo(liveTargetUser.lastSeen)}`; statusEl.classList.remove("online"); } 
+        } else { 
+            statusEl.innerText = ""; 
+            statusEl.classList.remove("online"); 
+            statusEl.style.display = "none"; 
+        }
+    };
+
+    typingUnsubscribe = onSnapshot(doc(db, "chats", currentChatId), (docSnap) => { 
+        currentlyTyping = docSnap.exists() && docSnap.data()[`typing_${targetUserUid}`];
+        updateHeaderStatus();
+    }); 
+
+    presenceUnsubscribe = onSnapshot(doc(db, "users", targetUserUid), (userSnap) => {
+        if (userSnap.exists()) {
+            liveTargetUser = { ...liveTargetUser, ...userSnap.data(), id: targetUserUid };
+            updateHeaderStatus();
+        }
+    });
+}
+
+msgInput.addEventListener("input", async () => { 
+    if(!currentChatId || isCurrentChatGroup) return; 
+    if (myUserData) {
+        const mySetting = myUserData.privacyTyping || 'everyone';
+        if (mySetting === 'none') return;
+        if (mySetting === 'friends' && !(myUserData.chatMeta && myUserData.chatMeta[targetUserUid])) return;
+    }
+    await setDoc(doc(db, "chats", currentChatId), { [`typing_${auth.currentUser.uid}`]: true }, { merge: true }); 
+    clearTimeout(typingTimeout); 
+    typingTimeout = setTimeout(async () => { await setDoc(doc(db, "chats", currentChatId), { [`typing_${auth.currentUser.uid}`]: false }, { merge: true }); }, 1500); 
+});
 let isSendingMsg = false;
 async function sendMessage() {
   if (isSendingMsg) return;
@@ -1466,8 +1494,8 @@ fileInput.addEventListener("change", async (e) => {
     } 
 });
 document.querySelector(".chat-header").addEventListener("click", (e) => {
-    if (e.target.closest('.mobile-back-btn') || e.target.closest('#launchGameMenuBtn') || e.target.closest('#chatSettingsBtn') || e.target.closest('#chatDoodleBtn') || e.target.closest('#ghostModeBtn')) return;
-    if (isCurrentChatGroup && currentChatId) {
+    if (e.target.closest('.mobile-back-btn') || e.target.closest('#launchGameMenuBtn') || e.target.closest('#chatSettingsBtn') || e.target.closest('#chatDoodleBtn') || e.target.closest('#ghostModeBtn') || e.target.closest('#callMenuBtn')) return;
+if (isCurrentChatGroup && currentChatId) {
         const group = allGroups.find(g => g.id === currentChatId); if(group) {
             document.getElementById("groupSettingsName").innerText = group.name; document.getElementById("groupMemberCount").innerText = group.members.length; document.getElementById("groupSettingsAvatar").src = group.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(group.name)}&background=8b5cf6&color=fff`;
             const membersListDiv = document.getElementById("groupMembersList"); membersListDiv.innerHTML = "<h4 style='font-size:12px; color:var(--text-muted); margin-bottom:8px;'>Group Members:</h4>"; const isAdmin = group.createdBy === auth.currentUser.uid;
@@ -2225,6 +2253,7 @@ if (appSettingsBtnEl) {
             document.getElementById("settingsUsername").value = myUserData.username || "";
             document.getElementById("settingsBio").value = myUserData.bio || "";
             document.getElementById("settingsStatusPrivacy").value = myUserData.privacyStatus || "everyone";
+            if (document.getElementById("settingsTypingPrivacy")) document.getElementById("settingsTypingPrivacy").value = myUserData.privacyTyping || "everyone";
             document.getElementById("settingsPfpPrivacy").value = myUserData.privacyPfp || "everyone";
             document.getElementById("settingsGroupInvitePrivacy").value = myUserData.privacyGroupInvite || "everyone";
         }
@@ -2245,11 +2274,12 @@ if (settingsSaveProfileBtnEl) {
                 const usernameSnapshot = await getDocs(usernameQuery);
                 if (!usernameSnapshot.empty) { alert("This username is already taken by another user."); btn.innerHTML = 'Save Profile'; return; }
             }
-            await updateDoc(doc(db, "users", auth.currentUser.uid), { 
+           await updateDoc(doc(db, "users", auth.currentUser.uid), { 
                 fullName: newName, 
                 username: newUsername, 
                 bio: newBio, 
                 privacyStatus: document.getElementById("settingsStatusPrivacy").value, 
+                privacyTyping: document.getElementById("settingsTypingPrivacy") ? document.getElementById("settingsTypingPrivacy").value : "everyone",
                 privacyPfp: document.getElementById("settingsPfpPrivacy").value,
                 privacyGroupInvite: document.getElementById("settingsGroupInvitePrivacy").value 
             });
@@ -2568,4 +2598,338 @@ document.addEventListener("visibilitychange", () => {
             updateDoc(doc(db, "users", auth.currentUser.uid), { isOnline: false, lastSeen: Date.now() }).catch(() => {});
         }
     }
+});
+// ==========================================
+// WEBRTC AUDIO/VIDEO CALLING SYSTEM
+// ==========================================
+let currentCallDoc = null;
+let callUnsubscribe = null;
+let callTimerInterval = null;
+let isAudioOnlyCall = false;
+let currentPingMsg = null;
+
+let peerConnection = null;
+let localStream = null;
+let remoteStream = null;
+const servers = {
+    iceServers: [
+        { urls: ['stun:stun1.l.google.com:19302', 'stun:stun2.l.google.com:19302'] }
+    ]
+};
+
+let ringtoneAudio = new Audio('https://actions.google.com/sounds/v1/alarms/phone_ringing.ogg');
+ringtoneAudio.loop = true;
+let vibrateInterval = null;
+
+window.stopRinging = () => {
+    ringtoneAudio.pause();
+    ringtoneAudio.currentTime = 0;
+    clearInterval(vibrateInterval);
+    if (navigator.vibrate) navigator.vibrate(0);
+    clearCallNotification();
+};
+
+function clearCallNotification() {
+    if (typeof Notification !== 'undefined') {
+        navigator.serviceWorker.ready.then(reg => {
+            reg.getNotifications({tag: 'incoming_call'}).then(notifications => {
+                notifications.forEach(n => n.close());
+            });
+        });
+    }
+}
+
+window.listenForIncomingCalls = (uid) => {
+    const callsQuery = query(collection(db, "users", uid, "calls"), where("status", "==", "ringing"));
+    onSnapshot(callsQuery, (snapshot) => {
+        snapshot.docChanges().forEach((change) => {
+            if (change.type === "added" || change.type === "modified") {
+                const callData = change.doc.data();
+                const callId = change.doc.id;
+                
+                if (callData.status !== "ringing") return;
+
+                if (document.getElementById("activeCallOverlay").style.display === "flex") {
+                    updateDoc(doc(db, "users", uid, "calls", callId), { status: "declined" });
+                    return;
+                }
+
+                currentCallDoc = doc(db, "users", uid, "calls", callId);
+                isAudioOnlyCall = callData.audioOnly;
+                
+                document.getElementById("callerName").innerText = callData.callerName;
+                document.getElementById("callerAvatar").src = callData.callerAvatar;
+                document.getElementById("callTypeText").innerText = callData.audioOnly ? "Chit-Chat Voice Call" : "Chit-Chat Video Call";
+                
+                document.getElementById("incomingCallModal").style.display = "flex";
+                
+                ringtoneAudio.play().catch(e => console.log("Audio autoplay blocked:", e));
+                if (navigator.vibrate) {
+                    navigator.vibrate([500, 500]);
+                    vibrateInterval = setInterval(() => navigator.vibrate([500, 500]), 1500);
+                }
+
+                if (typeof Notification !== 'undefined' && Notification.permission === 'granted' && document.visibilityState !== "visible") {
+                    navigator.serviceWorker.ready.then(reg => reg.showNotification(`📞 ${callData.callerName} is calling...`, { 
+                        body: callData.audioOnly ? "Tap to view incoming voice call" : "Tap to view incoming video call", 
+                        icon: callData.callerAvatar || "./icon-192.png", 
+                        vibrate: [500, 500, 500, 500, 500], 
+                        tag: "incoming_call",
+                        renotify: true, 
+                        requireInteraction: true 
+                    }));
+                }
+
+                const ringUnsub = onSnapshot(currentCallDoc, (snap) => {
+                    const data = snap.data();
+                    if (!data || data.status === "ended" || data.status === "declined" || data.status === "answered") {
+                        document.getElementById("incomingCallModal").style.display = "none";
+                        window.stopRinging();
+                        if (data.status !== "answered" && data.pingChatId && data.pingMsgId) {
+                            deleteDoc(doc(db, "chats", data.pingChatId, "messages", data.pingMsgId)).catch(()=>{});
+                        }
+                        currentCallDoc = null;
+                        ringUnsub();
+                    }
+                });
+
+                document.getElementById("acceptCallBtn").onclick = () => { 
+                    ringUnsub(); 
+                    window.stopRinging();
+                    if (callData.pingChatId && callData.pingMsgId) deleteDoc(doc(db, "chats", callData.pingChatId, "messages", callData.pingMsgId)).catch(()=>{});
+                    acceptCall(callData); 
+                };
+                document.getElementById("declineCallBtn").onclick = () => { 
+                    ringUnsub(); 
+                    window.stopRinging();
+                    if (callData.pingChatId && callData.pingMsgId) deleteDoc(doc(db, "chats", callData.pingChatId, "messages", callData.pingMsgId)).catch(()=>{});
+                    updateDoc(currentCallDoc, { status: "declined" }); 
+                    document.getElementById("incomingCallModal").style.display = "none"; 
+                    currentCallDoc = null;
+                };
+            }
+        });
+    });
+};
+
+async function getMedia(audioOnly) {
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: !audioOnly, audio: true });
+        localStream = stream;
+        document.getElementById("localVideo").srcObject = stream;
+        
+        if (audioOnly) {
+            document.getElementById("remoteVideo").style.display = "none";
+            document.getElementById("localVideo").style.display = "none";
+            document.getElementById("audioOnlyAvatar").style.display = "block";
+            document.getElementById("toggleVideoBtn").style.display = "none";
+        } else {
+            document.getElementById("remoteVideo").style.display = "block";
+            document.getElementById("localVideo").style.display = "block";
+            document.getElementById("audioOnlyAvatar").style.display = "none";
+            document.getElementById("toggleVideoBtn").style.display = "block";
+        }
+    } catch(err) {
+        showToast("Hardware Error", "Camera or Mic permissions denied.");
+        throw err;
+    }
+}
+
+window.startCall = async (audioOnly) => {
+    if(!currentChatId || isCurrentChatGroup) return;
+    isAudioOnlyCall = audioOnly;
+    
+    document.getElementById("activeCallAvatar").src = document.getElementById("chatTargetAvatar").src;
+    document.getElementById("activeCallName").innerText = document.getElementById("chatTargetName").innerText;
+
+    await getMedia(audioOnly);
+    document.getElementById("activeCallOverlay").style.display = "flex";
+    document.getElementById("callDuration").innerText = "Ringing...";
+    
+    currentCallDoc = doc(collection(db, "users", targetUserUid, "calls"));
+    
+    peerConnection = new RTCPeerConnection(servers);
+    remoteStream = new MediaStream();
+    document.getElementById("remoteVideo").srcObject = remoteStream;
+    
+    localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
+    peerConnection.ontrack = (event) => event.streams[0].getTracks().forEach(track => remoteStream.addTrack(track));
+    
+    const offerCandidates = collection(currentCallDoc, "offerCandidates");
+    const answerCandidates = collection(currentCallDoc, "answerCandidates");
+    
+    peerConnection.onicecandidate = (event) => {
+        if (event.candidate) addDoc(offerCandidates, event.candidate.toJSON());
+    };
+    
+    const offerDescription = await peerConnection.createOffer();
+    await peerConnection.setLocalDescription(offerDescription);
+    
+    let pingMsgId = null;
+    try {
+        const pingRef = await addDoc(collection(db, "chats", currentChatId, "messages"), {
+            text: audioOnly ? "📞 Incoming Voice Call..." : "📹 Incoming Video Call...",
+            sender: auth.currentUser.uid,
+            senderName: document.getElementById("myName").innerText,
+            time: Date.now(),
+            isDeleted: false,
+            isCallLog: true
+        });
+        pingMsgId = pingRef.id;
+        currentPingMsg = { chatId: currentChatId, msgId: pingMsgId };
+        
+        await setDoc(doc(db, "users", targetUserUid), {
+            chatMeta: { [auth.currentUser.uid]: { time: Date.now(), text: audioOnly ? "📞 Voice Call" : "📹 Video Call", unread: true, unreadCount: increment(1) } }
+        }, { merge: true });
+    } catch(e) { console.error("Failed to send wakeup ping", e); }
+
+    await setDoc(currentCallDoc, {
+        offer: { type: offerDescription.type, sdp: offerDescription.sdp },
+        callerId: auth.currentUser.uid,
+        callerName: document.getElementById("myName").innerText,
+        callerAvatar: document.getElementById("myAvatar").src,
+        audioOnly: audioOnly,
+        status: "ringing",
+        timestamp: Date.now(),
+        pingChatId: currentChatId || null,
+        pingMsgId: pingMsgId || null
+    });
+    
+    callUnsubscribe = onSnapshot(currentCallDoc, (snapshot) => {
+        const data = snapshot.data();
+        if (!data || data.status === "ended" || data.status === "declined") {
+            window.hangUpCall();
+            if(data && data.status === "declined") showToast("Call Declined", "The user is busy.");
+            return;
+        }
+        if (!peerConnection.currentRemoteDescription && data.answer) {
+            const answerDescription = new RTCSessionDescription(data.answer);
+            peerConnection.setRemoteDescription(answerDescription);
+            startCallTimer();
+        }
+    });
+    
+    onSnapshot(answerCandidates, (snapshot) => {
+        snapshot.docChanges().forEach((change) => {
+            if (change.type === "added") {
+                const candidate = new RTCIceCandidate(change.doc.data());
+                peerConnection.addIceCandidate(candidate);
+            }
+        });
+    });
+};
+
+async function acceptCall(callData) {
+    document.getElementById("incomingCallModal").style.display = "none";
+    
+    document.getElementById("activeCallAvatar").src = callData.callerAvatar;
+    document.getElementById("activeCallName").innerText = callData.callerName;
+
+    await getMedia(callData.audioOnly);
+    document.getElementById("activeCallOverlay").style.display = "flex";
+    document.getElementById("callDuration").innerText = "Connecting...";
+    
+    peerConnection = new RTCPeerConnection(servers);
+    remoteStream = new MediaStream();
+    document.getElementById("remoteVideo").srcObject = remoteStream;
+    
+    localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
+    peerConnection.ontrack = (event) => event.streams[0].getTracks().forEach(track => remoteStream.addTrack(track));
+    
+    const offerCandidates = collection(currentCallDoc, "offerCandidates");
+    const answerCandidates = collection(currentCallDoc, "answerCandidates");
+    
+    peerConnection.onicecandidate = (event) => {
+        if (event.candidate) addDoc(answerCandidates, event.candidate.toJSON());
+    };
+    
+    const offerDescription = new RTCSessionDescription(callData.offer);
+    await peerConnection.setRemoteDescription(offerDescription);
+    
+    const answerDescription = await peerConnection.createAnswer();
+    await peerConnection.setLocalDescription(answerDescription);
+    
+    await updateDoc(currentCallDoc, { answer: { type: answerDescription.type, sdp: answerDescription.sdp }, status: "answered" });
+    
+    onSnapshot(offerCandidates, (snapshot) => {
+        snapshot.docChanges().forEach((change) => {
+            if (change.type === "added") {
+                const candidate = new RTCIceCandidate(change.doc.data());
+                peerConnection.addIceCandidate(candidate);
+            }
+        });
+    });
+
+    startCallTimer();
+    
+    callUnsubscribe = onSnapshot(currentCallDoc, (snapshot) => {
+        const data = snapshot.data();
+        if (!data || data.status === "ended") {
+            window.hangUpCall();
+        }
+    });
+}
+
+window.hangUpCall = () => {
+    window.stopRinging();
+    if (currentPingMsg) {
+        deleteDoc(doc(db, "chats", currentPingMsg.chatId, "messages", currentPingMsg.msgId)).catch(()=>{});
+        currentPingMsg = null;
+    }
+
+    if (currentCallDoc) { updateDoc(currentCallDoc, { status: "ended" }).catch(()=>{}); }
+    if (peerConnection) { peerConnection.close(); peerConnection = null; }
+    if (localStream) { localStream.getTracks().forEach(track => track.stop()); localStream = null; }
+    remoteStream = null;
+    
+    document.getElementById("remoteVideo").srcObject = null;
+    document.getElementById("localVideo").srcObject = null;
+    
+    if (callUnsubscribe) { callUnsubscribe(); callUnsubscribe = null; }
+    
+    document.getElementById("activeCallOverlay").style.display = "none";
+    document.getElementById("incomingCallModal").style.display = "none";
+    currentCallDoc = null;
+    
+    clearInterval(callTimerInterval);
+    document.getElementById("callDuration").innerText = "00:00";
+};
+
+function startCallTimer() {
+    let seconds = 0;
+    document.getElementById("callDuration").innerText = "00:00";
+    clearInterval(callTimerInterval);
+    callTimerInterval = setInterval(() => {
+        seconds++;
+        const m = String(Math.floor(seconds / 60)).padStart(2, '0');
+        const s = String(seconds % 60).padStart(2, '0');
+        document.getElementById("callDuration").innerText = `${m}:${s}`;
+    }, 1000);
+}
+
+let isMicOn = true;
+let isCamOn = true;
+
+document.getElementById("endCallBtn").addEventListener("click", window.hangUpCall);
+
+document.getElementById("toggleAudioBtn").addEventListener("click", () => {
+    if(localStream) {
+        isMicOn = !isMicOn;
+        localStream.getAudioTracks()[0].enabled = isMicOn;
+        document.getElementById("toggleAudioBtn").style.background = isMicOn ? "rgba(255,255,255,0.15)" : "#ef4444";
+        document.getElementById("toggleAudioBtn").innerHTML = isMicOn ? '<i class="fa-solid fa-microphone"></i>' : '<i class="fa-solid fa-microphone-slash"></i>';
+    }
+});
+
+document.getElementById("toggleVideoBtn").addEventListener("click", () => {
+    if(localStream && !isAudioOnlyCall) {
+        isCamOn = !isCamOn;
+        localStream.getVideoTracks()[0].enabled = isCamOn;
+        document.getElementById("toggleVideoBtn").style.background = isCamOn ? "rgba(255,255,255,0.15)" : "#ef4444";
+        document.getElementById("toggleVideoBtn").innerHTML = isCamOn ? '<i class="fa-solid fa-video"></i>' : '<i class="fa-solid fa-video-slash"></i>';
+    }
+});
+
+document.getElementById("callMenuBtn").addEventListener("click", () => {
+    document.getElementById("callSelectionModal").style.display = "flex";
 });
