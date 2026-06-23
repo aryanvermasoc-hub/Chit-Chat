@@ -42,10 +42,19 @@
 </head>
 <body>
   
-  <div id="toastContainer" class="toast-container"></div>
+ <div id="toastContainer" class="toast-container"></div>
   <div class="ambient-bg"><div class="blob blob-1"></div><div class="blob blob-2"></div></div>
 
-  <div id="authScreen" class="screen active">
+  <div id="splashScreen" class="screen active" style="display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 9999; background: var(--bg-base);">
+      <div class="splash-logo-container">
+          <i class="fa-regular fa-comments"></i>
+      </div>
+      <h2 class="splash-title">Chit-Chat</h2>
+     <p class="splash-subtitle">Chat • Clash • Conquer</p>
+      <div class="splash-loader"></div>
+  </div>
+
+  <div id="authScreen" class="screen" style="display: none;">
     <div class="auth-container">
       <div class="glass-card auth-card">
        <div class="auth-header" style="display: flex; flex-direction: column; align-items: center; text-align: center;">

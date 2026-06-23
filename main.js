@@ -683,10 +683,14 @@ document.getElementById("settingsLogoutBtn").addEventListener("click", async () 
 });
 
 onAuthStateChanged(auth, async (user) => {
+  const splash = document.getElementById("splashScreen");
+  if (splash) splash.style.display = "none";
+
   if (user) {
     authScreen.style.display = "none"; appScreen.style.display = "flex"; history.pushState({ page: "home" }, ""); 
-    await updateDoc(doc(db, "users", user.uid), { isOnline: true }); showToast("Welcome Back!", "You are securely connected.");
-    window.addEventListener("beforeunload", () => updateDoc(doc(db, "users", user.uid), { isOnline: false, lastSeen: Date.now() }));
+    await updateDoc(doc(db, "users", user.uid), { isOnline: true }); 
+    if (!sessionStorage.getItem('welcomed')) { showToast("Welcome Back!", "You are securely connected."); sessionStorage.setItem('welcomed', 'true'); }
+window.addEventListener("beforeunload", () => updateDoc(doc(db, "users", user.uid), { isOnline: false, lastSeen: Date.now() }));
     
   // --- NOTIFICATION POP-UP CODE ---
     if (typeof Notification !== 'undefined' && 'serviceWorker' in navigator) {
@@ -2415,6 +2419,7 @@ document.querySelectorAll('.modal-overlay').forEach(modal => {
 document.getElementById('toastContainer').style.zIndex = "9999";
   } else {
     // User is signed out — show auth screen
+    if (splash) splash.style.display = "none";
     authScreen.style.display = "flex";
     appScreen.style.display = "none";
     if(myProfileUnsubscribe) { myProfileUnsubscribe(); myProfileUnsubscribe = null; }
