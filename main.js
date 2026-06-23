@@ -1749,18 +1749,70 @@ let occupancy = {};
 window.rollLudoDice = async (gameId, myRole) => { const diceBtn = document.getElementById("ludoDiceBtn"); diceBtn.classList.add("dice-rolling"); diceBtn.classList.remove("pulse"); diceBtn.disabled = true; setTimeout(async () => { const roll = Math.floor(Math.random() * 6) + 1; await updateDoc(doc(db, "games", gameId), { diceValue: roll }); const docSnap = await getDoc(doc(db, "games", gameId)); const data = docSnap.data(); let canMove = false; data.ludoTokens[myRole].forEach(pos => { if (pos === -1 && roll === 6) canMove = true; if (pos !== -1) { if (myRole === 'p1' && pos + roll <= 57) canMove = true; if (myRole === 'p2') { let absoluteProgress = pos >= 26 ? (pos - 26) : (pos + 26); if (absoluteProgress + roll <= 57) canMove = true; } } }); if (!canMove) { setTimeout(async () => { const nextTurn = data.player1 === auth.currentUser.uid ? data.player2 : data.player1; await updateDoc(doc(db, "games", gameId), { turn: nextTurn, diceValue: null }); }, 1000); } }, 500); };
 window.moveLudoToken = async (gameId, data, tokenIndex, role) => { let tokens = { ...data.ludoTokens }; let roll = data.diceValue; let currPos = tokens[role][tokenIndex]; let newPos = currPos; if (currPos === -1) { if (roll !== 6) return; newPos = role === 'p1' ? 0 : 26; } else { if (role === 'p1') { newPos = currPos + roll; if (newPos > 51 && currPos <= 51) newPos = 51 + (newPos - 51); if (newPos > 57) return; } else { newPos = currPos + roll; if (currPos <= 24 && newPos >= 25) { newPos = 56 + (newPos - 24); } else if (newPos > 51 && currPos > 24 && currPos <= 51) { newPos = newPos - 52; } if (newPos > 62) return; } } tokens[role][tokenIndex] = newPos; const safeZones = [0, 8, 13, 21, 26, 34, 39, 47]; let hasKilled = false; let oppRole = role === 'p1' ? 'p2' : 'p1'; if (!safeZones.includes(newPos) && newPos <= 51) { tokens[oppRole].forEach((oppPos, idx) => { if (oppPos === newPos) { tokens[oppRole][idx] = -1; hasKilled = true; } }); } let hasWon = false; if (role === 'p1' && tokens.p1.every(p => p === 57)) hasWon = true; if (role === 'p2' && tokens.p2.every(p => p === 62)) hasWon = true; let nextTurn = data.turn; let nextDice = null; if (roll !== 6 && !hasKilled && !hasWon) { nextTurn = data.player1 === auth.currentUser.uid ? data.player2 : data.player1; } await updateDoc(doc(db, "games", gameId), { ludoTokens: tokens, turn: nextTurn, diceValue: nextDice, winner: hasWon ? auth.currentUser.uid : null }); };
 window.resetLudo = async (gameId) => { const docSnap = await getDoc(doc(db, "games", gameId)); await updateDoc(doc(db, "games", gameId), { ludoTokens: { p1: [-1, -1, -1, -1], p2: [-1, -1, -1, -1] }, winner: null, turn: docSnap.data().player1, diceValue: null }); };
-window.startSinglePlayer = (gameType) => { singlePlayerMode = true; currentGameId = null; if (window.innerWidth <= 992) sidebar.style.display = "none"; activeGameArea.style.display = "flex"; if (gameType === 'tictactoe') { spTttReset(); } else if (gameType === 'rps') { renderSinglePlayerRPS(); } else if (gameType === 'jetfighter' || gameType === 'carracing' || gameType === 'flappybird') { renderSinglePlayerAction(gameType); } else if (gameType === 'ludo') { spLudoReset(); } };
+window.startSinglePlayer = (gameType) => { singlePlayerMode = true; currentGameId = null; if (window.innerWidth <= 992) sidebar.style.display = "none"; activeGameArea.style.display = "flex"; if (gameType === 'tictactoe') { spTttReset(); } else if (gameType === 'rps') { renderSinglePlayerRPS(); } else if (gameType === 'jetfighter' || gameType === 'carracing' || gameType === 'flappybird') { renderSinglePlayerAction(gameType); } else if (gameType === 'ludo') { showSpLudoColorSelection(); } };
 
+let spLudoUserRole = 'p1';
 let spLudoTokens = { p1: [-1, -1, -1, -1], p2: [-1, -1, -1, -1] }; let spLudoTurn = 'p1'; let spLudoDice = null; let spLudoActive = true; let spLudoWinner = null; let isComputerThinking = false;
 function getSpLudoProgress(player, pos) { if (pos === -1) return -1; if (player === 'p1') { if (pos >= 52) return 51 + (pos - 51); return pos; } else { if (pos >= 57) return 51 + (pos - 56); return (pos - 26 + 52) % 52; } }
 function isSpLudoMoveValid(player, tokenIndex, dice) { const pos = spLudoTokens[player][tokenIndex]; const winPos = player === 'p1' ? 57 : 62; if (pos === winPos) return false; if (pos === -1) return dice === 6; const progress = getSpLudoProgress(player, pos); return progress + dice <= 57; }
-window.spLudoReset = () => { spLudoTokens = { p1: [-1, -1, -1, -1], p2: [-1, -1, -1, -1] }; spLudoTurn = 'p1'; spLudoDice = null; spLudoActive = true; spLudoWinner = null; isComputerThinking = false; renderSinglePlayerLudo(); };
+
+window.showSpLudoColorSelection = () => {
+    document.getElementById("activeGameTitle").innerText = "Ludo Arena (Solo)";
+    let html = `
+        <div class="game-turn-indicator" style="margin-bottom: 20px;">Choose your color</div>
+        <div style="display: flex; gap: 20px; justify-content: center; flex-wrap: wrap;">
+            <div onclick="spLudoUserRole = 'p1'; spLudoReset()" style="cursor:pointer; display:flex; flex-direction:column; align-items:center; gap:10px; background:rgba(239, 68, 68, 0.1); border:2px solid #ef4444; padding:20px; border-radius:12px; transition:0.3s; min-width: 120px;" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">
+                <div class="ludo-base red-base" style="position:relative; width:60px; height:60px; left:0; top:0; border-radius:8px;"><div class="base-inner" style="width:30px; height:30px; border-radius:4px; margin:13px;"></div></div>
+                <span style="color:white; font-weight:bold;">Play as Red</span>
+                <span style="color:var(--text-muted); font-size:11px;">Plays First</span>
+            </div>
+            <div onclick="spLudoUserRole = 'p2'; spLudoReset()" style="cursor:pointer; display:flex; flex-direction:column; align-items:center; gap:10px; background:rgba(59, 130, 246, 0.1); border:2px solid #3b82f6; padding:20px; border-radius:12px; transition:0.3s; min-width: 120px;" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">
+                <div class="ludo-base blue-base" style="position:relative; width:60px; height:60px; left:0; top:0; border-radius:8px;"><div class="base-inner" style="width:30px; height:30px; border-radius:4px; margin:13px;"></div></div>
+                <span style="color:white; font-weight:bold;">Play as Blue</span>
+                <span style="color:var(--text-muted); font-size:11px;">Plays Second</span>
+            </div>
+        </div>
+    `;
+    gameUIContainer.innerHTML = html;
+};
+
+window.spLudoReset = () => { 
+    spLudoTokens = { p1: [-1, -1, -1, -1], p2: [-1, -1, -1, -1] }; spLudoTurn = 'p1'; spLudoDice = null; spLudoActive = true; spLudoWinner = null; isComputerThinking = false; 
+    renderSinglePlayerLudo(); 
+    if (spLudoTurn !== spLudoUserRole) { setTimeout(triggerComputerLudoTurn, 1000); }
+};
+
 function renderSinglePlayerLudo() {
-    document.getElementById("activeGameTitle").innerText = "Ludo Arena (Solo)"; const isMyTurn = spLudoTurn === 'p1'; const diceIcons = ['🎲', '⚀', '⚁', '⚂', '⚃', '⚄', '⚅']; let currentDice = spLudoDice ? diceIcons[spLudoDice] : '🎲';
-    let statusText = spLudoWinner ? (spLudoWinner === 'p1' ? "🎉 You Won!" : "😞 Computer Won!") : (isMyTurn ? "Your Turn" : "Computer's Turn...");
-    let html = `<div class="ludo-header-info"><div class="ludo-player-badge red-badge ${isMyTurn && !spLudoWinner ? 'active' : ''}">You</div><div class="ludo-vs">VS</div><div class="ludo-player-badge blue-badge ${!isMyTurn && !spLudoWinner ? 'active' : ''}">Computer</div></div><div class="game-turn-indicator" style="color: ${isMyTurn && !spLudoWinner ? '#ef4444' : 'white'}; font-weight:bold; margin-top: 10px;">${statusText}</div><div class="ludo-container"><div class="ludo-board-wrapper" id="ludoBoard"></div><div class="ludo-controls"><button id="ludoDiceBtn" class="dice-btn ${!spLudoDice && isMyTurn ? 'pulse' : ''}" ${!isMyTurn || spLudoWinner || isComputerThinking ? 'disabled' : ''} onclick="spLudoRollDice()">${currentDice}</button></div>${spLudoWinner ? `<button class="primary-btn glow-btn" style="max-width:200px;" onclick="spLudoReset()">Play Again</button>` : ''}</div>`;
-    gameUIContainer.innerHTML = html; const board = document.getElementById("ludoBoard"); board.innerHTML += `<div class="ludo-base red-base"><div class="base-inner"></div></div><div class="ludo-base blue-base"><div class="base-inner"></div></div>`;
-    ludoPath.forEach((pos, i) => { let extraClass = ''; if (i >= 52 && i < 57) extraClass = 'path-red'; if (i >= 57 && i < 62) extraClass = 'path-blue'; const safeZones = [0, 8, 13, 21, 26, 34, 39, 47]; if (safeZones.includes(i)) extraClass += ' safe-zone'; if (i === 0) extraClass += ' start-red'; if (i === 26) extraClass += ' start-blue'; board.innerHTML += `<div class="ludo-cell ${extraClass}" style="left:${pos.x - 10}px; top:${pos.y - 10}px;">${safeZones.includes(i) ? '<i class="fa-solid fa-star" style="font-size:8px; opacity:0.5; color:white;"></i>' : ''}</div>`; });
+    document.getElementById("activeGameTitle").innerText = "Ludo Arena (Solo)"; 
+    const isMyTurn = spLudoTurn === spLudoUserRole; 
+    const compRole = spLudoUserRole === 'p1' ? 'p2' : 'p1';
+    const diceIcons = ['🎲', '⚀', '⚁', '⚂', '⚃', '⚄', '⚅']; let currentDice = spLudoDice ? diceIcons[spLudoDice] : '🎲';
+    let statusText = spLudoWinner ? (spLudoWinner === spLudoUserRole ? "🎉 You Won!" : "😞 Computer Won!") : (isMyTurn ? "Your Turn" : "Computer's Turn...");
+    
+    let html = `
+        <div class="ludo-header-info">
+            <div class="ludo-player-badge red-badge ${spLudoTurn === 'p1' && !spLudoWinner ? 'active' : ''}">${spLudoUserRole === 'p1' ? 'You' : 'Computer'}</div>
+            <div class="ludo-vs">VS</div>
+            <div class="ludo-player-badge blue-badge ${spLudoTurn === 'p2' && !spLudoWinner ? 'active' : ''}">${spLudoUserRole === 'p2' ? 'You' : 'Computer'}</div>
+        </div>
+        <div class="game-turn-indicator" style="color: ${isMyTurn && !spLudoWinner ? (spLudoUserRole==='p1'?'#ef4444':'#3b82f6') : 'white'}; font-weight:bold; margin-top: 10px;">${statusText}</div>
+        <div class="ludo-container">
+            <div class="ludo-board-wrapper" id="ludoBoard" style="transform: ${spLudoUserRole === 'p2' ? 'rotate(180deg)' : 'none'}; transition: transform 0.5s ease;"></div>
+            <div class="ludo-controls">
+                <button id="ludoDiceBtn" class="dice-btn ${!spLudoDice && isMyTurn ? 'pulse' : ''}" ${!isMyTurn || spLudoWinner || isComputerThinking ? 'disabled' : ''} onclick="spLudoRollDice()">${currentDice}</button>
+            </div>
+            ${spLudoWinner ? `<button class="primary-btn glow-btn" style="max-width:200px;" onclick="showSpLudoColorSelection()">Play Again</button>` : ''}
+        </div>`;
+    gameUIContainer.innerHTML = html; const board = document.getElementById("ludoBoard"); 
+    board.innerHTML += `<div class="ludo-base red-base"><div class="base-inner"></div></div><div class="ludo-base blue-base"><div class="base-inner"></div></div>`;
+    
+    ludoPath.forEach((pos, i) => { 
+        let extraClass = ''; if (i >= 52 && i < 57) extraClass = 'path-red'; if (i >= 57 && i < 62) extraClass = 'path-blue'; 
+        const safeZones = [0, 8, 13, 21, 26, 34, 39, 47]; if (safeZones.includes(i)) extraClass += ' safe-zone'; 
+        if (i === 0) extraClass += ' start-red'; if (i === 26) extraClass += ' start-blue'; 
+        board.innerHTML += `<div class="ludo-cell ${extraClass}" style="left:${pos.x - 10}px; top:${pos.y - 10}px;">${safeZones.includes(i) ? '<i class="fa-solid fa-star" style="font-size:8px; opacity:0.5; color:white; transform: ' + (spLudoUserRole === 'p2' ? 'rotate(180deg)' : 'none') + '"></i>' : ''}</div>`; 
+    });
+
     let occupancy = {};
     ['p1', 'p2'].forEach(player => { spLudoTokens[player].forEach((pos, index) => { if (pos !== -1 && pos !== 57 && pos !== 62) { if (!occupancy[pos]) occupancy[pos] = []; occupancy[pos].push({ player, index }); } }); });
 
@@ -1779,86 +1831,115 @@ function renderSinglePlayerLudo() {
                 token.style.width = "12px"; token.style.height = "12px"; token.style.zIndex = 20 + myOccIndex;
             }
 
-            if (isMyTurn && player === 'p1' && spLudoDice && !spLudoWinner && isSpLudoMoveValid('p1', index, spLudoDice)) { 
+            if (isMyTurn && player === spLudoUserRole && spLudoDice && !spLudoWinner && isSpLudoMoveValid(spLudoUserRole, index, spLudoDice)) { 
                 token.classList.add('token-playable'); 
                 token.style.zIndex = "50"; 
                 token.onclick = () => spLudoMoveToken(index); 
             }
-            
             token.style.left = `${finalX}px`; token.style.top = `${finalY}px`; 
             board.appendChild(token);
         });
     });
 }
+
 window.spLudoRollDice = () => {
-    if (spLudoTurn !== 'p1' || spLudoDice) return; const diceBtn = document.getElementById("ludoDiceBtn"); diceBtn.classList.add("dice-rolling"); diceBtn.classList.remove("pulse"); diceBtn.disabled = true;
+    if (spLudoTurn !== spLudoUserRole || spLudoDice) return; 
+    const diceBtn = document.getElementById("ludoDiceBtn"); diceBtn.classList.add("dice-rolling"); diceBtn.classList.remove("pulse"); diceBtn.disabled = true;
     setTimeout(() => {
         const roll = Math.floor(Math.random() * 6) + 1; spLudoDice = roll; let canMove = false;
-        for (let i = 0; i < 4; i++) { if (isSpLudoMoveValid('p1', i, spLudoDice)) { canMove = true; break; } }
-            renderSinglePlayerLudo();
-            if (!canMove) { setTimeout(() => { spLudoTurn = 'p2'; spLudoDice = null; renderSinglePlayerLudo(); setTimeout(triggerComputerLudoTurn, 1000); }, 1000); }
+        for (let i = 0; i < 4; i++) { if (isSpLudoMoveValid(spLudoUserRole, i, spLudoDice)) { canMove = true; break; } }
+        renderSinglePlayerLudo();
+        if (!canMove) { 
+            setTimeout(() => { spLudoTurn = spLudoUserRole === 'p1' ? 'p2' : 'p1'; spLudoDice = null; renderSinglePlayerLudo(); setTimeout(triggerComputerLudoTurn, 1000); }, 1000); 
+        }
     }, 500);
 };
+
 window.spLudoMoveToken = (tokenIndex) => {
-    if (spLudoTurn !== 'p1' || !spLudoDice || !isSpLudoMoveValid('p1', tokenIndex, spLudoDice)) return;
-    let roll = spLudoDice; let currPos = spLudoTokens.p1[tokenIndex]; let newPos;
-    if (currPos === -1) { newPos = 0; } else { let progress = getSpLudoProgress('p1', currPos); let newProgress = progress + roll; if (newProgress === 57) newPos = 57; else if (newProgress > 51) newPos = 52 + (newProgress - 52); else newPos = newProgress; }
-    spLudoTokens.p1[tokenIndex] = newPos;
-    const safeZones = [0, 8, 13, 21, 26, 34, 39, 47]; let hasKilled = false;
-        if (!safeZones.includes(newPos) && newPos <= 51) { for (let i = 0; i < 4; i++) { if (spLudoTokens.p2[i] === newPos) { spLudoTokens.p2[i] = -1; hasKilled = true; break; } } }
-    if (spLudoTokens.p1.every(p => p === 57)) { spLudoWinner = 'p1'; spLudoActive = false; }
-    if (roll !== 6 && !hasKilled && !spLudoWinner) { spLudoTurn = 'p2'; }
+    if (spLudoTurn !== spLudoUserRole || !spLudoDice || !isSpLudoMoveValid(spLudoUserRole, tokenIndex, spLudoDice)) return;
+    let roll = spLudoDice; let currPos = spLudoTokens[spLudoUserRole][tokenIndex]; let newPos;
+    if (currPos === -1) { newPos = spLudoUserRole === 'p1' ? 0 : 26; } 
+    else { 
+        let progress = getSpLudoProgress(spLudoUserRole, currPos); let newProgress = progress + roll; 
+        if (spLudoUserRole === 'p1') {
+            if (newProgress === 57) newPos = 57; else if (newProgress > 51) newPos = 52 + (newProgress - 52); else newPos = newProgress;
+        } else {
+            if (newProgress === 57) newPos = 62; else if (newProgress > 51) newPos = 57 + (newProgress - 52); else newPos = (26 + newProgress) % 52;
+        }
+    }
+    spLudoTokens[spLudoUserRole][tokenIndex] = newPos;
+    
+    const safeZones = [0, 8, 13, 21, 26, 34, 39, 47]; let hasKilled = false; let compRole = spLudoUserRole === 'p1' ? 'p2' : 'p1';
+    if (!safeZones.includes(newPos) && newPos <= 51) { 
+        for (let i = 0; i < 4; i++) { if (spLudoTokens[compRole][i] === newPos) { spLudoTokens[compRole][i] = -1; hasKilled = true; break; } } 
+    }
+    if (spLudoUserRole === 'p1' && spLudoTokens.p1.every(p => p === 57)) { spLudoWinner = 'p1'; spLudoActive = false; }
+    if (spLudoUserRole === 'p2' && spLudoTokens.p2.every(p => p === 62)) { spLudoWinner = 'p2'; spLudoActive = false; }
+    if (roll !== 6 && !hasKilled && !spLudoWinner) { spLudoTurn = compRole; }
     spLudoDice = null; renderSinglePlayerLudo();
-    if (spLudoTurn === 'p2' && spLudoActive) { setTimeout(triggerComputerLudoTurn, 1000); }
+    if (spLudoTurn === compRole && spLudoActive) { setTimeout(triggerComputerLudoTurn, 1000); }
 };
+
 function triggerComputerLudoTurn() {
-    if (spLudoTurn !== 'p2' || !spLudoActive) return; isComputerThinking = true; renderSinglePlayerLudo();
+    let compRole = spLudoUserRole === 'p1' ? 'p2' : 'p1';
+    if (spLudoTurn !== compRole || !spLudoActive) return; 
+    isComputerThinking = true; renderSinglePlayerLudo();
     setTimeout(() => {
-        const roll = Math.floor(Math.random() * 6) + 1; spLudoDice = roll; const move = getComputerLudoMove(roll);
-            renderSinglePlayerLudo();
-            setTimeout(() => {
-                if (move.tokenIndex === -1) { spLudoTurn = 'p1'; spLudoDice = null; isComputerThinking = false; renderSinglePlayerLudo(); return; }
-                let currPos = spLudoTokens.p2[move.tokenIndex]; let newPos;
-                if (currPos === -1) { newPos = 26; } else { let progress = getSpLudoProgress('p2', currPos); let newProgress = progress + roll; if (newProgress === 57) newPos = 62; else if (newProgress > 51) newPos = 57 + (newProgress - 52); else newPos = (26 + newProgress) % 52; }
-                spLudoTokens.p2[move.tokenIndex] = newPos;
-                const safeZones = [0, 8, 13, 21, 26, 34, 39, 47]; let hasKilled = false;
-                if (!safeZones.includes(newPos) && newPos <= 51) { for (let i = 0; i < 4; i++) { if (spLudoTokens.p1[i] === newPos) { spLudoTokens.p1[i] = -1; hasKilled = true; break; } } }
-                if (spLudoTokens.p2.every(p => p === 62)) { spLudoWinner = 'p2'; spLudoActive = false; }
-                if (roll !== 6 && !hasKilled && !spLudoWinner) { spLudoTurn = 'p1'; }
-                spLudoDice = null; isComputerThinking = false; renderSinglePlayerLudo();
-                if (spLudoTurn === 'p2' && spLudoActive) { setTimeout(triggerComputerLudoTurn, 1000); }
-            }, 1000);
+        const roll = Math.floor(Math.random() * 6) + 1; spLudoDice = roll; const move = getComputerLudoMove(roll, compRole, spLudoUserRole);
+        renderSinglePlayerLudo();
+        setTimeout(() => {
+            if (move.tokenIndex === -1) { spLudoTurn = spLudoUserRole; spLudoDice = null; isComputerThinking = false; renderSinglePlayerLudo(); return; }
+            let currPos = spLudoTokens[compRole][move.tokenIndex]; let newPos;
+            if (currPos === -1) { newPos = compRole === 'p1' ? 0 : 26; } 
+            else { 
+                let progress = getSpLudoProgress(compRole, currPos); let newProgress = progress + roll; 
+                if (compRole === 'p1') {
+                    if (newProgress === 57) newPos = 57; else if (newProgress > 51) newPos = 52 + (newProgress - 52); else newPos = newProgress;
+                } else {
+                    if (newProgress === 57) newPos = 62; else if (newProgress > 51) newPos = 57 + (newProgress - 52); else newPos = (26 + newProgress) % 52;
+                }
+            }
+            spLudoTokens[compRole][move.tokenIndex] = newPos;
+            const safeZones = [0, 8, 13, 21, 26, 34, 39, 47]; let hasKilled = false;
+            if (!safeZones.includes(newPos) && newPos <= 51) { 
+                for (let i = 0; i < 4; i++) { if (spLudoTokens[spLudoUserRole][i] === newPos) { spLudoTokens[spLudoUserRole][i] = -1; hasKilled = true; break; } } 
+            }
+            if (compRole === 'p1' && spLudoTokens.p1.every(p => p === 57)) { spLudoWinner = 'p1'; spLudoActive = false; }
+            if (compRole === 'p2' && spLudoTokens.p2.every(p => p === 62)) { spLudoWinner = 'p2'; spLudoActive = false; }
+            if (roll !== 6 && !hasKilled && !spLudoWinner) { spLudoTurn = spLudoUserRole; }
+            spLudoDice = null; isComputerThinking = false; renderSinglePlayerLudo();
+            if (spLudoTurn === compRole && spLudoActive) { setTimeout(triggerComputerLudoTurn, 1000); }
         }, 1000);
+    }, 1000);
 }
-function getComputerLudoMove(dice) {
+
+function getComputerLudoMove(dice, compRole, userRole) {
     let moves = [];
     for (let i = 0; i < 4; i++) {
-        if (isSpLudoMoveValid('p2', i, dice)) {
-            let score = 0; const currPos = spLudoTokens.p2[i]; let newPos;
-            if (currPos === -1) {
-                newPos = 26;
-            } else {
-                const progress = getSpLudoProgress('p2', currPos);
-                const newProgress = progress + dice;
-                if (newProgress === 57) newPos = 62;
-                else if (newProgress > 51) newPos = 57 + (newProgress - 52);
-                else newPos = (26 + newProgress) % 52;
+        if (isSpLudoMoveValid(compRole, i, dice)) {
+            let score = 0; const currPos = spLudoTokens[compRole][i]; let newPos;
+            if (currPos === -1) { newPos = compRole === 'p1' ? 0 : 26; } 
+            else {
+                const progress = getSpLudoProgress(compRole, currPos); const newProgress = progress + dice;
+                if (compRole === 'p1') {
+                    if (newProgress === 57) newPos = 57; else if (newProgress > 51) newPos = 52 + (newProgress - 52); else newPos = newProgress;
+                } else {
+                    if (newProgress === 57) newPos = 62; else if (newProgress > 51) newPos = 57 + (newProgress - 52); else newPos = (26 + newProgress) % 52;
+                }
             }
-            if (newPos === 62) score += 1000;
+            if ((compRole === 'p1' && newPos === 57) || (compRole === 'p2' && newPos === 62)) score += 1000;
             const safeZones = [0, 8, 13, 21, 26, 34, 39, 47];
-            if (!safeZones.includes(newPos) && newPos <= 51 && spLudoTokens.p1.includes(newPos)) { score += 500; }
+            if (!safeZones.includes(newPos) && newPos <= 51 && spLudoTokens[userRole].includes(newPos)) { score += 500; }
             if (currPos === -1 && dice === 6) score += 200;
             if (safeZones.includes(newPos) && !safeZones.includes(currPos)) score += 50;
-            score += getSpLudoProgress('p2', newPos);
+            score += getSpLudoProgress(compRole, newPos);
             moves.push({ tokenIndex: i, score: score });
         }
     }
     if (moves.length === 0) return { tokenIndex: -1, score: 0 };
     moves.sort((a, b) => b.score - a.score);
     return moves[0];
-}
-
-let spTttBoard = ["","","","","","","","",""]; let spTttActive = true;
+} let spTttActive = true;
 window.renderSinglePlayerTTT = () => { document.getElementById("activeGameTitle").innerText = "Tic Tac Toe (Solo)"; let html = `<div class="game-turn-indicator" style="margin-bottom:10px;">You vs Computer</div><select id="spDifficulty" class="difficulty-select" onchange="changeSpDifficulty(this.value)"><option value="easy" ${currentSpDifficulty==='easy'?'selected':''}>Difficulty: Easy</option><option value="medium" ${currentSpDifficulty==='medium'?'selected':''}>Difficulty: Medium</option><option value="hard" ${currentSpDifficulty==='hard'?'selected':''}>Difficulty: Hard</option></select><div class="ttt-board">`; spTttBoard.forEach((cell, i) => { const cellClass = cell === 'X' ? 'x' : (cell === 'O' ? 'o' : ''); html += `<div class="ttt-cell ${cellClass}" onclick="spTttMove(${i})">${cell}</div>`; }); html += `</div>`; if(!spTttActive) html += `<button class="primary-btn glow-btn" style="max-width:200px; margin-top:20px;" onclick="spTttReset()">Play Again</button>`; gameUIContainer.innerHTML = html; };
 function getBotMoveTTT(board, difficulty) { let empty = board.map((c, i) => c === "" ? i : null).filter(c => c !== null); if (empty.length === 0) return -1; if (difficulty === 'easy') return empty[Math.floor(Math.random() * empty.length)]; const checkWin = (player) => { const lines = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]]; for(let line of lines) { const [a,b,c] = line; if(board[a]===player && board[b]===player && board[c]==="") return c; if(board[a]===player && board[c]===player && board[b]==="") return b; if(board[b]===player && board[c]===player && board[a]==="") return a; } return null; }; let winMove = checkWin("O"); let blockMove = checkWin("X"); if (difficulty === 'hard') { if (winMove !== null) return winMove; if (blockMove !== null) return blockMove; if (board[4] === "") return 4; const corners = [0, 2, 6, 8].filter(c => board[c] === ""); if (corners.length > 0) return corners[Math.floor(Math.random() * corners.length)]; return empty[Math.floor(Math.random() * empty.length)]; } if (Math.random() > 0.4) { if (winMove !== null) return winMove; if (blockMove !== null) return blockMove; } return empty[Math.floor(Math.random() * empty.length)]; }
 window.spTttMove = (i) => { if(!spTttActive || spTttBoard[i] !== "") return; spTttBoard[i] = "X"; if(checkTttWin(spTttBoard, "X")) { spTttEnd("🎉 You Won!"); return; } if(!spTttBoard.includes("")) { spTttEnd("It's a Draw!"); return; } let botMove = getBotMoveTTT(spTttBoard, currentSpDifficulty); if(botMove !== -1) { spTttBoard[botMove] = "O"; if(checkTttWin(spTttBoard, "O")) { spTttEnd("😞 Computer Won!"); return; } if(!spTttBoard.includes("")) { spTttEnd("It's a Draw!"); return; } } renderSinglePlayerTTT(); };
