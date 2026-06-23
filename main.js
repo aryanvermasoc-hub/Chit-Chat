@@ -1718,7 +1718,33 @@ function renderLudo(data, gameId) {
     let html = `<div class="ludo-header-info"><div class="ludo-player-badge red-badge ${data.turn === data.player1 && !data.winner ? 'active' : ''}">${p1User.fullName || p1User.username}</div><div class="ludo-vs">VS</div><div class="ludo-player-badge blue-badge ${data.turn === data.player2 && !data.winner ? 'active' : ''}">${p2User.fullName || p2User.username}</div></div><div class="game-turn-indicator" style="color: ${colorTheme}; font-weight:bold; margin-top: 10px;">${statusText}</div><div class="ludo-container"><div class="ludo-board-wrapper" id="ludoBoard"></div><div class="ludo-controls"><button id="ludoDiceBtn" class="dice-btn ${data.diceValue ? '' : 'pulse'}" ${!isMyTurn || data.winner ? 'disabled' : ''} onclick="rollLudoDice('${gameId}', '${myRole}')">${currentDice}</button></div>${data.winner ? `<button class="primary-btn glow-btn" style="max-width:200px;" onclick="resetLudo('${gameId}')">Play Again</button>` : ''}</div>`;
     gameUIContainer.innerHTML = html; const board = document.getElementById("ludoBoard"); board.innerHTML += `<div class="ludo-base red-base"><div class="base-inner"></div></div><div class="ludo-base blue-base"><div class="base-inner"></div></div>`;
     ludoPath.forEach((pos, i) => { let extraClass = ''; if (i >= 52 && i <= 56) extraClass = 'path-red'; if (i >= 57 && i <= 61) extraClass = 'path-blue'; const safeZones = [0, 8, 13, 21, 26, 34, 39, 47]; if (safeZones.includes(i)) extraClass += ' safe-zone'; if (i === 0) extraClass += ' start-red'; if (i === 26) extraClass += ' start-blue'; board.innerHTML += `<div class="ludo-cell ${extraClass}" style="left:${pos.x - 10}px; top:${pos.y - 10}px;">${safeZones.includes(i) ? '<i class="fa-solid fa-star" style="font-size:8px; opacity:0.5; color:white;"></i>' : ''}</div>`; });
-    ['p1', 'p2'].forEach(player => { data.ludoTokens[player].forEach((pos, index) => { let coords = pos === -1 ? ludoBases[player][index] : ludoPath[pos]; if ((player === 'p1' && pos === 57) || (player === 'p2' && pos === 62)) return; let token = document.createElement("div"); token.className = `ludo-token token-${player === 'p1' ? 'red' : 'blue'}`; if (isMyTurn && player === myRole && data.diceValue) { token.classList.add('token-playable'); } token.style.left = `${coords.x}px`; token.style.top = `${coords.y}px`; if (isMyTurn && player === myRole && data.diceValue) { token.onclick = () => moveLudoToken(gameId, data, index, myRole); } board.appendChild(token); }); });
+let occupancy = {};
+    ['p1', 'p2'].forEach(player => { data.ludoTokens[player].forEach((pos, index) => { if (pos !== -1 && pos !== 57 && pos !== 62) { if (!occupancy[pos]) occupancy[pos] = []; occupancy[pos].push({ player, index }); } }); });
+
+    ['p1', 'p2'].forEach(player => { data.ludoTokens[player].forEach((pos, index) => { 
+        let coords = pos === -1 ? ludoBases[player][index] : ludoPath[pos]; 
+        if ((player === 'p1' && pos === 57) || (player === 'p2' && pos === 62)) return; 
+        
+        let token = document.createElement("div"); 
+        token.className = `ludo-token token-${player === 'p1' ? 'red' : 'blue'}`; 
+        
+        let finalX = coords.x; let finalY = coords.y;
+        if (pos !== -1 && occupancy[pos] && occupancy[pos].length > 1) {
+            let myOccIndex = occupancy[pos].findIndex(t => t.player === player && t.index === index);
+            const offsets = [{x: -4, y: -4}, {x: 4, y: 4}, {x: -4, y: 4}, {x: 4, y: -4}, {x: 0, y: -6}, {x: 0, y: 6}];
+            if (myOccIndex < offsets.length) { finalX += offsets[myOccIndex].x; finalY += offsets[myOccIndex].y; }
+            token.style.width = "12px"; token.style.height = "12px"; token.style.zIndex = 20 + myOccIndex;
+        }
+
+        if (isMyTurn && player === myRole && data.diceValue) { 
+            token.classList.add('token-playable'); 
+            token.style.zIndex = "50"; // Forces clickable tokens to the very front
+            token.onclick = () => moveLudoToken(gameId, data, index, myRole); 
+        } 
+        
+        token.style.left = `${finalX}px`; token.style.top = `${finalY}px`; 
+        board.appendChild(token); 
+    }); });
 }
 window.rollLudoDice = async (gameId, myRole) => { const diceBtn = document.getElementById("ludoDiceBtn"); diceBtn.classList.add("dice-rolling"); diceBtn.classList.remove("pulse"); diceBtn.disabled = true; setTimeout(async () => { const roll = Math.floor(Math.random() * 6) + 1; await updateDoc(doc(db, "games", gameId), { diceValue: roll }); const docSnap = await getDoc(doc(db, "games", gameId)); const data = docSnap.data(); let canMove = false; data.ludoTokens[myRole].forEach(pos => { if (pos === -1 && roll === 6) canMove = true; if (pos !== -1) { if (myRole === 'p1' && pos + roll <= 57) canMove = true; if (myRole === 'p2') { let absoluteProgress = pos >= 26 ? (pos - 26) : (pos + 26); if (absoluteProgress + roll <= 57) canMove = true; } } }); if (!canMove) { setTimeout(async () => { const nextTurn = data.player1 === auth.currentUser.uid ? data.player2 : data.player1; await updateDoc(doc(db, "games", gameId), { turn: nextTurn, diceValue: null }); }, 1000); } }, 500); };
 window.moveLudoToken = async (gameId, data, tokenIndex, role) => { let tokens = { ...data.ludoTokens }; let roll = data.diceValue; let currPos = tokens[role][tokenIndex]; let newPos = currPos; if (currPos === -1) { if (roll !== 6) return; newPos = role === 'p1' ? 0 : 26; } else { if (role === 'p1') { newPos = currPos + roll; if (newPos > 51 && currPos <= 51) newPos = 51 + (newPos - 51); if (newPos > 57) return; } else { newPos = currPos + roll; if (currPos <= 24 && newPos >= 25) { newPos = 56 + (newPos - 24); } else if (newPos > 51 && currPos > 24 && currPos <= 51) { newPos = newPos - 52; } if (newPos > 62) return; } } tokens[role][tokenIndex] = newPos; const safeZones = [0, 8, 13, 21, 26, 34, 39, 47]; let hasKilled = false; let oppRole = role === 'p1' ? 'p2' : 'p1'; if (!safeZones.includes(newPos) && newPos <= 51) { tokens[oppRole].forEach((oppPos, idx) => { if (oppPos === newPos) { tokens[oppRole][idx] = -1; hasKilled = true; } }); } let hasWon = false; if (role === 'p1' && tokens.p1.every(p => p === 57)) hasWon = true; if (role === 'p2' && tokens.p2.every(p => p === 62)) hasWon = true; let nextTurn = data.turn; let nextDice = null; if (roll !== 6 && !hasKilled && !hasWon) { nextTurn = data.player1 === auth.currentUser.uid ? data.player2 : data.player1; } await updateDoc(doc(db, "games", gameId), { ludoTokens: tokens, turn: nextTurn, diceValue: nextDice, winner: hasWon ? auth.currentUser.uid : null }); };
@@ -1735,12 +1761,32 @@ function renderSinglePlayerLudo() {
     let html = `<div class="ludo-header-info"><div class="ludo-player-badge red-badge ${isMyTurn && !spLudoWinner ? 'active' : ''}">You</div><div class="ludo-vs">VS</div><div class="ludo-player-badge blue-badge ${!isMyTurn && !spLudoWinner ? 'active' : ''}">Computer</div></div><div class="game-turn-indicator" style="color: ${isMyTurn && !spLudoWinner ? '#ef4444' : 'white'}; font-weight:bold; margin-top: 10px;">${statusText}</div><div class="ludo-container"><div class="ludo-board-wrapper" id="ludoBoard"></div><div class="ludo-controls"><button id="ludoDiceBtn" class="dice-btn ${!spLudoDice && isMyTurn ? 'pulse' : ''}" ${!isMyTurn || spLudoWinner || isComputerThinking ? 'disabled' : ''} onclick="spLudoRollDice()">${currentDice}</button></div>${spLudoWinner ? `<button class="primary-btn glow-btn" style="max-width:200px;" onclick="spLudoReset()">Play Again</button>` : ''}</div>`;
     gameUIContainer.innerHTML = html; const board = document.getElementById("ludoBoard"); board.innerHTML += `<div class="ludo-base red-base"><div class="base-inner"></div></div><div class="ludo-base blue-base"><div class="base-inner"></div></div>`;
     ludoPath.forEach((pos, i) => { let extraClass = ''; if (i >= 52 && i < 57) extraClass = 'path-red'; if (i >= 57 && i < 62) extraClass = 'path-blue'; const safeZones = [0, 8, 13, 21, 26, 34, 39, 47]; if (safeZones.includes(i)) extraClass += ' safe-zone'; if (i === 0) extraClass += ' start-red'; if (i === 26) extraClass += ' start-blue'; board.innerHTML += `<div class="ludo-cell ${extraClass}" style="left:${pos.x - 10}px; top:${pos.y - 10}px;">${safeZones.includes(i) ? '<i class="fa-solid fa-star" style="font-size:8px; opacity:0.5; color:white;"></i>' : ''}</div>`; });
+    let occupancy = {};
+    ['p1', 'p2'].forEach(player => { spLudoTokens[player].forEach((pos, index) => { if (pos !== -1 && pos !== 57 && pos !== 62) { if (!occupancy[pos]) occupancy[pos] = []; occupancy[pos].push({ player, index }); } }); });
+
     ['p1', 'p2'].forEach(player => {
         spLudoTokens[player].forEach((pos, index) => {
             const winPos = player === 'p1' ? 57 : 62; if (pos === winPos) return;
-            let coords = pos === -1 ? ludoBases[player][index] : ludoPath[pos]; let token = document.createElement("div"); token.className = `ludo-token token-${player === 'p1' ? 'red' : 'blue'}`;
-            if (isMyTurn && player === 'p1' && spLudoDice && !spLudoWinner && isSpLudoMoveValid('p1', index, spLudoDice)) { token.classList.add('token-playable'); token.onclick = () => spLudoMoveToken(index); }
-            token.style.left = `${coords.x}px`; token.style.top = `${coords.y}px`; board.appendChild(token);
+            let coords = pos === -1 ? ludoBases[player][index] : ludoPath[pos]; 
+            let token = document.createElement("div"); 
+            token.className = `ludo-token token-${player === 'p1' ? 'red' : 'blue'}`;
+            
+            let finalX = coords.x; let finalY = coords.y;
+            if (pos !== -1 && occupancy[pos] && occupancy[pos].length > 1) {
+                let myOccIndex = occupancy[pos].findIndex(t => t.player === player && t.index === index);
+                const offsets = [{x: -4, y: -4}, {x: 4, y: 4}, {x: -4, y: 4}, {x: 4, y: -4}, {x: 0, y: -6}, {x: 0, y: 6}];
+                if (myOccIndex < offsets.length) { finalX += offsets[myOccIndex].x; finalY += offsets[myOccIndex].y; }
+                token.style.width = "12px"; token.style.height = "12px"; token.style.zIndex = 20 + myOccIndex;
+            }
+
+            if (isMyTurn && player === 'p1' && spLudoDice && !spLudoWinner && isSpLudoMoveValid('p1', index, spLudoDice)) { 
+                token.classList.add('token-playable'); 
+                token.style.zIndex = "50"; 
+                token.onclick = () => spLudoMoveToken(index); 
+            }
+            
+            token.style.left = `${finalX}px`; token.style.top = `${finalY}px`; 
+            board.appendChild(token);
         });
     });
 }
