@@ -43,56 +43,93 @@ window.changeSpDifficulty = (val) => { currentSpDifficulty = val; };
 // =========================================================
 // CUSTOM UI MODALS (Replace prompts/confirms)
 // =========================================================
-window.customConfirm = (title, message, confirmText = "Confirm", confirmColor = "#ef4444") => {
-    return new Promise((resolve) => {
-        const modal = document.getElementById("customConfirmModal");
-        document.getElementById("confirmModalTitle").innerText = title;
-        document.getElementById("confirmModalMessage").innerText = message;
-        const confirmBtn = document.getElementById("confirmActionBtn");
-        confirmBtn.innerText = confirmText;
-        confirmBtn.style.background = confirmColor;
-        
-        const cleanup = () => {
-            document.getElementById("confirmCancelBtn").removeEventListener("click", onCancel);
-            confirmBtn.removeEventListener("click", onConfirm);
-            modal.style.display = "none";
-        };
-        
-        const onConfirm = () => { cleanup(); resolve(true); };
-        const onCancel = () => { cleanup(); resolve(false); };
-        
-        document.getElementById("confirmCancelBtn").addEventListener("click", onCancel);
-        confirmBtn.addEventListener("click", onConfirm);
-        
-        modal.style.display = "flex";
+// =========================================================
+// CUSTOM UI MODALS (Replace prompts/confirms)
+// =========================================================
+window.AppGUI = {
+    show: function({ title = "Chit-Chat", message, type = "alert", inputPlaceholder = "Type here...", confirmText = "OK", cancelText = "Cancel", confirmColor = "var(--primary)" }) {
+        return new Promise((resolve) => {
+            const modal = document.getElementById('appGuiModal');
+            const titleEl = document.getElementById('appGuiTitle');
+            const bodyEl = document.getElementById('appGuiBody');
+            const btnsEl = document.getElementById('appGuiButtons');
+
+            titleEl.innerText = title;
+            bodyEl.innerHTML = `<p>${message}</p>`;
+
+            let inputEl = null;
+            if (type === 'prompt') {
+                bodyEl.innerHTML += `<input type="text" id="guiPromptInput" class="gui-modal-input" placeholder="${inputPlaceholder}" autocomplete="off" />`;
+                inputEl = bodyEl.querySelector('#guiPromptInput');
+                setTimeout(() => inputEl.focus(), 100);
+            }
+
+            btnsEl.innerHTML = '';
+
+            if (type === 'confirm' || type === 'prompt') {
+                const cancelBtn = document.createElement('button');
+                cancelBtn.className = 'secondary-btn glow-btn';
+                cancelBtn.style.flex = '1';
+                cancelBtn.innerText = cancelText;
+                cancelBtn.onclick = () => {
+                    modal.style.display = 'none';
+                    resolve(type === 'prompt' ? null : false);
+                };
+                btnsEl.appendChild(cancelBtn);
+            }
+
+            const confirmBtn = document.createElement('button');
+            confirmBtn.className = 'primary-btn glow-btn';
+            confirmBtn.style.flex = '1';
+            confirmBtn.style.background = confirmColor;
+            confirmBtn.innerText = confirmText;
+            confirmBtn.onclick = () => {
+                modal.style.display = 'none';
+                if (type === 'prompt') {
+                    resolve(inputEl ? inputEl.value.trim() : '');
+                } else {
+                    resolve(true);
+                }
+            };
+            btnsEl.appendChild(confirmBtn);
+
+            modal.style.display = 'flex';
+        });
+    }
+};
+// =========================================================
+// NATIVE SELECT OVERRIDE (Replaces Mobile Bottom Sheets)
+// =========================================================
+window.syncCustomSelects = function() {
+    document.querySelectorAll('select.difficulty-select').forEach(select => {
+        let wrapper = select.nextElementSibling;
+        if (!wrapper || !wrapper.classList.contains('custom-select-wrapper')) {
+            select.style.display = 'none'; 
+            wrapper = document.createElement('div'); wrapper.className = 'custom-select-wrapper';
+            const trigger = document.createElement('div'); trigger.className = 'custom-select-trigger'; trigger.innerHTML = `<span></span> <i class="fa-solid fa-chevron-down" style="font-size:10px;"></i>`;
+            const optionsContainer = document.createElement('div'); optionsContainer.className = 'custom-select-options';
+            Array.from(select.options).forEach(option => {
+                const optDiv = document.createElement('div'); optDiv.className = 'custom-option'; optDiv.dataset.value = option.value; optDiv.innerHTML = option.innerHTML;
+                optDiv.addEventListener('click', (e) => {
+                    e.stopPropagation(); select.value = option.value; select.dispatchEvent(new Event('change'));
+                    if(typeof select.onchange === 'function') select.onchange({target: select});
+                    window.syncCustomSelects(); optionsContainer.classList.remove('open');
+                });
+                optionsContainer.appendChild(optDiv);
+            });
+            trigger.addEventListener('click', (e) => {
+                e.stopPropagation(); document.querySelectorAll('.custom-select-options').forEach(cont => { if (cont !== optionsContainer) cont.classList.remove('open'); });
+                optionsContainer.classList.toggle('open');
+            });
+            wrapper.appendChild(trigger); wrapper.appendChild(optionsContainer); select.parentNode.insertBefore(wrapper, select.nextSibling);
+        }
+        const triggerSpan = wrapper.querySelector('.custom-select-trigger span'); const optionsContainer = wrapper.querySelector('.custom-select-options'); const selectedOpt = select.options[select.selectedIndex];
+        if (selectedOpt && triggerSpan) triggerSpan.innerHTML = selectedOpt.innerHTML;
+        if (optionsContainer) { optionsContainer.querySelectorAll('.custom-option').forEach(optDiv => { optDiv.classList.remove('selected'); if (optDiv.dataset.value === select.value) optDiv.classList.add('selected'); }); }
     });
 };
-
-window.customPrompt = (title, defaultValue = "", placeholder = "Enter value...") => {
-    return new Promise((resolve) => {
-        const modal = document.getElementById("customPromptModal");
-        document.getElementById("promptModalTitle").innerText = title;
-        const input = document.getElementById("promptModalInput");
-        input.value = defaultValue;
-        input.placeholder = placeholder;
-        
-        const cleanup = () => {
-            document.getElementById("promptCancelBtn").removeEventListener("click", onCancel);
-            document.getElementById("promptActionBtn").removeEventListener("click", onConfirm);
-            modal.style.display = "none";
-        };
-        
-        const onConfirm = () => { cleanup(); resolve(input.value); };
-        const onCancel = () => { cleanup(); resolve(null); };
-        
-        document.getElementById("promptCancelBtn").addEventListener("click", onCancel);
-        document.getElementById("promptActionBtn").addEventListener("click", onConfirm);
-        
-        modal.style.display = "flex";
-        setTimeout(() => input.focus(), 100);
-    });
-};
-
+document.addEventListener('click', () => { document.querySelectorAll('.custom-select-options').forEach(cont => cont.classList.remove('open')); });
+window.addEventListener('DOMContentLoaded', window.syncCustomSelects);
 window.openSelectUsersModal = (mode, existingMembers = [], pendingArr = []) => {
     return new Promise((resolve) => {
         const modal = document.getElementById("selectUsersModal");
@@ -479,16 +516,24 @@ authActionBtn.addEventListener("click", async () => {
   const username = usernameInput.value.trim().toLowerCase(); const password = passwordInput.value.trim(); const fullName = fullNameInput.value.trim();
   const realEmail = document.getElementById("emailInput") ? document.getElementById("emailInput").value.trim() : "";
   const confirmPassword = document.getElementById("confirmPassword") ? document.getElementById("confirmPassword").value.trim() : "";
-  if (!username || !password || (isSignupMode && (!fullName || !realEmail || !confirmPassword))) { alert("Please fill in all required fields."); return; }
-  if (isSignupMode && password !== confirmPassword) { alert("Passwords do not match!"); return; }
-  if (username.includes(" ")) { alert("Username cannot contain spaces."); return; }
-
+  if (!username || !password || (isSignupMode && (!fullName || !realEmail || !confirmPassword))) { 
+    window.AppGUI.show({ title: "Missing Info", message: "Please fill in all required fields." }); 
+    return; 
+}
+if (isSignupMode && password !== confirmPassword) { 
+    window.AppGUI.show({ title: "Error", message: "Passwords do not match!" }); 
+    return; 
+}
+if (username.includes(" ")) { 
+    window.AppGUI.show({ title: "Invalid Username", message: "Username cannot contain spaces." }); 
+    return; 
+}
   authActionBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Processing...';
   try { 
       if (isSignupMode) { 
           const usernameQuery = query(collection(db, "users"), where("username", "==", username), limit(1));
           const usernameSnapshot = await getDocs(usernameQuery);
-          if (!usernameSnapshot.empty) { alert("This username is already taken. Please choose a different one."); authActionBtn.innerText = "Create Account"; return; }
+          if (!usernameSnapshot.empty) { window.AppGUI.show({ title: "Username Taken", message: "This username is already taken. Please choose a different one." }); authActionBtn.innerText = "Create Account"; return; }
           generatedOTP = Math.floor(100000 + Math.random() * 900000).toString(); 
           pendingSignupData = { realEmail, password, username, fullName };
           const response = await fetch('/api/sendOtp', {
@@ -526,12 +571,12 @@ if (!response.ok) {
               else { throw err; }
           }
       }
-  } catch (error) { alert(error.message.replace("Firebase: ", "") || "Failed to process request."); authActionBtn.innerText = isSignupMode ? "Create Account" : "Enter Chit-Chat"; }
+  } catch (error) { window.AppGUI.show({ title: "Error", message: error.message.replace("Firebase: ", "") || "Failed to process request." }); authActionBtn.innerText = isSignupMode ? "Create Account" : "Enter Chit-Chat"; }
 });
 
 document.getElementById("verifyOtpBtn").addEventListener("click", async () => {
     const enteredOtp = document.getElementById("otpInput").value.trim(); const verifyBtn = document.getElementById("verifyOtpBtn");
-    if (enteredOtp !== generatedOTP) { alert("Invalid OTP!"); return; }
+    if (enteredOtp !== generatedOTP) { window.AppGUI.show({ title: "Verification Failed", message: "Invalid OTP!" }); return; }
     verifyBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Creating...'; verifyBtn.disabled = true;
     try {
         const accountEmail = pendingSignupData.realEmail;
@@ -542,9 +587,9 @@ document.getElementById("verifyOtpBtn").addEventListener("click", async () => {
         
         await setDoc(doc(db, "users", cred.user.uid), { username: pendingSignupData.username, fullName: pendingSignupData.fullName, realEmail: pendingSignupData.realEmail, publicKey: publicKey, createdAt: Date.now(), isOnline: false, lastSeen: Date.now() });
         document.getElementById("otpModal").style.display = "none"; generatedOTP = null; pendingSignupData = null; document.getElementById("otpInput").value = "";
-        verifyBtn.innerText = "Verify & Create Account"; verifyBtn.disabled = false; alert("Account verified! You can log in.");
+        verifyBtn.innerText = "Verify & Create Account"; verifyBtn.disabled = false; window.AppGUI.show({ title: "Success", message: "Account verified! You can log in." });
         await signOut(auth); document.getElementById("tabLogin").click(); 
-    } catch (error) { alert(error.message); verifyBtn.innerText = "Verify & Create Account"; verifyBtn.disabled = false; }
+    } catch (error) { window.AppGUI.show({ title: "Error", message: error.message }); verifyBtn.innerText = "Verify & Create Account"; verifyBtn.disabled = false; }
 });
 // --- MISSING EMAIL RECOVERY LOGIC ---
 let currentUpdateOtp = null;
@@ -556,7 +601,7 @@ if (sendUpdateOtpBtn) {
         const email = emailInput.value.trim();
 
         if (!email || !email.includes("@")) {
-            alert("Please enter a valid email address.");
+            window.AppGUI.show({ title: "Invalid Email", message: "Please enter a valid email address." });
             return;
         }
 
@@ -583,7 +628,7 @@ if (sendUpdateOtpBtn) {
             document.getElementById("updateEmailStep1").style.display = "none";
             document.getElementById("updateEmailStep2").style.display = "block";
         } catch (error) {
-            alert("Error sending code. Please ensure Vercel is deployed.");
+            window.AppGUI.show({ title: "Error", message: "Error sending code. Please ensure Vercel is deployed." });
             sendUpdateOtpBtn.disabled = false;
             sendUpdateOtpBtn.innerText = "Send Verification Code";
         }
@@ -596,7 +641,7 @@ if (verifyUpdateOtpBtn) {
         const userEnteredOtp = document.getElementById("updateOtpInput").value.trim();
         
         if (userEnteredOtp !== currentUpdateOtp) {
-            alert("Incorrect code. Please try again.");
+            window.AppGUI.show({ title: "Invalid Code", message: "Incorrect code. Please try again." });
             return;
         }
 
@@ -609,10 +654,10 @@ if (verifyUpdateOtpBtn) {
             if (auth.currentUser) {
                await updateDoc(doc(db, "users", auth.currentUser.uid), { realEmail: email });
             }
-            alert("Account secured successfully!");
+            window.AppGUI.show({ title: "Success", message: "Account secured successfully!" });
             document.getElementById("missingEmailModal").style.display = "none";
         } catch (err) {
-            alert("Error saving email to database.");
+            window.AppGUI.show({ title: "Error", message: "Error saving email to database." });
         } finally {
             verifyUpdateOtpBtn.innerText = "Verify & Secure Account";
             verifyUpdateOtpBtn.disabled = false;
@@ -621,7 +666,15 @@ if (verifyUpdateOtpBtn) {
 }
 // ------------------------------------
 document.getElementById("settingsLogoutBtn").addEventListener("click", async () => { 
-    if (confirm("Disconnect from Chit-Chat?")) { 
+    const isConfirmed = await window.AppGUI.show({
+        type: "confirm",
+        title: "Disconnect",
+        message: "Are you sure you want to log out of your session?",
+        confirmText: "Log Out",
+        confirmColor: "#ef4444"
+    });
+
+    if (isConfirmed) { 
         try { await updateDoc(doc(db, "users", auth.currentUser.uid), { isOnline: false, lastSeen: Date.now() }); } catch (e) {} 
         if(myProfileUnsubscribe) myProfileUnsubscribe(); 
         document.getElementById("appSettingsModal").style.display = "none"; 
@@ -1001,7 +1054,10 @@ function listenToChatStatus(targetName) {
     chatDocUnsubscribe = onSnapshot(doc(db, "chats", currentChatId), (snap) => {
         if (snap.exists()) {
             const data = snap.data(); currentChatStatus = data.status;
-            if (data.messageTimer !== undefined && modalMsgTimerSelect && modalMsgTimerSelect.value != data.messageTimer) modalMsgTimerSelect.value = data.messageTimer; 
+            if (data.messageTimer !== undefined && modalMsgTimerSelect && modalMsgTimerSelect.value != data.messageTimer) {
+    modalMsgTimerSelect.value = data.messageTimer; 
+    if (window.syncCustomSelects) window.syncCustomSelects(); // TELLS TIMER UI TO UPDATE
+}
             if (data.doodleActive) initPrivateDoodle(); else { if (document.getElementById("privateDoodleArea")) document.getElementById("privateDoodleArea").style.display = "none"; if(pDoodleUnsubscribe) { pDoodleUnsubscribe(); pDoodleUnsubscribe = null; } }
            if (data.wallpaperUrl) { 
                 document.getElementById("chatWallpaper").style.backgroundImage = `linear-gradient(rgba(10,10,15,0.8), rgba(10,10,15,0.8)), url('${data.wallpaperUrl}')`; 
@@ -1320,9 +1376,9 @@ window.openMessageModal = (msgId, encodedText, encodedName, isMe, context = 'cha
 };
 window.closeMsgOptions = () => { document.getElementById("msgOptionsModal").style.display = "none"; };
 window.triggerReply = () => { closeMsgOptions(); replyingToMsg = { id: activeMsgId, text: activeMsgText, name: activeMsgSender, context: activeMsgContext }; document.getElementById("replyPreviewName").innerText = `Replying to ${activeMsgSender}`; document.getElementById("replyPreviewText").innerText = activeMsgText; const previewContainer = document.getElementById("replyPreviewContainer"); previewContainer.style.display = "flex"; if (activeMsgContext === 'global') { document.getElementById("exploreLounge").insertBefore(previewContainer, document.querySelector("#exploreLounge .chat-input-wrapper")); globalMsgInput.focus(); } else { document.getElementById("activeChatState").insertBefore(previewContainer, document.querySelector("#activeChatState .chat-input-wrapper")); msgInput.focus(); } };
-window.triggerEdit = async () => { closeMsgOptions(); const newText = await customPrompt("Edit message", activeMsgText, "Update your message..."); if (newText !== null && newText.trim() !== "" && newText !== activeMsgText) { if (activeMsgContext === 'global') { await updateDoc(doc(db, "global_lounge", activeMsgId), { text: newText.trim(), isEdited: true }); } else { const eText = activeSharedKey ? await CryptoE2EE.encrypt(newText.trim(), activeSharedKey) : newText.trim(); await updateDoc(doc(db, "chats", currentChatId, "messages", activeMsgId), { text: eText, isEdited: true }); } } };
-window.triggerDeleteEveryone = async () => { closeMsgOptions(); const isConfirmed = await customConfirm("Delete for Everyone", "Delete this message for everyone? It cannot be restored.", "Delete", "#ef4444"); if (isConfirmed) { if (activeMsgContext === 'global') { await updateDoc(doc(db, "global_lounge", activeMsgId), { isDeleted: true, text: "" }); } else { await updateDoc(doc(db, "chats", currentChatId, "messages", activeMsgId), { isDeleted: true, text: "" }); } } };
-window.triggerDeleteMe = async () => { closeMsgOptions(); const isConfirmed = await customConfirm("Delete for Me", "Delete this message for yourself?", "Delete", "#f59e0b"); if (isConfirmed) { if (activeMsgContext === 'global') { await updateDoc(doc(db, "global_lounge", activeMsgId), { deletedFor: arrayUnion(auth.currentUser.uid) }); } else { await updateDoc(doc(db, "chats", currentChatId, "messages", activeMsgId), { deletedFor: arrayUnion(auth.currentUser.uid) }); } } };
+window.triggerEdit = async () => { closeMsgOptions(); const newText = await window.AppGUI.show({ type: "prompt", title: "Edit message", message: "Update your message...", inputPlaceholder: activeMsgText, confirmText: "Save" }); if (newText !== null && newText.trim() !== "" && newText !== activeMsgText) { if (activeMsgContext === 'global') { await updateDoc(doc(db, "global_lounge", activeMsgId), { text: newText.trim(), isEdited: true }); } else { const eText = activeSharedKey ? await CryptoE2EE.encrypt(newText.trim(), activeSharedKey) : newText.trim(); await updateDoc(doc(db, "chats", currentChatId, "messages", activeMsgId), { text: eText, isEdited: true }); } } };
+window.triggerDeleteEveryone = async () => { closeMsgOptions(); const isConfirmed = await window.AppGUI.show({ type: "confirm", title: "Delete for Everyone", message: "Delete this message for everyone? It cannot be restored.", confirmText: "Delete", confirmColor: "#ef4444" }); if (isConfirmed) { if (activeMsgContext === 'global') { await updateDoc(doc(db, "global_lounge", activeMsgId), { isDeleted: true, text: "" }); } else { await updateDoc(doc(db, "chats", currentChatId, "messages", activeMsgId), { isDeleted: true, text: "" }); } } };
+window.triggerDeleteMe = async () => { closeMsgOptions(); const isConfirmed = await window.AppGUI.show({ type: "confirm", title: "Delete for Me", message: "Delete this message for yourself?", confirmText: "Delete", confirmColor: "#f59e0b" }); if (isConfirmed) { if (activeMsgContext === 'global') { await updateDoc(doc(db, "global_lounge", activeMsgId), { deletedFor: arrayUnion(auth.currentUser.uid) }); } else { await updateDoc(doc(db, "chats", currentChatId, "messages", activeMsgId), { deletedFor: arrayUnion(auth.currentUser.uid) }); } } };
 document.getElementById("cancelReplyBtn").addEventListener("click", () => { replyingToMsg = null; const previewContainer = document.getElementById("replyPreviewContainer"); previewContainer.style.display = "none"; document.getElementById("activeChatState").insertBefore(previewContainer, document.querySelector("#activeChatState .chat-input-wrapper")); });
 window.sendChatRequest = async () => { if (!currentChatId || !targetUserUid) return; try { await setDoc(doc(db, "chats", currentChatId), { status: 'pending', initiator: auth.currentUser.uid, createdAt: Date.now() }); await setDoc(doc(db, "users", targetUserUid), { chatMeta: { [auth.currentUser.uid]: { time: Date.now(), text: "👋 Connection Request", unread: true } } }, { merge: true }); showToast("Request Sent", "Waiting for approval."); } catch (error) { showToast("Error", "Failed to send request."); } };
 window.acceptChatRequest = async () => { if (!currentChatId) return; try { await updateDoc(doc(db, "chats", currentChatId), { status: 'accepted' }); showToast("Connected", "You can now chat!"); } catch (error) { showToast("Error", "Failed to accept request."); } };
@@ -1463,10 +1519,13 @@ document.querySelector('.fa-paperclip').parentElement.addEventListener("click", 
 fileInput.addEventListener("change", async (e) => { 
     const file = e.target.files[0]; if (!file || !currentChatId) return; 
     if (file.size > 5000000) { 
-        alert("File is too large! Please choose an image under 5MB."); 
-        fileInput.value = ""; 
-        return; 
-    }
+    window.AppGUI.show({ 
+        title: "File Too Large", 
+        message: "Please choose an image under 5MB to optimize performance." 
+    }); 
+    fileInput.value = ""; 
+    return; 
+}
     const originalHtml = sendBtn.innerHTML; sendBtn.innerHTML = "<i class='fa-solid fa-spinner fa-spin'></i>"; sendBtn.disabled = true; 
     try { 
         const formData = new FormData(); formData.append("file", file); formData.append("upload_preset", UPLOAD_PRESET); 
@@ -1488,7 +1547,7 @@ fileInput.addEventListener("change", async (e) => {
             } catch(err) {}
         }
     } catch (err) { 
-        alert("Upload failed: " + err.message); 
+        window.AppGUI.show({ title: "Upload Failed", message: "Upload failed: " + err.message }); 
     } finally { 
         sendBtn.innerHTML = originalHtml; sendBtn.disabled = false; fileInput.value = ""; 
     } 
@@ -1510,7 +1569,7 @@ if (isCurrentChatGroup && currentChatId) {
             if (leaveBtn) {
                 leaveBtn.style.display = "flex";
                 leaveBtn.onclick = async () => {
-                    const isConfirmed = await customConfirm("Leave Group", `Are you sure you want to leave ${group.name}? You will lose access to all messages.`, "Leave", "#f59e0b");
+                    const isConfirmed = await window.AppGUI.show({ type: "confirm", title: "Leave Group", message: `Are you sure you want to leave ${group.name}? You will lose access to all messages.`, confirmText: "Leave", confirmColor: "#f59e0b" });
                     if (isConfirmed) {
                         leaveBtn.innerHTML = "<i class='fa-solid fa-spinner fa-spin'></i> Leaving...";
                         if (isAdmin) {
@@ -1540,7 +1599,7 @@ if (isCurrentChatGroup && currentChatId) {
                         pendingReqDiv.innerHTML += `<div style="font-size: 13px; padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,0.05); display: flex; justify-content: space-between; align-items: center;"><span>${pName}</span><div><button onclick="approveMember('${group.id}', '${pendingId}')" style="background:#10b981; border:none; color:white; padding:4px 8px; border-radius:4px; font-size:11px; cursor:pointer; margin-right:5px;">Approve</button><button onclick="rejectMember('${group.id}', '${pendingId}')" style="background:#ef4444; border:none; color:white; padding:4px 8px; border-radius:4px; font-size:11px; cursor:pointer;">Reject</button></div></div>`;
                     });
                 } else { pendingReqDiv.style.display = "none"; }
-                deleteBtn.onclick = async () => { const isConfirmed = await customConfirm("Delete Group", `Are you sure you want to delete ${group.name}? This action cannot be undone.`, "Delete", "#ef4444"); if (isConfirmed) { deleteBtn.innerHTML = "<i class='fa-solid fa-spinner fa-spin'></i> Deleting..."; const msgsSnap = await getDocs(query(collection(db, "chats", currentChatId, "messages"))); const batch = writeBatch(db); msgsSnap.docs.forEach(msgDoc => batch.delete(msgDoc.ref)); await batch.commit(); await deleteDoc(doc(db, "groups", currentChatId)); document.getElementById("groupSettingsModal").style.display = "none"; document.getElementById("backToUsersBtn").click(); showToast("Group Deleted", "Group permanently wiped."); } }; 
+                deleteBtn.onclick = async () => { const isConfirmed = await window.AppGUI.show({ type: "confirm", title: "Delete Group", message: `Are you sure you want to delete ${group.name}? This action cannot be undone.`, confirmText: "Delete", confirmColor: "#ef4444" }); if (isConfirmed) { deleteBtn.innerHTML = "<i class='fa-solid fa-spinner fa-spin'></i> Deleting..."; const msgsSnap = await getDocs(query(collection(db, "chats", currentChatId, "messages"))); const batch = writeBatch(db); msgsSnap.docs.forEach(msgDoc => batch.delete(msgDoc.ref)); await batch.commit(); await deleteDoc(doc(db, "groups", currentChatId)); document.getElementById("groupSettingsModal").style.display = "none"; document.getElementById("backToUsersBtn").click(); showToast("Group Deleted", "Group permanently wiped."); } }; 
             } else { deleteBtn.style.display = "none"; if (pendingReqDiv) pendingReqDiv.style.display = "none"; }
             document.getElementById("groupSettingsModal").style.display = "flex";
         }
@@ -1587,11 +1646,11 @@ window.triggerAddGroupMember = async () => {
     } 
     document.getElementById("groupSettingsModal").style.display = "none"; 
 };
-window.triggerRemoveMember = async (groupId, memberId) => { const isConfirmed = await customConfirm("Remove Member", "Are you sure you want to kick this user from the group?", "Remove", "#ef4444"); if(isConfirmed) { try { await updateDoc(doc(db, "groups", groupId), { members: arrayRemove(memberId) }); showToast("Member Removed", "User was kicked from the group."); } catch(e) { showToast("Error", "Failed to remove member."); } } };
+window.triggerRemoveMember = async (groupId, memberId) => { const isConfirmed = await window.AppGUI.show({ type: "confirm", title: "Remove Member", message: "Are you sure you want to kick this user from the group?", confirmText: "Remove", confirmColor: "#ef4444" }); if(isConfirmed) { try { await updateDoc(doc(db, "groups", groupId), { members: arrayRemove(memberId) }); showToast("Member Removed", "User was kicked from the group."); } catch(e) { showToast("Error", "Failed to remove member."); } } };
 window.triggerGroupAvatarUpload = () => { const input = document.createElement("input"); input.type = "file"; input.accept = "image/*"; input.onchange = async (e) => { const file = e.target.files[0]; if(!file) return;if (file.size > 5000000) { 
-            alert("File is too large! Please choose an image under 5MB."); 
+            window.AppGUI.show({ title: "File Too Large", message: "Please choose an image under 5MB." }); 
             return; 
-        } try { showToast("Uploading...", "Updating group icon"); const formData = new FormData(); formData.append("file", file); formData.append("upload_preset", UPLOAD_PRESET); const response = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`, { method: "POST", body: formData }); const data = await response.json(); await updateDoc(doc(db, "groups", currentChatId), { avatarUrl: data.secure_url }); document.getElementById("groupSettingsAvatar").src = data.secure_url; document.getElementById("chatTargetAvatar").src = data.secure_url; showToast("Success", "Group icon updated!"); } catch(err) { alert("Failed to update group image."); } }; input.click(); };
+        } try { showToast("Uploading...", "Updating group icon"); const formData = new FormData(); formData.append("file", file); formData.append("upload_preset", UPLOAD_PRESET); const response = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`, { method: "POST", body: formData }); const data = await response.json(); await updateDoc(doc(db, "groups", currentChatId), { avatarUrl: data.secure_url }); document.getElementById("groupSettingsAvatar").src = data.secure_url; document.getElementById("chatTargetAvatar").src = data.secure_url; showToast("Success", "Group icon updated!"); } catch(err) { window.AppGUI.show({ title: "Error", message: "Failed to update group image." }); } }; input.click(); };
 
 bindPointerTap(launchGameMenuBtn, () => { gameSelectionModal.style.display = "flex"; });
 bindPointerTap(closeGameSelectBtn, () => { gameSelectionModal.style.display = "none"; });
@@ -1608,7 +1667,7 @@ document.querySelectorAll(".game-select-btn").forEach(btn => {
         try {
             const gameType = newBtn.getAttribute("data-game"); gameSelectionModal.style.display = "none"; const timerValue = modalMsgTimerSelect ? parseInt(modalMsgTimerSelect.value) : 0;
             if (gameType === 'doodle') {
-                if (isCurrentChatGroup) { alert("Doodle is for 1v1 only!"); return; }
+                if (isCurrentChatGroup) { window.AppGUI.show({ title: "Not Supported", message: "Doodle is for 1v1 only!" }); return; }
                 await updateDoc(doc(db, "chats", currentChatId), { doodleReq: auth.currentUser.uid });
                 const payload = { sender: auth.currentUser.uid, time: Date.now(), isDoodleRequest: true, isDeleted: false }; if (timerValue > 0) payload.timerDuration = timerValue; 
                 await addDoc(collection(db, "chats", currentChatId, "messages"), payload); await setDoc(doc(db, "users", targetUserUid), { chatMeta: { [auth.currentUser.uid]: { time: Date.now(), text: "🎨 DOODLE REQUEST", unread: true } } }, { merge: true });
@@ -2017,11 +2076,11 @@ chatDoodleBtn.addEventListener("click", async (e) => {
     chatDoodleBtn.style.opacity = "0.5";
     chatDoodleBtn.style.pointerEvents = "none";
     try {
-        if(currentChatStatus !== 'accepted') { alert("Connection request not accepted yet."); return; }
+        if(currentChatStatus !== 'accepted') { window.AppGUI.show({ title: "Hold On", message: "Connection request not accepted yet." }); return; }
         const chatSnap = await getDoc(doc(db, "chats", currentChatId));
         if(chatSnap.exists() && chatSnap.data().doodleActive) { pDoodleArea.style.display = "flex"; document.getElementById("doodleBadge").style.display = "none"; window.dispatchEvent(new Event('resize')); } 
         else {
-            if (isCurrentChatGroup) { alert("Doodle is for 1v1 only!"); return; }
+            if (isCurrentChatGroup) { window.AppGUI.show({ title: "Not Supported", message: "Doodle is for 1v1 only!" }); return; }
             await updateDoc(doc(db, "chats", currentChatId), { doodleReq: auth.currentUser.uid });
             const timerValue = modalMsgTimerSelect ? parseInt(modalMsgTimerSelect.value) : 0;
             const payload = { sender: auth.currentUser.uid, time: Date.now(), isDoodleRequest: true, isDeleted: false }; if (timerValue > 0) payload.timerDuration = timerValue;
@@ -2038,7 +2097,7 @@ chatDoodleBtn.addEventListener("click", async (e) => {
 });
 document.getElementById("hideDoodleBtn").addEventListener("click", () => { pDoodleArea.style.display = "none"; if (currentChatId) { loadMessages(); } });
 window.acceptDoodle = async () => { await updateDoc(doc(db, "chats", currentChatId), { doodleActive: true, doodleReq: null }); pDoodleArea.style.display = "flex"; window.dispatchEvent(new Event('resize')); };
-document.getElementById("disconnectDoodleBtn").addEventListener("click", async () => { const isConfirmed = await customConfirm("Stop Doodling", "Stop doodling and wipe the board for both of you?", "Disconnect", "#ef4444"); if(isConfirmed) { await updateDoc(doc(db, "chats", currentChatId), { doodleActive: false }); const snaps = await getDocs(collection(db, "chats", currentChatId, "doodle")); const batch = writeBatch(db); snaps.docs.forEach(d => batch.delete(d.ref)); await batch.commit(); pDoodleArea.style.display = "none"; } });
+document.getElementById("disconnectDoodleBtn").addEventListener("click", async () => { const isConfirmed = await window.AppGUI.show({ type: "confirm", title: "Stop Doodling", message: "Stop doodling and wipe the board for both of you?", confirmText: "Disconnect", confirmColor: "#ef4444" }); if(isConfirmed) { await updateDoc(doc(db, "chats", currentChatId), { doodleActive: false }); const snaps = await getDocs(collection(db, "chats", currentChatId, "doodle")); const batch = writeBatch(db); snaps.docs.forEach(d => batch.delete(d.ref)); await batch.commit(); pDoodleArea.style.display = "none"; } });
 function getPCoordinates(e) { const rect = pDoodleCanvas.getBoundingClientRect(); const clientX = e.touches ? e.touches[0].clientX : e.clientX; const clientY = e.touches ? e.touches[0].clientY : e.clientY; return { x: clientX - rect.left, y: clientY - rect.top }; }
 function drawPLine(x0, y0, x1, y1, color, size = 3) { pDoodleCtx.beginPath(); pDoodleCtx.moveTo(x0, y0); pDoodleCtx.lineTo(x1, y1); pDoodleCtx.strokeStyle = color; pDoodleCtx.lineWidth = size; pDoodleCtx.lineCap = 'round'; pDoodleCtx.stroke(); pDoodleCtx.closePath(); }
 function initPrivateDoodle() {
@@ -2061,7 +2120,7 @@ const startPDrawing = (e) => { isPDrawing = true; currentPStroke = []; currentPS
 const drawP = (e) => { if (!isPDrawing) return; e.preventDefault(); const pos = getPCoordinates(e); const lastPos = currentPStroke[currentPStroke.length - 1]; drawPLine(lastPos.x, lastPos.y, pos.x, pos.y, pDoodleColor.value, pDoodleSize.value); currentPStroke.push(pos); };
 const stopPDrawing = async () => { if (!isPDrawing) return; isPDrawing = false; if(currentPStroke.length > 1) { try { await addDoc(collection(db, "chats", currentChatId, "doodle"), { stroke: currentPStroke, color: pDoodleColor.value, size: pDoodleSize.value, time: Date.now(), sender: auth.currentUser.uid }); } catch(e) {} } };
 pDoodleCanvas.addEventListener("mousedown", startPDrawing); pDoodleCanvas.addEventListener("mousemove", drawP); pDoodleCanvas.addEventListener("mouseup", stopPDrawing); pDoodleCanvas.addEventListener("mouseout", stopPDrawing); pDoodleCanvas.addEventListener("touchstart", startPDrawing, {passive: false}); pDoodleCanvas.addEventListener("touchmove", drawP, {passive: false}); pDoodleCanvas.addEventListener("touchend", stopPDrawing);
-document.getElementById("clearPDoodleBtn").addEventListener("click", async () => { const isConfirmed = await customConfirm("Clear Board", "Are you sure you want to clear the whiteboard?", "Clear", "#ef4444"); if(isConfirmed) { const snaps = await getDocs(collection(db, "chats", currentChatId, "doodle")); const batch = writeBatch(db); snaps.docs.forEach(d => batch.delete(d.ref)); await batch.commit(); await addDoc(collection(db, "chats", currentChatId, "doodle"), { type: 'clear', time: Date.now() }); } });
+document.getElementById("clearPDoodleBtn").addEventListener("click", async () => { const isConfirmed = await window.AppGUI.show({ type: "confirm", title: "Clear Board", message: "Are you sure you want to clear the whiteboard?", confirmText: "Clear", confirmColor: "#ef4444" }); if(isConfirmed) { const snaps = await getDocs(collection(db, "chats", currentChatId, "doodle")); const batch = writeBatch(db); snaps.docs.forEach(d => batch.delete(d.ref)); await batch.commit(); await addDoc(collection(db, "chats", currentChatId, "doodle"), { type: 'clear', time: Date.now() }); } });
 if (undoPDoodleBtn) { undoPDoodleBtn.addEventListener("click", async () => { if (!currentChatId) return; try { const snaps = await getDocs(query(collection(db, "chats", currentChatId, "doodle"), orderBy("time", "desc"))); for (let docSnap of snaps.docs) { const data = docSnap.data(); if (data.sender === auth.currentUser.uid && data.type !== 'clear') { await deleteDoc(doc(db, "chats", currentChatId, "doodle", docSnap.id)); break; } else if (data.type === 'clear') { break; } } } catch(e) { console.error("Undo failed:", e); } }); }
 
 // --- EXPLORE HUB ---
@@ -2180,14 +2239,14 @@ async function loadMoreMemes() {
 // --- SETTINGS & CLEANUP ---
 if (chatSettingsBtn) chatSettingsBtn.addEventListener("click", () => document.getElementById("chatSettingsModal").style.display = "flex");
 if (modalMsgTimerSelect) modalMsgTimerSelect.addEventListener("change", async (e) => { if (currentChatId && !isCurrentChatGroup) { await updateDoc(doc(db, "chats", currentChatId), { messageTimer: e.target.value }); showToast("Timer Updated", "Disappearing message timer changed for this chat."); } });
-if (changeWallpaperBtn && wallpaperInput) { changeWallpaperBtn.addEventListener("click", () => wallpaperInput.click()); wallpaperInput.addEventListener("change", async (e) => { const file = e.target.files[0]; if (!file || !currentChatId || isCurrentChatGroup) return; const originalText = changeWallpaperBtn.innerHTML; changeWallpaperBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Uploading...'; changeWallpaperBtn.disabled = true; try { const formData = new FormData(); formData.append("file", file); formData.append("upload_preset", UPLOAD_PRESET); const response = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`, { method: "POST", body: formData }); const data = await response.json(); await updateDoc(doc(db, "chats", currentChatId), { wallpaperUrl: data.secure_url }); showToast("Wallpaper Updated", "Chat background synced for both users."); } catch (err) { alert("Failed to upload wallpaper: " + err.message); } finally { changeWallpaperBtn.innerHTML = originalText; changeWallpaperBtn.disabled = false; wallpaperInput.value = ""; } }); }
+if (changeWallpaperBtn && wallpaperInput) { changeWallpaperBtn.addEventListener("click", () => wallpaperInput.click()); wallpaperInput.addEventListener("change", async (e) => { const file = e.target.files[0]; if (!file || !currentChatId || isCurrentChatGroup) return; const originalText = changeWallpaperBtn.innerHTML; changeWallpaperBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Uploading...'; changeWallpaperBtn.disabled = true; try { const formData = new FormData(); formData.append("file", file); formData.append("upload_preset", UPLOAD_PRESET); const response = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`, { method: "POST", body: formData }); const data = await response.json(); await updateDoc(doc(db, "chats", currentChatId), { wallpaperUrl: data.secure_url }); showToast("Wallpaper Updated", "Chat background synced for both users."); } catch (err) { window.AppGUI.show({ title: "Upload Failed", message: "Failed to upload wallpaper: " + err.message }); } finally { changeWallpaperBtn.innerHTML = originalText; changeWallpaperBtn.disabled = false; wallpaperInput.value = ""; } }); }
 if (removeWallpaperBtn) { removeWallpaperBtn.addEventListener("click", async () => { if (!currentChatId || isCurrentChatGroup) return; try { await updateDoc(doc(db, "chats", currentChatId), { wallpaperUrl: null }); showToast("Wallpaper Removed", "Restored default background for both."); } catch (err) {} }); }
-if (clearChatMeBtn) { clearChatMeBtn.addEventListener("click", async () => { if (!currentChatId) return; const isConfirmed = await customConfirm("Clear Chat", "Are you sure you want to clear this chat for yourself? Messages will be hidden for you but remain for the other person.", "Clear for Me", "#f59e0b"); if (isConfirmed) { clearChatMeBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Clearing...'; try { const msgsSnap = await getDocs(query(collection(db, "chats", currentChatId, "messages"))); const batch = writeBatch(db); msgsSnap.docs.forEach(docSnap => { batch.update(docSnap.ref, { deletedFor: arrayUnion(auth.currentUser.uid) }); }); await batch.commit(); document.getElementById("chatSettingsModal").style.display = "none"; showToast("Chat Cleared", "Messages have been hidden from your screen."); } catch (e) { showToast("Error", "Error clearing chat."); } finally { clearChatMeBtn.innerHTML = '<i class="fa-solid fa-eraser"></i> Clear Chat for Me'; } } }); }
+if (clearChatMeBtn) { clearChatMeBtn.addEventListener("click", async () => { if (!currentChatId) return; const isConfirmed = await window.AppGUI.show({ type: "confirm", title: "Clear Chat", message: "Are you sure you want to clear this chat for yourself? Messages will be hidden for you but remain for the other person.", confirmText: "Clear for Me", confirmColor: "#f59e0b" }); if (isConfirmed) { clearChatMeBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Clearing...'; try { const msgsSnap = await getDocs(query(collection(db, "chats", currentChatId, "messages"))); const batch = writeBatch(db); msgsSnap.docs.forEach(docSnap => { batch.update(docSnap.ref, { deletedFor: arrayUnion(auth.currentUser.uid) }); }); await batch.commit(); document.getElementById("chatSettingsModal").style.display = "none"; showToast("Chat Cleared", "Messages have been hidden from your screen."); } catch (e) { showToast("Error", "Error clearing chat."); } finally { clearChatMeBtn.innerHTML = '<i class="fa-solid fa-eraser"></i> Clear Chat for Me'; } } }); }
 
 window.triggerClearChatEveryone = async () => {
     if (!currentChatId) return; 
 
-    const isConfirmed = await customConfirm("DEVELOPER ACTION", "Permanently wipe this entire chat history for BOTH users? This cannot be undone.", "Wipe Everyone", "#ef4444");
+    const isConfirmed = await window.AppGUI.show({ type: "confirm", title: "DEVELOPER ACTION", message: "Permanently wipe this entire chat history for BOTH users? This cannot be undone.", confirmText: "Wipe Everyone", confirmColor: "#ef4444" });
     if (isConfirmed) {
         const clearBtn = document.getElementById("clearChatEveryoneBtn");
         if (clearBtn) clearBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Wiping...';
@@ -2210,7 +2269,7 @@ window.triggerClearChatEveryone = async () => {
             if (settingsModal) settingsModal.style.display = "none";
             
         } catch (error) {
-            alert("Failed to wipe chat: " + error.message);
+            window.AppGUI.show({ title: "Error", message: "Failed to wipe chat: " + error.message });
         } finally {
             if (clearBtn) clearBtn.innerHTML = '<i class="fa-solid fa-fire"></i> Clear for Everyone';
         }
@@ -2248,7 +2307,7 @@ const savedTheme = localStorage.getItem('chitchat_theme'); if (savedTheme) windo
 const appSettingsBtnEl = document.getElementById("appSettingsBtn");
 if (appSettingsBtnEl) {
     appSettingsBtnEl.onclick = () => {
-        if(myUserData) {
+       if(myUserData) {
             document.getElementById("settingsFullName").value = myUserData.fullName || "";
             document.getElementById("settingsUsername").value = myUserData.username || "";
             document.getElementById("settingsBio").value = myUserData.bio || "";
@@ -2257,6 +2316,7 @@ if (appSettingsBtnEl) {
             document.getElementById("settingsPfpPrivacy").value = myUserData.privacyPfp || "everyone";
             document.getElementById("settingsGroupInvitePrivacy").value = myUserData.privacyGroupInvite || "everyone";
         }
+        if (window.syncCustomSelects) window.syncCustomSelects(); // TELLS CUSTOM UI TO UPDATE
         document.getElementById("appSettingsModal").style.display = "flex";
     };
 }
@@ -2266,13 +2326,13 @@ if (settingsSaveProfileBtnEl) {
         const newName = document.getElementById("settingsFullName").value.trim();
         const newUsername = document.getElementById("settingsUsername").value.trim().toLowerCase();
         const newBio = document.getElementById("settingsBio").value.trim();
-        if (!newName || !newUsername) { alert("Display Name and Username cannot be empty."); return; }
+        if (!newName || !newUsername) { window.AppGUI.show({ title: "Missing Info", message: "Display Name and Username cannot be empty." }); return; }
         const btn = document.getElementById("settingsSaveProfileBtn"); btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Saving...';
         try {
             if (newUsername !== myUserData.username) {
                 const usernameQuery = query(collection(db, "users"), where("username", "==", newUsername), limit(1));
                 const usernameSnapshot = await getDocs(usernameQuery);
-                if (!usernameSnapshot.empty) { alert("This username is already taken by another user."); btn.innerHTML = 'Save Profile'; return; }
+                if (!usernameSnapshot.empty) { window.AppGUI.show({ title: "Username Taken", message: "This username is already taken by another user." }); btn.innerHTML = 'Save Profile'; return; }
             }
            await updateDoc(doc(db, "users", auth.currentUser.uid), { 
                 fullName: newName, 
@@ -2296,7 +2356,7 @@ if (settingsChangePfpBtnEl) {
 if (settingsPfpInput) {
     settingsPfpInput.onchange = async (e) => {
         const file = e.target.files[0]; if (!file) return;if (file.size > 5000000) { 
-            alert("File is too large! Please choose an image under 5MB."); 
+            window.AppGUI.show({ title: "File Too Large", message: "Please choose an image under 5MB." }); 
             settingsPfpInput.value = ""; 
             return; 
         }
@@ -2343,10 +2403,10 @@ window.approveMember = async (groupId, memberId) => {
         showToast("Approved", "Invitation sent to the user."); 
         document.getElementById("groupSettingsModal").style.display = "none"; 
     } catch (e) { 
-        alert("Error approving member."); 
+        window.AppGUI.show({ title: "Error", message: "Error approving member." }); 
     } 
 };
-window.rejectMember = async (groupId, memberId) => { try { await updateDoc(doc(db, "groups", groupId), { pendingMembers: arrayRemove(memberId) }); showToast("Rejected", "Request deleted."); document.getElementById("groupSettingsModal").style.display = "none"; } catch (e) { alert("Error rejecting member."); } };
+window.rejectMember = async (groupId, memberId) => { try { await updateDoc(doc(db, "groups", groupId), { pendingMembers: arrayRemove(memberId) }); showToast("Rejected", "Request deleted."); document.getElementById("groupSettingsModal").style.display = "none"; } catch (e) { window.AppGUI.show({ title: "Error", message: "Error rejecting member." }); } };
 
 document.querySelectorAll('.modal-overlay').forEach(modal => {
     modal.style.zIndex = "1000"; 
@@ -2403,7 +2463,7 @@ if (installAppBtn) {
       // Clear the prompt variable, it can only be used once
       deferredPrompt = null;
     } else {
-      alert("Your browser doesn't support this or the app is already installed!");
+      window.AppGUI.show({ title: "Install Unavailable", message: "Your browser doesn't support this or the app is already installed!" });
     }
   });
 }
