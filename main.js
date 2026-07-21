@@ -39,7 +39,26 @@ let messageLoadSeq = 0;
 
 window.changeSpDifficulty = (val) => { currentSpDifficulty = val; };
 
-
+const maintenanceRef = doc(db, "admin", "settings");
+onSnapshot(maintenanceRef, (snap) => {
+    if (snap.exists() && snap.data().maintenanceMode === true) {
+        // Lock down the app and show the maintenance overlay
+        document.getElementById("maintenanceScreen").style.display = "flex";
+        
+        // Hide all other active screens
+        const authScreen = document.getElementById("authScreen");
+        const appScreen = document.getElementById("appScreen");
+        const splashScreen = document.getElementById("splashScreen");
+        
+        if (authScreen) authScreen.style.display = "none";
+        if (appScreen) appScreen.style.display = "none";
+        if (splashScreen) splashScreen.style.display = "none";
+    } else {
+        // Hide the maintenance overlay (Normal authentication flow will handle the rest)
+        const maintenanceScreen = document.getElementById("maintenanceScreen");
+        if (maintenanceScreen) maintenanceScreen.style.display = "none";
+    }
+});
 // =========================================================
 // CUSTOM UI MODALS (Replace prompts/confirms)
 // =========================================================
