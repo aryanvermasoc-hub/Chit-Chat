@@ -1102,19 +1102,24 @@ input:-webkit-autofill,
 input:-webkit-autofill:hover, 
 input:-webkit-autofill:focus, 
 input:-webkit-autofill:active {
-    /* Use a transition trick to prevent the background color from changing */
-    transition: background-color 5000s ease-in-out 0s !important;
+    /* Uses a dark inset shadow to cover Chrome's ugly white background */
+    -webkit-box-shadow: 0 0 0px 1000px #16161e inset !important;
     
-    /* Keep the text color white for dark themes */
+    /* Forces the text and blinking cursor to remain white */
     -webkit-text-fill-color: white !important;
+    caret-color: white !important;
+    
+    transition: background-color 5000s ease-in-out 0s !important;
 }
 
-/* Ensure Light Theme autofill text stays dark */
+/* Ensure Light Theme autofill text stays dark and background stays white */
 body.theme-light input:-webkit-autofill,
 body.theme-light input:-webkit-autofill:hover, 
 body.theme-light input:-webkit-autofill:focus, 
 body.theme-light input:-webkit-autofill:active {
+    -webkit-box-shadow: 0 0 0px 1000px #ffffff inset !important;
     -webkit-text-fill-color: #0f172a !important;
+    caret-color: #0f172a !important;
 }
 /* =========================================================
    SYSTEM NOTIFICATIONS (Centered, No Profile Pic)
